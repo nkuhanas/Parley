@@ -1,0 +1,16 @@
+{
+  "name": "@nkuhanas/parley",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Parley coordination runtime and OpenClaw tool surfaces",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./parley/*": "./src/parley/*"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
