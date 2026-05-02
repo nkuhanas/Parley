@@ -4,21 +4,20 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { resolveCallerBoardMemberships, resolveCallerIdentity } from "../src/board.js";
-import { createKairosBoardConfig } from "../src/adapters/kairos_board.js";
-import { resolveParleyBoardRegistry } from "../src/config.js";
-import { createRegisterArtifactTool } from "../src/actions/register_artifact.js";
-import { createCreateObjectTool } from "../src/actions/create_object.js";
-import { createRecordEffectTool } from "../src/actions/record_effect.js";
-import { createCreateObligationTool } from "../src/actions/create_obligation.js";
-import { createWhereAmITool } from "../src/actions/where_am_i.js";
-import { createBoardProjectionTool } from "../src/actions/board_projection.js";
-import { createRecordRelationshipTool } from "../src/actions/record_relationship.js";
-import { createRemoveRelationshipTool } from "../src/actions/remove_relationship.js";
-import { createCheckpointProjectionTool } from "../src/actions/checkpoint_projection.js";
-import { createValidateStateAction } from "../src/actions/validate_state.js";
-import { createQueryTool } from "../src/actions/query.js";
-import { createMutateTool } from "../src/actions/mutate.js";
+import { resolveCallerBoardMemberships, resolveCallerIdentity } from "../src/core/board/board.js";
+import { resolveParleyBoardRegistry } from "../src/core/config.js";
+import { createRegisterArtifactTool } from "../src/adapters/openclaw/tools/register_artifact.js";
+import { createCreateObjectTool } from "../src/adapters/openclaw/tools/create_object.js";
+import { createRecordEffectTool } from "../src/adapters/openclaw/tools/record_effect.js";
+import { createCreateObligationTool } from "../src/adapters/openclaw/tools/create_obligation.js";
+import { createWhereAmITool } from "../src/adapters/openclaw/tools/where_am_i.js";
+import { createBoardProjectionTool } from "../src/adapters/openclaw/tools/board_projection.js";
+import { createRecordRelationshipTool } from "../src/adapters/openclaw/tools/record_relationship.js";
+import { createRemoveRelationshipTool } from "../src/adapters/openclaw/tools/remove_relationship.js";
+import { createCheckpointProjectionTool } from "../src/adapters/openclaw/tools/checkpoint_projection.js";
+import { createValidateStateAction } from "../src/adapters/openclaw/tools/validate_state.js";
+import { createQueryTool } from "../src/adapters/openclaw/tools/query.js";
+import { createMutateTool } from "../src/adapters/openclaw/tools/mutate.js";
 import {
   createCoordinationObjectRecord,
   createEffectRecord,
@@ -26,10 +25,64 @@ import {
   loadArtifactRecord,
   loadCoordinationObjectRecord,
   loadProjectionCheckpointRecord
-} from "../src/board_store.js";
+} from "../src/core/storage/board_store.js";
 
-const REPO_ROOT = "/home/agent/workspace/Kairos";
-const OPERATOR_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "kairos-operator" };
+const REPO_ROOT = path.join(os.tmpdir(), "parley-test-repo");
+const AGENT_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "parley-agent" };
+
+function createProjectBoardConfig(pluginConfig = {}, options = {}) {
+  const repoRoot = options.repoRoot ?? pluginConfig.repoRoot;
+  const boardRoot = path.join(pluginConfig.parleyRoot, "boards", "project");
+  return {
+    board_id: "project",
+    display_name: "Project",
+    status: "active",
+    board_root: boardRoot,
+    state_root: path.join(boardRoot, "state"),
+    managed_artifact_root: path.join(boardRoot, "artifacts"),
+    plan_extension: ".md",
+    artifact_namespaces: [
+      {
+        id: "project_plans",
+        roles: ["plan_landing", "explicit_landing", "reference"],
+        default_for: ["plan_landing"],
+        uri_prefix: "repo://plans/",
+        resolved_root: path.join(pluginConfig.__tempRoot, "repo", "plans"),
+        allowed_subpaths: []
+      },
+      {
+        id: "project_refs",
+        roles: ["reference"],
+        default_for: [],
+        uri_prefix: "repo://refs/",
+        resolved_root: path.join(pluginConfig.__tempRoot, "refs"),
+        allowed_subpaths: []
+      }
+    ],
+    allowed_reference_namespaces: ["project_plans", "project_refs"],
+    members: [
+      {
+        agent_id: "parley-agent",
+        board_agent_id: "parley-agent",
+        display_name: "Parley Agent",
+        kind: "agent",
+        runtime_refs: [AGENT_RUNTIME_REF],
+        roles: ["implementation"],
+        permissions: { preset: "board_admin" }
+      },
+      {
+        agent_id: "project-reviewer",
+        board_agent_id: "project-reviewer",
+        display_name: "Project Reviewer",
+        kind: "agent",
+        runtime_refs: [],
+        roles: ["review"],
+        permissions: { preset: "board_member" }
+      }
+    ],
+    permission_model: { mode: "board_wide_all_tools", future_agent_scoping: true }
+  };
+}
 
 async function makePluginConfig() {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "parley-v2-test-"));
@@ -37,15 +90,15 @@ async function makePluginConfig() {
     repoRoot: REPO_ROOT,
     parleyRuntimeRoot: path.join(tempRoot, "thread-runtime"),
     parleyRoot: path.join(tempRoot, "board-runtime"),
-    parleyKairosDefaultPlanLandingRoot: path.join(tempRoot, "repo", "plans"),
-    parleyKairosAllowedReferenceRoots: [path.join(tempRoot, "refs")],
-    parleyKairosAllowedLandingRoots: [path.join(tempRoot, "repo", "plans")],
+    parleyProjectDefaultPlanLandingRoot: path.join(tempRoot, "repo", "plans"),
+    parleyProjectAllowedReferenceRoots: [path.join(tempRoot, "refs")],
+    parleyProjectAllowedLandingRoots: [path.join(tempRoot, "repo", "plans")],
     __tempRoot: tempRoot
   };
   return {
     ...baseConfig,
     parleyDefaultBoards: {
-      kairos: createKairosBoardConfig(baseConfig, { repoRoot: REPO_ROOT })
+      project: createProjectBoardConfig(baseConfig, { repoRoot: REPO_ROOT })
     }
   };
 }
@@ -67,12 +120,12 @@ function toolApi(pluginConfig) {
 
 test("Parley v2 identity resolves a configured runtime ref to one board agent", async () => {
   await withPluginConfig(async (pluginConfig) => {
-    const identity = resolveCallerIdentity(pluginConfig, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
+    const identity = resolveCallerIdentity(pluginConfig, { callerRuntimeRef: AGENT_RUNTIME_REF });
 
-    assert.equal(identity.board_id, "kairos");
-    assert.equal(identity.board_agent_id, "kairos-operator");
-    assert.equal(identity.actor.board_agent_id, "kairos-operator");
-    assert.deepEqual(identity.runtime_ref, OPERATOR_RUNTIME_REF);
+    assert.equal(identity.board_id, "project");
+    assert.equal(identity.board_agent_id, "parley-agent");
+    assert.equal(identity.actor.board_agent_id, "parley-agent");
+    assert.deepEqual(identity.runtime_ref, AGENT_RUNTIME_REF);
   });
 });
 
@@ -85,7 +138,7 @@ test("Parley v2 identity fails closed when no board agent matches", async () => 
   });
 });
 
-test("Parley v2 board registry accepts explicit non-Kairos board config without embedded defaults", async () => {
+test("Parley v2 board registry accepts explicit non-default board config without embedded defaults", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const soloRoot = path.join(pluginConfig.__tempRoot, "solo-board");
     const explicitOnlyConfig = {
@@ -160,19 +213,19 @@ test("Parley v2 global registry resolves default and explicit board memberships"
       ...pluginConfig,
       parleyRegistry: {
         agents: {
-          "kairos-operator": {
-            display_name: "Rio",
+          "parley-agent": {
+            display_name: "Parley Agent",
             kind: "agent",
-            runtime_bindings: [OPERATOR_RUNTIME_REF],
-            default_board: "kairos",
+            runtime_bindings: [AGENT_RUNTIME_REF],
+            default_board: "project",
             memberships: {
-              kairos: {
-                board_agent_id: "kairos-operator",
+              project: {
+                board_agent_id: "parley-agent",
                 permissions: { preset: "board_admin" },
                 roles: ["implementation", "runtime"]
               },
               parley: {
-                board_agent_id: "kairos-operator",
+                board_agent_id: "parley-agent",
                 permissions: { preset: "board_admin" },
                 roles: ["maintainer", "implementation"]
               }
@@ -196,32 +249,32 @@ test("Parley v2 global registry resolves default and explicit board memberships"
           ],
           members: [
             {
-              agent_id: "kairos-operator",
-              board_agent_id: "kairos-operator"
+              agent_id: "parley-agent",
+              board_agent_id: "parley-agent"
             }
           ]
         }
       }
     };
 
-    const defaultIdentity = resolveCallerIdentity(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
-    assert.equal(defaultIdentity.global_agent_id, "kairos-operator");
-    assert.equal(defaultIdentity.board_id, "kairos");
+    const defaultIdentity = resolveCallerIdentity(config, { callerRuntimeRef: AGENT_RUNTIME_REF });
+    assert.equal(defaultIdentity.global_agent_id, "parley-agent");
+    assert.equal(defaultIdentity.board_id, "project");
     assert.equal(defaultIdentity.identity_resolution.used_default_board, true);
 
-    const parleyIdentity = resolveCallerIdentity(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF, boardId: "parley" });
-    assert.equal(parleyIdentity.global_agent_id, "kairos-operator");
+    const parleyIdentity = resolveCallerIdentity(config, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "parley" });
+    assert.equal(parleyIdentity.global_agent_id, "parley-agent");
     assert.equal(parleyIdentity.board_id, "parley");
-    assert.equal(parleyIdentity.board_agent_id, "kairos-operator");
+    assert.equal(parleyIdentity.board_agent_id, "parley-agent");
     assert.equal(parleyIdentity.identity_resolution.used_default_board, false);
 
-    const memberships = resolveCallerBoardMemberships(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
-    assert.equal(memberships.global_agent_id, "kairos-operator");
-    assert.equal(memberships.default_board, "kairos");
-    assert.deepEqual(memberships.boards.map((board) => board.board_id), ["kairos", "parley"]);
+    const memberships = resolveCallerBoardMemberships(config, { callerRuntimeRef: AGENT_RUNTIME_REF });
+    assert.equal(memberships.global_agent_id, "parley-agent");
+    assert.equal(memberships.default_board, "project");
+    assert.deepEqual(memberships.boards.map((board) => board.board_id), ["project", "parley"]);
     assert.deepEqual(
       memberships.boards.map((board) => [board.board_id, board.board_agent_id, board.is_default]),
-      [["kairos", "kairos-operator", true], ["parley", "kairos-operator", false]]
+      [["project", "parley-agent", true], ["parley", "parley-agent", false]]
     );
     assert.equal(memberships.identity_resolution.accessible_board_count, 2);
   });
@@ -233,11 +286,11 @@ test("Parley v2 global registry fails closed for non-member explicit boards", as
       ...pluginConfig,
       parleyRegistry: {
         agents: {
-          "kairos-operator": {
-            runtime_bindings: [OPERATOR_RUNTIME_REF],
-            default_board: "kairos",
+          "parley-agent": {
+            runtime_bindings: [AGENT_RUNTIME_REF],
+            default_board: "project",
             memberships: {
-              kairos: { board_agent_id: "kairos-operator" }
+              project: { board_agent_id: "parley-agent" }
             }
           }
         }
@@ -253,7 +306,7 @@ test("Parley v2 global registry fails closed for non-member explicit boards", as
     };
 
     assert.throws(
-      () => resolveCallerIdentity(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF, boardId: "parley" }),
+      () => resolveCallerIdentity(config, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "parley" }),
       /not a member of board: parley/
     );
   });
@@ -261,13 +314,13 @@ test("Parley v2 global registry fails closed for non-member explicit boards", as
 
 test("Parley v2 tools derive caller identity from trusted OpenClaw runtime context", async () => {
   await withPluginConfig(async (pluginConfig) => {
-    const whereTool = createWhereAmITool({ pluginConfig, toolContext: { agentId: "kairos-operator" } });
+    const whereTool = createWhereAmITool({ pluginConfig, toolContext: { agentId: "parley-agent" } });
 
     assert.ok(!whereTool.parameters.required?.includes("callerRuntimeRef"));
 
     const result = await whereTool.execute(null, {});
-    assert.equal(result.details.identity.board_agent_id, "kairos-operator");
-    assert.deepEqual(result.details.identity.runtime_ref, OPERATOR_RUNTIME_REF);
+    assert.equal(result.details.identity.board_agent_id, "parley-agent");
+    assert.deepEqual(result.details.identity.runtime_ref, AGENT_RUNTIME_REF);
   });
 });
 
@@ -275,17 +328,18 @@ test("Parley v2 tool caller identity falls back to runtime session key when agen
   await withPluginConfig(async (pluginConfig) => {
     const whereTool = createWhereAmITool({
       pluginConfig,
-      toolContext: { sessionKey: "agent:kairos-operator:discord:channel:1494492383726010418" }
+      toolContext: { sessionKey: "agent:parley-agent:discord:channel:channel-test-001" }
     });
 
     const result = await whereTool.execute(null, {});
-    assert.equal(result.details.identity.board_agent_id, "kairos-operator");
+    assert.equal(result.details.identity.board_agent_id, "parley-agent");
     assert.deepEqual(result.details.identity.runtime_ref, {
       scheme: "openclaw",
       type: "session",
-      id: "agent:kairos-operator:discord:channel:1494492383726010418"
+      id: "agent:parley-agent:discord:channel:channel-test-001"
     });
-    assert.equal(result.details.identity.identity_resolution.caller_runtime_ref_persisted, true);
+    assert.equal(result.details.identity.identity_resolution.caller_runtime_ref_persisted, false);
+    assert.equal(result.details.identity.identity_resolution.source, "adapter_discovered");
   });
 });
 
@@ -294,11 +348,11 @@ test("Parley identity derives OpenClaw agent aliases without persisting discover
     const agentOnlyConfig = {
       ...pluginConfig,
       parleyDefaultBoards: {
-        kairos: {
-          ...pluginConfig.parleyDefaultBoards.kairos,
-          agent_registry: pluginConfig.parleyDefaultBoards.kairos.agent_registry.map((agent) => ({
+        project: {
+          ...pluginConfig.parleyDefaultBoards.project,
+          members: pluginConfig.parleyDefaultBoards.project.members.map((agent) => ({
             ...agent,
-            runtime_refs: agent.runtime_refs.filter((runtimeRef) => runtimeRef.type === "agent")
+            runtime_refs: (agent.runtime_refs ?? []).filter((runtimeRef) => runtimeRef.type === "agent")
           }))
         }
       }
@@ -307,21 +361,21 @@ test("Parley identity derives OpenClaw agent aliases without persisting discover
     const callerRuntimeRef = {
       scheme: "openclaw",
       type: "session",
-      id: "agent:kairos-operator:discord:channel:1494492383726010418"
+      id: "agent:parley-agent:discord:channel:channel-test-001"
     };
     const identity = resolveCallerIdentity(agentOnlyConfig, { callerRuntimeRef });
 
-    assert.equal(identity.board_agent_id, "kairos-operator");
+    assert.equal(identity.board_agent_id, "parley-agent");
     assert.deepEqual(identity.runtime_ref, callerRuntimeRef);
     assert.equal(identity.identity_resolution.source, "adapter_discovered");
     assert.equal(identity.identity_resolution.caller_runtime_ref_persisted, false);
     assert.deepEqual(identity.identity_resolution.resolved_by_runtime_ref, {
       scheme: "openclaw",
       type: "agent",
-      id: "kairos-operator",
-      key: "openclaw:agent:kairos-operator"
+      id: "parley-agent",
+      key: "openclaw:agent:parley-agent"
     });
-    assert.ok(identity.identity_resolution.candidates.some((candidate) => candidate.runtime_ref.key === "openclaw:session:agent:kairos-operator:discord:channel:1494492383726010418"));
+    assert.ok(identity.identity_resolution.candidates.some((candidate) => candidate.runtime_ref.key === "openclaw:session:agent:parley-agent:discord:channel:channel-test-001"));
   });
 });
 
@@ -338,7 +392,7 @@ test("Parley v2 identity fails closed when a runtime ref is ambiguous", async ()
           agent_registry: [
             {
               board_agent_id: "other-agent",
-              runtime_refs: [OPERATOR_RUNTIME_REF]
+              runtime_refs: [AGENT_RUNTIME_REF]
             }
           ]
         }
@@ -346,7 +400,7 @@ test("Parley v2 identity fails closed when a runtime ref is ambiguous", async ()
     };
 
     assert.throws(
-      () => resolveCallerIdentity(ambiguousConfig, { callerRuntimeRef: OPERATOR_RUNTIME_REF }),
+      () => resolveCallerIdentity(ambiguousConfig, { callerRuntimeRef: AGENT_RUNTIME_REF }),
       /ambiguously/
     );
     assert.throws(
@@ -354,10 +408,10 @@ test("Parley v2 identity fails closed when a runtime ref is ambiguous", async ()
         callerRuntimeRef: {
           scheme: "openclaw",
           type: "session",
-          id: "agent:kairos-operator:discord:channel:1494492383726010418"
+          id: "agent:parley-agent:discord:channel:channel-test-001"
         }
       }),
-      /ambiguously.*kairos-operator, other-agent/
+      /ambiguously.*parley-agent, other-agent/
     );
   });
 });
@@ -386,7 +440,7 @@ test("Parley v2 first-class schemas route raw target/payload through constructor
 
     await assert.rejects(
       () => effectTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         type: "activation_proposed",
         target: {
           artifact_id: "artifact_demo",
@@ -398,7 +452,7 @@ test("Parley v2 first-class schemas route raw target/payload through constructor
         payload: {
           requested_action: "review_activation",
           non_executing: true,
-          review_required_from: ["kairos-operator"]
+          review_required_from: ["parley-agent"]
         }
       }),
       /target\.invented is not allowed/
@@ -406,8 +460,8 @@ test("Parley v2 first-class schemas route raw target/payload through constructor
 
     await assert.rejects(
       () => obligationTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
-        agent: "kairos-operator",
+        callerRuntimeRef: AGENT_RUNTIME_REF,
+        agent: "parley-agent",
         type: "review",
         target: { note: "invented shape" }
       }),
@@ -419,10 +473,10 @@ test("Parley v2 first-class schemas route raw target/payload through constructor
 test("Parley v2 board-state schemas reject raw-authored malformed actor and artifact refs", () => {
   assert.throws(
     () => createEffectRecord({
-      board_id: "kairos",
+      board_id: "project",
       effect_id: "effect_bad_actor",
       type: "decision_recorded",
-      actor: { board_agent_id: "kairos-operator" },
+      actor: { board_agent_id: "parley-agent" },
       target: { object_id: "object_demo" },
       payload: { decision: "accept" }
     }),
@@ -431,7 +485,7 @@ test("Parley v2 board-state schemas reject raw-authored malformed actor and arti
 
   assert.throws(
     () => createCoordinationObjectRecord({
-      board_id: "kairos",
+      board_id: "project",
       object_id: "object_bad_artifact_ref",
       kind: "plan",
       title: "Bad artifact ref",
@@ -453,7 +507,7 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
     assert.deepEqual(mutateTool.parameters.required, ["action"]);
 
     const artifactResult = await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "register_artifact",
       input: {
         artifactId: "artifact_facade",
@@ -468,7 +522,7 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
     assert.equal(artifactResult.details.result.artifact.artifact_id, "artifact_facade");
 
     const boardResultValue = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board"
     });
     assert.equal(boardResultValue.details.tool, "parley_query");
@@ -477,34 +531,34 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
     assert.equal(boardResultValue.details.result.projection.records, null);
 
     const whereResult = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "where_am_i"
     });
-    assert.equal(whereResult.details.result.projection.board_agent_id, "kairos-operator");
+    assert.equal(whereResult.details.result.projection.board_agent_id, "parley-agent");
 
     const myBoardsResult = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "my_boards"
     });
     assert.equal(myBoardsResult.details.action, "my_boards");
-    assert.equal(myBoardsResult.details.result.result.global_agent_id, "kairos-operator");
-    assert.deepEqual(myBoardsResult.details.result.result.boards.map((board) => board.board_id), ["kairos"]);
+    assert.equal(myBoardsResult.details.result.result.global_agent_id, "parley-agent");
+    assert.deepEqual(myBoardsResult.details.result.result.boards.map((board) => board.board_id), ["project"]);
     await assert.rejects(
-      () => queryTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, action: "my_boards", boardId: "kairos" }),
+      () => queryTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, action: "my_boards", boardId: "project" }),
       /parley_my_boards does not accept parameter: boardId/
     );
 
     await assert.rejects(
-      () => queryTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, action: "activation_candidates" }),
+      () => queryTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, action: "activation_candidates" }),
       /unsupported parley_query action/
     );
     await assert.rejects(
-      () => mutateTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, action: "defer_phase" }),
+      () => mutateTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, action: "defer_phase" }),
       /unsupported parley_mutate action/
     );
     await assert.rejects(
       () => mutateTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         action: "register_artifact",
         input: {
           artifactId: "artifact_facade_unknown_param",
@@ -526,7 +580,7 @@ test("Parley query/mutate façade creates and validates parley.plan.v1 documents
     const mutateTool = createMutateTool(api);
 
     const createResult = await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "create_plan",
       input: {
         planId: "plan_facade_create_validate",
@@ -534,7 +588,7 @@ test("Parley query/mutate façade creates and validates parley.plan.v1 documents
         authority: "implementation-plan",
         landingSubpath: "agent-comms/parley",
         filename: "facade-create-validate-plan.md",
-        participants: ["kairos-operator", "human:sensei"],
+        participants: ["parley-agent", "human:sensei"],
         scope: {
           summary: "Exercise plan creation through the Parley façade.",
           in: ["Create a namespaced plan document"],
@@ -565,11 +619,11 @@ test("Parley query/mutate façade creates and validates parley.plan.v1 documents
     assert.match(markdown, /schema: parley.plan.v1/);
     assert.match(markdown, /namespace: project_plans/);
 
-    const artifact = await loadArtifactRecord(pluginConfig, resolveParleyBoardRegistry(pluginConfig).boards.kairos, "artifact_facade_create_validate");
+    const artifact = await loadArtifactRecord(pluginConfig, resolveParleyBoardRegistry(pluginConfig).boards.project, "artifact_facade_create_validate");
     assert.equal(artifact.resolved_path, planPath);
 
     const validateResult = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "validate_plan",
       input: { resolvedPath: planPath }
     });
@@ -585,7 +639,7 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
     const mutateTool = createMutateTool(api);
 
     const createResult = await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "create_plan",
       input: {
         planId: "plan_human_checkpoint",
@@ -600,13 +654,13 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
             title: "Initial human review",
             kind: "review",
             required_from: "human:sensei",
-            shepherd: "kairos-operator",
+            shepherd: "parley-agent",
             trigger: "plan_created",
             status: "pending",
             requested_decision: "approve_or_request_changes"
           }
         ],
-        participants: ["kairos-operator", "human:sensei"],
+        participants: ["parley-agent", "human:sensei"],
         scope: {
           summary: "Exercise human checkpoint obligation creation.",
           in: ["Create shepherd obligation"],
@@ -626,13 +680,13 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
 
     const created = createResult.details.result.human_checkpoints.created_obligations;
     assert.equal(created.length, 1);
-    assert.equal(created[0].obligation.agent, "kairos-operator");
+    assert.equal(created[0].obligation.agent, "parley-agent");
     assert.equal(created[0].obligation.type, "notify_human");
     assert.equal(created[0].obligation.target.review_required_from, "human:sensei");
     assert.equal(created[0].effect.type, "review_requested");
 
     const boardResultValue = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board"
     });
     const checkpointState = boardResultValue.details.result.projection.checkpoint_state;
@@ -642,7 +696,7 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
     assert.equal(checkpointState.human_checkpoints[0].obligation_id, created[0].obligation.obligation_id);
 
     const whereResult = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "where_am_i"
     });
     assert.equal(whereResult.details.result.projection.counts.human_checkpoints_to_shepherd, 1);
@@ -652,11 +706,19 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
 
 test("Parley namespace landing fails closed outside allowed plan subpaths", async () => {
   await withPluginConfig(async (pluginConfig) => {
-    const mutateTool = createMutateTool(toolApi(pluginConfig));
+    const restrictedProjectBoard = createProjectBoardConfig(pluginConfig, { repoRoot: REPO_ROOT });
+    restrictedProjectBoard.artifact_namespaces = restrictedProjectBoard.artifact_namespaces.map((namespace) => (
+      namespace.id === "project_plans" ? { ...namespace, allowed_subpaths: ["approved"] } : namespace
+    ));
+    const restrictedConfig = {
+      ...pluginConfig,
+      parleyDefaultBoards: { project: restrictedProjectBoard }
+    };
+    const mutateTool = createMutateTool(toolApi(restrictedConfig));
 
     await assert.rejects(
       () => mutateTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         action: "create_plan",
         input: {
           planId: "plan_bad_namespace_subpath",
@@ -683,7 +745,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     const mutateTool = createMutateTool(api);
 
     const createResult = await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "create_plan",
       input: {
         planId: "plan_activation_visibility",
@@ -691,7 +753,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
         authority: "implementation-plan",
         landingSubpath: "agent-comms/parley",
         filename: "activation-visibility-plan.md",
-        participants: ["kairos-operator", "kairos-orchestrator"],
+        participants: ["parley-agent", "project-reviewer"],
         scope: {
           summary: "Exercise deferred phase visibility.",
           in: ["Surface deferred phases"],
@@ -707,10 +769,10 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
             "### Phase 4 — Deferred Gate",
             "",
             "Status: deferred",
-            "Owner: kairos-operator",
+            "Owner: parley-agent",
             "",
             "Supporting agents:",
-            "- kairos-orchestrator",
+            "- project-reviewer",
             "",
             "Entry criteria:",
             "- Prior relationship is complete.",
@@ -738,7 +800,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     });
 
     const boardBefore = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board"
     });
     assert.equal(boardBefore.details.result.projection.counts.deferred_phases, 1);
@@ -746,14 +808,14 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     assert.equal(boardBefore.details.result.projection.activation_state.deferred_phases[0].status, "deferred_visible");
 
     const whereBefore = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "where_am_i"
     });
     assert.equal(whereBefore.details.result.projection.counts.deferred_phases_owned_not_actionable, 1);
     assert.equal(whereBefore.details.result.projection.counts.activation_candidates, 0);
 
     await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "record_effect",
       input: {
         type: "activation_proposed",
@@ -766,7 +828,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
         payload: {
           requested_action: "review_activation",
           non_executing: true,
-          review_required_from: ["kairos-operator"],
+          review_required_from: ["parley-agent"],
           evidence: [
             { type: "manual_proposal", summary: "Human asked to revisit the deferred gate.", confidence: "proposed_not_verified" }
           ]
@@ -775,24 +837,24 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     });
 
     const boardAfterProposal = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board"
     });
     const [candidate] = boardAfterProposal.details.result.projection.activation_state.activation_candidates;
     assert.equal(boardAfterProposal.details.result.projection.counts.activation_candidates, 1);
     assert.equal(candidate.status, "proposed");
-    assert.equal(candidate.candidate_key, "kairos:plan_activation_visibility:phase_4:v1");
-    assert.equal(candidate.review_required_from[0], "kairos-operator");
+    assert.equal(candidate.candidate_key, "project:plan_activation_visibility:phase_4:v1");
+    assert.equal(candidate.review_required_from[0], "parley-agent");
 
     const whereAfterProposal = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "where_am_i"
     });
     assert.equal(whereAfterProposal.details.result.projection.counts.activation_candidates, 1);
     assert.equal(whereAfterProposal.details.result.projection.activation_candidates_needing_attention[0].status, "proposed");
 
     await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "record_effect",
       input: {
         type: "activation_candidate_dismissed",
@@ -810,13 +872,13 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     });
 
     const boardAfterDismissal = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board"
     });
     assert.equal(boardAfterDismissal.details.result.projection.activation_state.activation_candidates[0].status, "dismissed");
 
     const whereAfterDismissal = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "where_am_i"
     });
     assert.equal(whereAfterDismissal.details.result.projection.counts.activation_candidates, 0);
@@ -829,10 +891,10 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     const checkpointTool = createCheckpointProjectionTool(api);
     const artifactTool = createRegisterArtifactTool(api);
     const registry = resolveParleyBoardRegistry(pluginConfig);
-    const board = registry.boards.kairos;
+    const board = registry.boards.project;
 
     const firstInspect = await checkpointTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       projectionType: "minimal_board"
     });
     assert.equal(firstInspect.details.projection_type, "minimal_board");
@@ -843,21 +905,21 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     assert.equal(firstInspect.details.checkpoint, null);
 
     const firstAdvance = await checkpointTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       projectionType: "minimal_board",
       advance: true
     });
     assert.equal(firstAdvance.details.advanced, true);
-    assert.equal(firstAdvance.details.checkpoint.board_id, "kairos");
-    assert.equal(firstAdvance.details.checkpoint.board_agent_id, "kairos-operator");
+    assert.equal(firstAdvance.details.checkpoint.board_id, "project");
+    assert.equal(firstAdvance.details.checkpoint.board_agent_id, "parley-agent");
     assert.equal(firstAdvance.details.checkpoint.projection_type, "minimal_board");
-    assert.deepEqual(firstAdvance.details.checkpoint.last_seen_by_runtime_ref, OPERATOR_RUNTIME_REF);
+    assert.deepEqual(firstAdvance.details.checkpoint.last_seen_by_runtime_ref, AGENT_RUNTIME_REF);
 
-    const stored = await loadProjectionCheckpointRecord(pluginConfig, board, "kairos-operator", "minimal_board");
+    const stored = await loadProjectionCheckpointRecord(pluginConfig, board, "parley-agent", "minimal_board");
     assert.equal(stored.cursor.projection_digest, firstAdvance.details.current_cursor.projection_digest);
 
     const unchangedInspect = await checkpointTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       projectionType: "minimal_board"
     });
     assert.equal(unchangedInspect.details.comparison.has_previous, true);
@@ -865,7 +927,7 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     assert.deepEqual(unchangedInspect.details.comparison.count_deltas, {});
 
     await artifactTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       artifactId: "artifact_checkpoint_delta",
       kind: "plan",
       storageMode: "reference_only",
@@ -874,7 +936,7 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     });
 
     const changedInspect = await checkpointTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       projectionType: "minimal_board"
     });
     assert.equal(changedInspect.details.comparison.changed, true);
@@ -882,7 +944,7 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     assert.deepEqual(changedInspect.details.comparison.count_deltas["artifacts_by_kind.plan"], { before: 0, after: 1, delta: 1 });
 
     const whereAdvance = await checkpointTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       projectionType: "where_am_i",
       advance: true
     });
@@ -890,7 +952,7 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     assert.equal(whereAdvance.details.current_cursor.counts.assigned, 0);
 
     await assert.rejects(
-      () => checkpointTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, projectionType: "activation_candidates" }),
+      () => checkpointTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, projectionType: "activation_candidates" }),
       /projectionType must be one of/
     );
   });
@@ -907,7 +969,7 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     const boardProjectionTool = createBoardProjectionTool(api);
 
     const artifactResult = await artifactTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       artifactId: "artifact_demo",
       kind: "plan",
       storageMode: "managed_local",
@@ -922,20 +984,20 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(await fs.readFile(artifact.resolved_path, "utf8"), "# Demo Plan\n");
 
     const objectResult = await objectTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       objectId: "object_demo",
       kind: "plan",
       title: "Demo coordination object",
       status: "active",
       artifactId: "artifact_demo",
-      participants: ["kairos-operator", "kairos-orchestrator"]
+      participants: ["parley-agent", "project-reviewer"]
     });
     const object = objectResult.details.object;
     assert.equal(object.object_id, "object_demo");
     assert.deepEqual(object.artifact_ref, { artifact_id: "artifact_demo", version: 1 });
 
     const effectResult = await effectTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       effectId: "effect_demo",
       type: "review_requested",
       target: { object_id: "object_demo", artifact_id: "artifact_demo" },
@@ -946,9 +1008,9 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(effectResult.details.effect.effect_id, "effect_demo");
 
     const obligationResult = await obligationTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       obligationId: "obligation_demo",
-      agent: "kairos-operator",
+      agent: "parley-agent",
       type: "review",
       status: "blocking",
       target: { object_id: "object_demo", artifact_id: "artifact_demo" },
@@ -959,12 +1021,12 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(obligationResult.details.obligation.obligation_id, "obligation_demo");
 
     const registry = resolveParleyBoardRegistry(pluginConfig);
-    const board = registry.boards.kairos;
+    const board = registry.boards.project;
     assert.equal((await loadArtifactRecord(pluginConfig, board, "artifact_demo")).title, "Demo Plan");
     assert.equal((await loadCoordinationObjectRecord(pluginConfig, board, "object_demo")).title, "Demo coordination object");
 
-    const whereResult = await whereTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
-    assert.equal(whereResult.details.identity.board_agent_id, "kairos-operator");
+    const whereResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF });
+    assert.equal(whereResult.details.identity.board_agent_id, "parley-agent");
     assert.equal(whereResult.details.projection.counts.blocking, 1);
     assert.equal(whereResult.details.projection.blocking_obligations[0].obligation.obligation_id, "obligation_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].source_refs.source_thread_id, "thread_demo");
@@ -972,7 +1034,7 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(whereResult.details.projection.blocking_obligations[0].object.object_id, "object_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].artifact.artifact_id, "artifact_demo");
 
-    const boardProjectionResult = await boardProjectionTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeRecords: true });
+    const boardProjectionResult = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeRecords: true });
     const projection = boardProjectionResult.details.projection;
     assert.equal(projection.projection_type, "minimal_board");
     assert.equal(projection.derived, true);
@@ -984,7 +1046,7 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(projection.counts.artifacts_by_kind.plan, 1);
     assert.equal(projection.counts.objects_by_status.active, 1);
     assert.equal(projection.counts.effects_by_type.review_requested, 1);
-    assert.equal(projection.counts.obligations_by_agent["kairos-operator"].by_status.blocking, 1);
+    assert.equal(projection.counts.obligations_by_agent["parley-agent"].by_status.blocking, 1);
     assert.equal(projection.records.artifacts[0].artifact_id, "artifact_demo");
     assert.equal(projection.records.objects[0].object_id, "object_demo");
     assert.equal(projection.records.effects[0].effect_id, "effect_demo");
@@ -1002,7 +1064,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     const boardProjectionTool = createBoardProjectionTool(api);
 
     await artifactTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       artifactId: "artifact_graph_plan",
       kind: "plan",
       storageMode: "reference_only",
@@ -1011,21 +1073,21 @@ test("Parley v2 relationship records feed the board relationship graph", async (
       title: "Graph Plan"
     });
     await objectTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       objectId: "object_graph_plan",
       kind: "plan",
       title: "Graph plan object",
       artifactId: "artifact_graph_plan"
     });
     await objectTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       objectId: "object_graph_review",
       kind: "review_request",
       title: "Graph review request"
     });
 
     const relationshipResult = await relationshipTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       relationshipId: "relationship_graph_review_depends",
       effectId: "effect_relationship_graph_review_depends",
       type: "depends_on",
@@ -1038,7 +1100,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(relationshipResult.details.relationship.relationship_id, "relationship_graph_review_depends");
     assert.equal(relationshipResult.details.effect.type, "relationship_added");
 
-    const projection = (await boardProjectionTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeRecords: true })).details.projection;
+    const projection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeRecords: true })).details.projection;
     assert.equal(projection.counts.relationships, 1);
     assert.equal(projection.counts.relationship_edges, 1);
     assert.equal(projection.counts.relationship_nodes, 2);
@@ -1049,7 +1111,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(projection.records.relationships[0].source_effect_id, "effect_relationship_graph_review_depends");
 
     const removalResult = await removeRelationshipTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       relationshipId: "relationship_graph_review_depends",
       effectId: "effect_relationship_graph_review_depends_removed",
       reason: "Original edge was imprecise; replace it with a constrains edge."
@@ -1059,7 +1121,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(removalResult.details.effect.type, "relationship_removed");
     assert.equal(removalResult.details.effect.payload.removal_mode, "inactive_in_projection");
 
-    const removedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeRecords: true })).details.projection;
+    const removedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeRecords: true })).details.projection;
     assert.equal(removedProjection.counts.relationships, 1);
     assert.equal(removedProjection.counts.relationship_edges, 0);
     assert.equal(removedProjection.counts.relationship_nodes, 0);
@@ -1069,7 +1131,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(removedProjection.records.relationships[0].status, "removed");
 
     const correctedRelationshipResult = await relationshipTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       relationshipId: "relationship_graph_review_constrains",
       effectId: "effect_relationship_graph_review_constrains",
       type: "constrains",
@@ -1081,7 +1143,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(correctedRelationshipResult.details.relationship.correction_of, "relationship_graph_review_depends");
     assert.equal(correctedRelationshipResult.details.effect.payload.correction_of, "relationship_graph_review_depends");
 
-    const correctedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeRecords: true })).details.projection;
+    const correctedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeRecords: true })).details.projection;
     assert.equal(correctedProjection.counts.relationships, 2);
     assert.equal(correctedProjection.counts.relationship_edges, 1);
     assert.equal(correctedProjection.counts.relationship_nodes, 2);
@@ -1098,7 +1160,7 @@ test("Parley v2 relationship endpoints must reference existing artifacts or obje
     const relationshipTool = createRecordRelationshipTool(toolApi(pluginConfig));
     await assert.rejects(
       () => relationshipTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         type: "depends_on",
         from: { kind: "object", id: "object_missing" },
         to: { kind: "object", id: "object_other_missing" }
@@ -1117,7 +1179,7 @@ test("Parley v2 scoped approvals become stale across artifact versions unless ca
     const boardProjectionTool = createBoardProjectionTool(api);
 
     await artifactTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       artifactId: "artifact_reviewed",
       kind: "plan",
       storageMode: "reference_only",
@@ -1127,7 +1189,7 @@ test("Parley v2 scoped approvals become stale across artifact versions unless ca
     });
 
     await effectTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       effectId: "effect_approval_v1",
       type: "approval_recorded",
       target: { artifact_id: "artifact_reviewed", artifact_version: 1, scope: "implementation" },
@@ -1135,7 +1197,7 @@ test("Parley v2 scoped approvals become stale across artifact versions unless ca
     });
 
     await artifactTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       artifactId: "artifact_reviewed",
       kind: "plan",
       storageMode: "reference_only",
@@ -1144,25 +1206,25 @@ test("Parley v2 scoped approvals become stale across artifact versions unless ca
       title: "Reviewed Plan v2"
     });
 
-    const staleProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeRecords: false });
+    const staleProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeRecords: false });
     assert.equal(staleProjection.details.projection.counts.approvals, 1);
     assert.equal(staleProjection.details.projection.counts.stale_approvals, 1);
     assert.equal(staleProjection.details.projection.approval_state.approvals[0].status, "stale");
     assert.equal(staleProjection.details.projection.approval_state.approvals[0].stale_reason, "artifact_version_changed");
 
-    const staleWhere = await whereTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
+    const staleWhere = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF });
     assert.equal(staleWhere.details.projection.counts.stale_approvals, 1);
     assert.equal(staleWhere.details.projection.stale_approvals[0].artifact_id, "artifact_reviewed");
 
     await effectTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       effectId: "effect_approval_v2_carry_forward",
       type: "approval_recorded",
       target: { artifact_id: "artifact_reviewed", artifact_version: 2, scope: "implementation" },
       payload: { carry_forward_from_version: 1, note: "carry v1 review forward" }
     });
 
-    const carriedProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeRecords: false });
+    const carriedProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeRecords: false });
     assert.equal(carriedProjection.details.projection.counts.approvals, 2);
     assert.equal(carriedProjection.details.projection.counts.stale_approvals, 0);
     assert.equal(carriedProjection.details.projection.counts.carried_forward_approvals, 1);
@@ -1177,7 +1239,7 @@ test("Parley v2 scoped approval effects require artifact version and authority s
     const effectTool = createRecordEffectTool(toolApi(pluginConfig));
     await assert.rejects(
       () => effectTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         effectId: "effect_unversioned_approval",
         type: "approval_recorded",
         target: { artifact_id: "artifact_missing_version", scope: "implementation" }
@@ -1186,7 +1248,7 @@ test("Parley v2 scoped approval effects require artifact version and authority s
     );
     await assert.rejects(
       () => effectTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         effectId: "effect_unscoped_approval",
         type: "approval_recorded",
         target: { artifact_id: "artifact_missing_scope", artifact_version: 1 }
@@ -1203,19 +1265,19 @@ test("Parley v2 where_am_i hides terminal obligations by default", async () => {
     const whereTool = createWhereAmITool(api);
 
     await obligationTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       obligationId: "obligation_resolved",
-      agent: "kairos-operator",
+      agent: "parley-agent",
       type: "report_status",
       status: "resolved",
       target: { note: "done" }
     });
 
-    const defaultResult = await whereTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
+    const defaultResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF });
     assert.equal(defaultResult.details.projection.counts.assigned, 1);
     assert.equal(defaultResult.details.projection.counts.visible, 0);
 
-    const includedResult = await whereTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, includeTerminal: true });
+    const includedResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, includeTerminal: true });
     assert.equal(includedResult.details.projection.counts.visible, 1);
     assert.equal(includedResult.details.projection.other_visible_obligations[0].obligation.obligation_id, "obligation_resolved");
   });
@@ -1225,7 +1287,7 @@ test("Parley v2 effects are append-only by id", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const effectTool = createRecordEffectTool(toolApi(pluginConfig));
     const payload = {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       effectId: "effect_once",
       type: "decision_recorded",
       target: { object_id: "object_demo" },
@@ -1237,7 +1299,7 @@ test("Parley v2 effects are append-only by id", async () => {
   });
 });
 
-test("Parley validate_state reports fake-board safety diagnostics without Kairos defaults", async () => {
+test("Parley validate_state reports fake-board safety diagnostics without Project defaults", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const fakeRoot = path.join(pluginConfig.__tempRoot, "fake-board-runtime");
     const fakePlans = path.join(pluginConfig.__tempRoot, "fake-plans");
@@ -1289,8 +1351,8 @@ test("Parley validate_state reports fake-board safety diagnostics without Kairos
         filename: "fake-board-fixture.md",
         scope: {
           summary: "Exercise fake-board validation.",
-          in: ["Create non-Kairos plan"],
-          out: ["Use Kairos runtime paths"]
+          in: ["Create non-default plan"],
+          out: ["Use generic runtime paths"]
         },
         sections: {
           purpose: "Prove fake-board fixtures remain generic.",
@@ -1320,7 +1382,7 @@ test("Parley validate_state reports hash mismatches and relationship cycles", as
     const mutateTool = createMutateTool(api);
 
     const createResult = await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "create_plan",
       input: {
         planId: "plan_validation_hash",
@@ -1343,7 +1405,7 @@ test("Parley validate_state reports hash mismatches and relationship cycles", as
 
     for (const objectId of ["object_cycle_a", "object_cycle_b"]) {
       await mutateTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         action: "create_object",
         input: { objectId, kind: "plan", title: objectId.replaceAll("_", " ") }
       });
@@ -1356,7 +1418,7 @@ test("Parley validate_state reports hash mismatches and relationship cycles", as
     ]) {
       const [relationshipId, type, fromId, toId] = relationship;
       await mutateTool.execute(null, {
-        callerRuntimeRef: OPERATOR_RUNTIME_REF,
+        callerRuntimeRef: AGENT_RUNTIME_REF,
         action: "record_relationship",
         input: {
           relationshipId,
@@ -1368,7 +1430,7 @@ test("Parley validate_state reports hash mismatches and relationship cycles", as
     }
 
     const validationResult = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "validate_state"
     });
     const validation = validationResult.details.result.validation;
@@ -1385,9 +1447,9 @@ test("Parley effect-derived projections use deterministic created_at plus effect
     const mutateTool = createMutateTool(api);
     const queryTool = createQueryTool(api);
     const registry = resolveParleyBoardRegistry(pluginConfig);
-    const board = registry.boards.kairos;
+    const board = registry.boards.project;
     const artifactResult = await mutateTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "register_artifact",
       input: {
         artifactId: "artifact_same_time_order",
@@ -1405,7 +1467,7 @@ test("Parley effect-derived projections use deterministic created_at plus effect
       board_id: board.board_id,
       effect_id: "effect_same_time_b",
       type: "approval_withdrawn",
-      actor: { board_agent_id: "kairos-operator", runtime_ref: OPERATOR_RUNTIME_REF },
+      actor: { board_agent_id: "parley-agent", runtime_ref: AGENT_RUNTIME_REF },
       target: { artifact_id: artifact.artifact_id, artifact_version: 1, scope: "schema" },
       payload: { reason: "Withdraw before re-approval in same timestamp fixture." },
       created_at: createdAt
@@ -1414,7 +1476,7 @@ test("Parley effect-derived projections use deterministic created_at plus effect
       board_id: board.board_id,
       effect_id: "effect_same_time_a",
       type: "approval_recorded",
-      actor: { board_agent_id: "kairos-operator", runtime_ref: OPERATOR_RUNTIME_REF },
+      actor: { board_agent_id: "parley-agent", runtime_ref: AGENT_RUNTIME_REF },
       target: { artifact_id: artifact.artifact_id, artifact_version: 1, scope: "schema" },
       payload: { note: "Approve in same timestamp fixture." },
       created_at: createdAt
@@ -1423,13 +1485,13 @@ test("Parley effect-derived projections use deterministic created_at plus effect
     await saveEffectRecord(pluginConfig, board, earlierAlphabeticalEffect);
 
     const first = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board",
       includeRecords: true,
       recordLimit: 10
     });
     const second = await queryTool.execute(null, {
-      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      callerRuntimeRef: AGENT_RUNTIME_REF,
       action: "board",
       includeRecords: true,
       recordLimit: 10

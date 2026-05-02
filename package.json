@@ -1,16 +1,52 @@
 {
   "name": "@nkuhanas/parley",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "type": "module",
-  "description": "Parley coordination runtime and OpenClaw tool surfaces",
+  "description": "Board-scoped coordination runtime and OpenClaw tools for AI agents",
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
-    "./*": "./src/*"
+    "./plugin": "./plugin.js",
+    "./openclaw": "./src/adapters/openclaw/index.js",
+    "./core/*": "./src/core/*",
+    "./adapters/openclaw/*": "./src/adapters/openclaw/*",
+    "./src/*": "./src/*"
   },
   "scripts": {
     "test": "node --test"
   },
-  "license": "UNLICENSED",
-  "private": true
+  "license": "Apache-2.0",
+  "files": [
+    "index.js",
+    "plugin.js",
+    "openclaw.plugin.json",
+    "src/",
+    "docs/",
+    "examples/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "agents",
+    "coordination",
+    "workflow"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./plugin.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.27",
+      "minGatewayVersion": "2026.4.27"
+    },
+    "build": {
+      "openclawVersion": "2026.4.27",
+      "pluginSdkVersion": "2026.4.27"
+    }
+  }
 }

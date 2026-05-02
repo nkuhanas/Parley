@@ -4,18 +4,18 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { createOpenThreadTool } from "../src/actions/open_thread.js";
-import { createClaimTurnTool } from "../src/actions/claim_turn.js";
-import { createReplyThreadTool } from "../src/actions/reply.js";
-import { createSettleTurnTool } from "../src/actions/settle_turn.js";
-import { createConcludeThreadTool } from "../src/actions/conclude_thread.js";
-import { createDispatchTransportRequestTool } from "../src/actions/dispatch_transport_request.js";
-import { createRecordHumanSummaryAnchorTool } from "../src/actions/record_human_summary_anchor.js";
-import { loadMessageRecord, loadThreadRecord } from "../src/store.js";
+import { createOpenThreadTool } from "../src/adapters/openclaw/tools/open_thread.js";
+import { createClaimTurnTool } from "../src/adapters/openclaw/tools/claim_turn.js";
+import { createReplyThreadTool } from "../src/adapters/openclaw/tools/reply.js";
+import { createSettleTurnTool } from "../src/adapters/openclaw/tools/settle_turn.js";
+import { createConcludeThreadTool } from "../src/adapters/openclaw/tools/conclude_thread.js";
+import { createDispatchTransportRequestTool } from "../src/adapters/openclaw/tools/dispatch_transport_request.js";
+import { createRecordHumanSummaryAnchorTool } from "../src/adapters/openclaw/tools/record_human_summary_anchor.js";
+import { loadMessageRecord, loadThreadRecord } from "../src/core/storage/store.js";
 
-const REPO_ROOT = "/home/agent/workspace/Kairos";
-const INITIATOR_SESSION_KEY = "agent:kairos-operator:discord:channel:1494492383726010418";
-const RECIPIENT_SESSION_KEY = "agent:kairos-operator:subagent:test-target";
+const REPO_ROOT = "/tmp/parley-test-repo";
+const INITIATOR_SESSION_KEY = "agent:parley-agent:discord:channel:channel-test-001";
+const RECIPIENT_SESSION_KEY = "agent:parley-agent:subagent:test-target";
 
 async function makePluginConfig() {
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "parley-transport-test-"));
@@ -49,7 +49,7 @@ async function openAndSettleThread(pluginConfig, gatewayCalls = []) {
   const openResult = await openTool.execute(null, {
     kind: "coordination",
     controlMode: "peer",
-    initiator: "kairos-operator",
+    initiator: "parley-agent",
     recipient: "parley-test-target",
     nextActionOwner: "parley-test-target",
     bodyText: "Live test after gateway restart.",
@@ -64,7 +64,7 @@ async function openAndSettleThread(pluginConfig, gatewayCalls = []) {
     threadId: openResult.details.thread.thread_id,
     actor: "parley-test-target",
     controlMarker: "turn_complete",
-    nextActionOwner: "kairos-operator",
+    nextActionOwner: "parley-agent",
     bodyText: "PARLEY RETURN PATH FIX VERIFIED"
   });
 
@@ -76,7 +76,7 @@ async function openRecordAndSettleHumanSummaryThread(pluginConfig, gatewayCalls 
   const openResult = await openTool.execute(null, {
     kind: "coordination",
     controlMode: "peer",
-    initiator: "kairos-operator",
+    initiator: "parley-agent",
     recipient: "parley-test-target",
     originKind: "human",
     nextActionOwner: "parley-test-target",
@@ -88,11 +88,11 @@ async function openRecordAndSettleHumanSummaryThread(pluginConfig, gatewayCalls 
   const recordTool = createRecordHumanSummaryAnchorTool({ pluginConfig });
   const recordResult = await recordTool.execute(null, {
     threadId: openResult.details.thread.thread_id,
-    messageId: "1496381619869712556",
+    messageId: "anchor-message-001",
     channel: "discord",
-    channelId: "1494492383726010418",
-    target: "channel:1494492383726010418",
-    accountId: "kairos-operator",
+    channelId: "channel-test-001",
+    target: "channel:channel-test-001",
+    accountId: "parley-agent",
     createdAt: "2026-04-22T05:26:30.000Z"
   });
 
@@ -101,7 +101,7 @@ async function openRecordAndSettleHumanSummaryThread(pluginConfig, gatewayCalls 
     threadId: openResult.details.thread.thread_id,
     actor: "parley-test-target",
     controlMarker: "turn_complete",
-    nextActionOwner: "kairos-operator",
+    nextActionOwner: "parley-agent",
     bodyText: "PARLEY RETURN PATH FIX VERIFIED"
   });
 
@@ -112,7 +112,7 @@ test("parley_open_thread defaults the bounded normal path cleanly", async () => 
   await withPluginConfig(async (pluginConfig) => {
     const openTool = createOpenThreadTool({ pluginConfig });
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -134,15 +134,15 @@ test("parley_open_thread defaults human-origin threads to summary_to_human when 
     const openResult = await openTool.execute(null, {
       kind: "coordination",
       controlMode: "peer",
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       originKind: "human",
       humanSummaryAnchor: {
-        messageId: "1496381619869712556",
+        messageId: "anchor-message-001",
         channel: "discord",
-        channelId: "1494492383726010418",
-        target: "channel:1494492383726010418",
-        accountId: "kairos-operator",
+        channelId: "channel-test-001",
+        target: "channel:channel-test-001",
+        accountId: "parley-agent",
         createdAt: "2026-04-22T05:26:30.000Z"
       },
       nextActionOwner: "parley-test-target",
@@ -153,7 +153,7 @@ test("parley_open_thread defaults human-origin threads to summary_to_human when 
 
     assert.equal(openResult.details.thread.origin_kind, "human");
     assert.equal(openResult.details.thread.report_back_policy, "summary_to_human");
-    assert.equal(openResult.details.thread.human_summary_anchor.message_id, "1496381619869712556");
+    assert.equal(openResult.details.thread.human_summary_anchor.message_id, "anchor-message-001");
     assert.equal(openResult.details.thread.human_summary_anchor.channel, "discord");
     assert.equal(openResult.details.thread.human_summary_anchor_status, "recorded");
     assert.equal(openResult.details.human_summary_anchor_required, false);
@@ -161,8 +161,8 @@ test("parley_open_thread defaults human-origin threads to summary_to_human when 
     const persistedThread = await loadThreadRecord(pluginConfig, openResult.details.thread.thread_id);
     assert.equal(persistedThread.origin_kind, "human");
     assert.equal(persistedThread.report_back_policy, "summary_to_human");
-    assert.equal(persistedThread.human_summary_anchor.message_id, "1496381619869712556");
-    assert.equal(persistedThread.human_summary_anchor.channel_id, "1494492383726010418");
+    assert.equal(persistedThread.human_summary_anchor.message_id, "anchor-message-001");
+    assert.equal(persistedThread.human_summary_anchor.channel_id, "channel-test-001");
     assert.equal(persistedThread.human_summary_anchor_status, "recorded");
   });
 });
@@ -173,7 +173,7 @@ test("parley_open_thread defaults human-origin threads without an explicit polic
     const openResult = await openTool.execute(null, {
       kind: "coordination",
       controlMode: "peer",
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       originKind: "human",
       nextActionOwner: "parley-test-target",
@@ -189,7 +189,7 @@ test("parley_open_thread defaults human-origin threads without an explicit polic
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, /^PARLEY THREAD\n/m);
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, new RegExp(`thread: ${openResult.details.thread.thread_id}`));
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, /kind: coordination/);
-    assert.match(openResult.details.human_summary_anchor_request.anchor_text, /participants: kairos-operator -> parley-test-target/);
+    assert.match(openResult.details.human_summary_anchor_request.anchor_text, /participants: parley-agent -> parley-test-target/);
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, /status: awaiting_next_action/);
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, /next: parley-test-target/);
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, /report: final update will follow in reply to this message after settlement/);
@@ -221,7 +221,7 @@ test("parley_record_human_summary_anchor records a delivered anchor for a pendin
     const openResult = await openTool.execute(null, {
       kind: "coordination",
       controlMode: "peer",
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       originKind: "human",
       nextActionOwner: "parley-test-target",
@@ -233,26 +233,26 @@ test("parley_record_human_summary_anchor records a delivered anchor for a pendin
     const recordTool = createRecordHumanSummaryAnchorTool({ pluginConfig });
     const recordResult = await recordTool.execute(null, {
       threadId: openResult.details.thread.thread_id,
-      messageId: "1496381619869712556",
+      messageId: "anchor-message-001",
       channel: "discord",
-      channelId: "1494492383726010418",
-      target: "channel:1494492383726010418",
-      accountId: "kairos-operator",
+      channelId: "channel-test-001",
+      target: "channel:channel-test-001",
+      accountId: "parley-agent",
       createdAt: "2026-04-22T05:26:30.000Z"
     });
 
     assert.equal(recordResult.details.thread.human_summary_anchor_status, "recorded");
-    assert.equal(recordResult.details.thread.human_summary_anchor.message_id, "1496381619869712556");
+    assert.equal(recordResult.details.thread.human_summary_anchor.message_id, "anchor-message-001");
     assert.equal(recordResult.details.thread.human_summary_anchor_request_text, openResult.details.thread.human_summary_anchor_request_text);
     assert.equal(recordResult.details.status.transport.state, "not_required");
     assert.equal(recordResult.details.status.human_summary.anchor_status, "recorded");
-    assert.equal(recordResult.details.status.human_summary.anchor_message_id, "1496381619869712556");
+    assert.equal(recordResult.details.status.human_summary.anchor_message_id, "anchor-message-001");
     assert.equal(recordResult.details.status.workflow.phase, "awaiting_next_action");
     assert.deepEqual(recordResult.details.status.workflow.next_steps, ["wait_for_next_action_owner"]);
 
     const persistedThread = await loadThreadRecord(pluginConfig, openResult.details.thread.thread_id);
     assert.equal(persistedThread.human_summary_anchor_status, "recorded");
-    assert.equal(persistedThread.human_summary_anchor.message_id, "1496381619869712556");
+    assert.equal(persistedThread.human_summary_anchor.message_id, "anchor-message-001");
     assert.equal(persistedThread.human_summary_anchor_request_text, openResult.details.thread.human_summary_anchor_request_text);
   });
 });
@@ -263,7 +263,7 @@ test("parley_open_thread lets callers explicitly suppress human-summary follow-u
     const openResult = await openTool.execute(null, {
       kind: "coordination",
       controlMode: "peer",
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       originKind: "human",
       suppressHumanSummary: true,
@@ -289,7 +289,7 @@ test("parley_open_thread rejects archived reportBackPolicy input", async () => {
     const openTool = createOpenThreadTool({ pluginConfig });
     await assert.rejects(
       openTool.execute(null, {
-        initiator: "kairos-operator",
+        initiator: "parley-agent",
         recipient: "parley-test-target",
         originKind: "human",
         reportBackPolicy: "none",
@@ -307,7 +307,7 @@ test("parley_open_thread validates transport correlation shape", async () => {
     const openTool = createOpenThreadTool({ pluginConfig });
     await assert.rejects(
       openTool.execute(null, {
-        initiator: "kairos-operator",
+        initiator: "parley-agent",
         recipient: "parley-test-target",
         bodyText: "Please take a look.",
         targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -317,7 +317,7 @@ test("parley_open_thread validates transport correlation shape", async () => {
     );
     await assert.rejects(
       openTool.execute(null, {
-        initiator: "kairos-operator",
+        initiator: "parley-agent",
         recipient: "parley-test-target",
         bodyText: "Please take a look.",
         targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -327,19 +327,19 @@ test("parley_open_thread validates transport correlation shape", async () => {
     );
 
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,
       initiatorSessionKey: INITIATOR_SESSION_KEY,
       transportCorrelation: {
         participantSessionKeys: {
-          observer: "agent:kairos-observer:session:test"
+          observer: "agent:parley-observer:session:test"
         }
       }
     });
-    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys.observer, "agent:kairos-observer:session:test");
-    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys["kairos-operator"], INITIATOR_SESSION_KEY);
+    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys.observer, "agent:parley-observer:session:test");
+    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys["parley-agent"], INITIATOR_SESSION_KEY);
     assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys["parley-test-target"], RECIPIENT_SESSION_KEY);
   });
 });
@@ -348,7 +348,7 @@ test("parley_claim_turn records state without dispatching an empty control messa
   await withPluginConfig(async (pluginConfig) => {
     const openTool = createOpenThreadTool({ pluginConfig });
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -376,7 +376,7 @@ test("parley_reply_thread auto-dispatches substantive replies", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const openTool = createOpenThreadTool({ pluginConfig });
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -412,17 +412,17 @@ test("parley_settle_turn returns a dynamic human-summary update request once an 
     assert.equal(settleResult.details.human_summary_update_available, true);
     assert.equal(settleResult.details.human_summary_update_request.mode, "caller_reply");
     assert.equal(settleResult.details.human_summary_update_request.style, "state_update");
-    assert.equal(settleResult.details.human_summary_update_request.target_message_id, "1496381619869712556");
+    assert.equal(settleResult.details.human_summary_update_request.target_message_id, "anchor-message-001");
     assert.equal(settleResult.details.human_summary_update_request.canonical_thread_id, settleResult.details.thread.thread_id);
     assert.equal(settleResult.details.human_summary_update_request.canonical_message_id, settleResult.details.message.message_id);
     assert.match(settleResult.details.human_summary_update_request.update_text, /^PARLEY UPDATE\n/m);
     assert.match(settleResult.details.human_summary_update_request.update_text, new RegExp(`thread: ${settleResult.details.thread.thread_id}`));
     assert.match(settleResult.details.human_summary_update_request.update_text, /status: awaiting_next_action/);
-    assert.match(settleResult.details.human_summary_update_request.update_text, /next: kairos-operator/);
+    assert.match(settleResult.details.human_summary_update_request.update_text, /next: parley-agent/);
     assert.match(settleResult.details.human_summary_update_request.update_text, /latest: turn_complete by parley-test-target/);
     assert.match(settleResult.details.human_summary_update_request.update_text, /report: final update remains pending until the thread is concluded/);
     assert.equal(settleResult.details.status.human_summary.update_available, true);
-    assert.equal(settleResult.details.status.human_summary.update_target_message_id, "1496381619869712556");
+    assert.equal(settleResult.details.status.human_summary.update_target_message_id, "anchor-message-001");
     assert.deepEqual(settleResult.details.status.workflow.next_steps, [
       "send_human_summary_state_update",
       "send_final_human_summary",
@@ -435,7 +435,7 @@ test("parley_conclude_thread rejects conclusion before the initiator owns the ne
   await withPluginConfig(async (pluginConfig) => {
     const openTool = createOpenThreadTool({ pluginConfig });
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -446,7 +446,7 @@ test("parley_conclude_thread rejects conclusion before the initiator owns the ne
     await assert.rejects(
       concludeTool.execute(null, {
         threadId: openResult.details.thread.thread_id,
-        actor: "kairos-operator"
+        actor: "parley-agent"
       }),
       /currently own the next action/
     );
@@ -460,7 +460,7 @@ test("parley_conclude_thread succeeds once the initiator owns the next action", 
     const concludeTool = createConcludeThreadTool({ pluginConfig, callGateway: makeAcceptedGatewayCaller(gatewayCalls) });
     const concludeResult = await concludeTool.execute(null, {
       threadId: settleResult.details.thread.thread_id,
-      actor: "kairos-operator",
+      actor: "parley-agent",
       bodyText: "All done."
     });
 
@@ -493,7 +493,7 @@ test("parley_dispatch_transport_request dispatches by canonical thread/message i
   await withPluginConfig(async (pluginConfig) => {
     const openTool = createOpenThreadTool({ pluginConfig });
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,
@@ -547,7 +547,7 @@ test("parley_dispatch_transport_request rejects stale non-latest pending message
   await withPluginConfig(async (pluginConfig) => {
     const openTool = createOpenThreadTool({ pluginConfig });
     const openResult = await openTool.execute(null, {
-      initiator: "kairos-operator",
+      initiator: "parley-agent",
       recipient: "parley-test-target",
       bodyText: "Please take a look.",
       targetSessionKey: RECIPIENT_SESSION_KEY,

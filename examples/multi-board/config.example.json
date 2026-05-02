@@ -1,0 +1,48 @@
+{
+  "parleyRoot": "~/.local/share/parley",
+  "parleyRegistry": {
+    "agents": {
+      "my-agent": {
+        "display_name": "My Agent",
+        "runtime_bindings": [
+          { "scheme": "openclaw", "type": "agent", "id": "my-agent" }
+        ],
+        "default_board": "project",
+        "memberships": {
+          "project": { "board_agent_id": "my-agent", "roles": ["implementation"] },
+          "research": { "board_agent_id": "my-agent", "roles": ["review"] }
+        }
+      }
+    }
+  },
+  "parleyBoards": {
+    "project": {
+      "board_id": "project",
+      "board_root": "~/.local/share/parley/boards/project",
+      "artifact_namespaces": [
+        {
+          "id": "project_plans",
+          "roles": ["plan_landing", "explicit_landing", "reference"],
+          "default_for": ["plan_landing"],
+          "uri_prefix": "repo://project/plans/",
+          "resolved_root": "~/projects/example/project-plans"
+        }
+      ],
+      "members": [{ "agent_id": "my-agent", "board_agent_id": "my-agent" }]
+    },
+    "research": {
+      "board_id": "research",
+      "board_root": "~/.local/share/parley/boards/research",
+      "artifact_namespaces": [
+        {
+          "id": "research_notes",
+          "roles": ["plan_landing", "explicit_landing", "reference"],
+          "default_for": ["plan_landing"],
+          "uri_prefix": "repo://research/",
+          "resolved_root": "~/projects/example/research"
+        }
+      ],
+      "members": [{ "agent_id": "my-agent", "board_agent_id": "my-agent" }]
+    }
+  }
+}
