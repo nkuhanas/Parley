@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.4
+
+- Restore the ClawHub release artifact to the canonical ClawPack/npm-pack format.
+- Mark alpha.4 as the final ClawPack-aligned release while ClawHub scanner indexing matures.
+
 ## 0.1.0-alpha.3
 
 - Publish the ClawHub package from extracted npm-pack contents so package review sees root-level runtime files.
