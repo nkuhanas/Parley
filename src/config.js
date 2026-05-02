@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertBoardAgentRecord, assertBoardId } from "./board_schema.js";
+import { assertBoardAgentRecord, assertBoardId, assertRuntimeRef } from "./board_schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -140,6 +140,22 @@ export function resolveParleyPaths(pluginConfig = {}) {
   };
 }
 
+function normalizeBoardMember(rawMember, fieldName) {
+  if (!rawMember || typeof rawMember !== "object" || Array.isArray(rawMember)) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+  const globalAgentId = nonEmptyString(rawMember.global_agent_id ?? rawMember.globalAgentId ?? rawMember.agent_id ?? rawMember.agentId);
+  const boardAgentId = nonEmptyString(rawMember.board_agent_id ?? rawMember.boardAgentId ?? globalAgentId);
+  if (!boardAgentId) throw new Error(`${fieldName}.board_agent_id required`);
+  return assertBoardAgentRecord({
+    ...rawMember,
+    global_agent_id: globalAgentId,
+    board_agent_id: boardAgentId,
+    display_name: rawMember.display_name ?? rawMember.displayName,
+    runtime_refs: rawMember.runtime_refs ?? rawMember.runtimeRefs ?? rawMember.runtime_bindings ?? rawMember.runtimeBindings ?? []
+  }, fieldName);
+}
+
 function normalizeBoard(rawBoard, boardId) {
   const normalizedBoardId = assertBoardId(rawBoard?.board_id ?? boardId, "board_id");
   const boardRoot = ensureAbsolutePath(rawBoard.board_root, `${normalizedBoardId}.board_root`);
@@ -167,15 +183,13 @@ function normalizeBoard(rawBoard, boardId) {
   if (resolvedDefaultPlanLandingRoot == null) {
     throw new Error(`${normalizedBoardId} requires a plan_landing artifact namespace or default_plan_landing_root`);
   }
-  const agentRegistry = Array.isArray(rawBoard.agent_registry)
+  const rawAgentRegistry = Array.isArray(rawBoard.agent_registry)
     ? rawBoard.agent_registry
     : Array.isArray(rawBoard.agents)
       ? rawBoard.agents
-      : [];
-
-  if (agentRegistry.length === 0) {
-    throw new Error(`board ${normalizedBoardId} requires at least one agent`);
-  }
+      : Array.isArray(rawBoard.members)
+        ? rawBoard.members
+        : [];
 
   return {
     board_id: normalizedBoardId,
@@ -199,12 +213,161 @@ function normalizeBoard(rawBoard, boardId) {
       ? legacyAllowedLandingRoots
       : artifactNamespaces.filter((namespace) => namespace.roles.includes("explicit_landing") || namespace.roles.includes("plan_landing")).map((namespace) => namespace.resolved_root),
     permission_model: rawBoard.permission_model ?? rawBoard.permissionModel ?? { mode: "board_wide_all_tools", future_agent_scoping: true },
-    agent_registry: agentRegistry.map((agent, index) => assertBoardAgentRecord(agent, `agent_registry[${index}]`))
+    agent_registry: rawAgentRegistry.map((agent, index) => normalizeBoardMember(agent, `agent_registry[${index}]`))
   };
 }
 
 function boardConfigObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function arrayOrObjectEntries(value, fieldName) {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value.map((item, index) => [null, item, `${fieldName}[${index}]`]);
+  }
+  if (typeof value === "object") {
+    return Object.entries(value).map(([key, item]) => [key, item, `${fieldName}.${key}`]);
+  }
+  throw new Error(`${fieldName} must be an object or array`);
+}
+
+function normalizeRuntimeBindings(value, fieldName) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error(`${fieldName} must be an array`);
+  return value.map((runtimeRef, index) => assertRuntimeRef(runtimeRef, `${fieldName}[${index}]`));
+}
+
+function uniqueRuntimeBindings(runtimeBindings) {
+  const seen = new Set();
+  const unique = [];
+  for (const runtimeRef of runtimeBindings) {
+    const key = `${runtimeRef.scheme}:${runtimeRef.type}:${runtimeRef.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(runtimeRef);
+  }
+  return unique;
+}
+
+function normalizeMembership(rawMembership, boardId, fieldName, fallbackBoardAgentId = null) {
+  const raw = rawMembership && typeof rawMembership === "object" && !Array.isArray(rawMembership) ? rawMembership : {};
+  const normalizedBoardId = assertBoardId(raw.board_id ?? raw.boardId ?? boardId, `${fieldName}.board_id`);
+  const boardAgentId = nonEmptyString(raw.board_agent_id ?? raw.boardAgentId ?? raw.agent_id ?? raw.agentId ?? fallbackBoardAgentId);
+  if (!boardAgentId) throw new Error(`${fieldName}.board_agent_id required`);
+  return {
+    board_id: normalizedBoardId,
+    board_agent_id: boardAgentId,
+    roles: normalizeFreeStringArray(raw.roles, `${fieldName}.roles`),
+    permissions: raw.permissions && typeof raw.permissions === "object" && !Array.isArray(raw.permissions)
+      ? raw.permissions
+      : { preset: "board_admin" }
+  };
+}
+
+function normalizeGlobalAgent(rawAgent, key, fieldName) {
+  if (!rawAgent || typeof rawAgent !== "object" || Array.isArray(rawAgent)) {
+    throw new Error(`${fieldName} must be an object`);
+  }
+  const globalAgentId = nonEmptyString(rawAgent.global_agent_id ?? rawAgent.globalAgentId ?? rawAgent.agent_id ?? rawAgent.agentId ?? rawAgent.id ?? key);
+  if (!globalAgentId) throw new Error(`${fieldName}.global_agent_id required`);
+  const rawMemberships = rawAgent.memberships ?? {};
+  const memberships = {};
+  for (const [membershipKey, membership, membershipField] of arrayOrObjectEntries(rawMemberships, `${fieldName}.memberships`)) {
+    const boardId = membershipKey ?? membership?.board_id ?? membership?.boardId;
+    if (!boardId) throw new Error(`${membershipField}.board_id required`);
+    const normalized = normalizeMembership(membership, boardId, membershipField, globalAgentId);
+    memberships[normalized.board_id] = normalized;
+  }
+  const defaultBoard = rawAgent.default_board ?? rawAgent.defaultBoard;
+  return {
+    global_agent_id: globalAgentId,
+    display_name: nonEmptyString(rawAgent.display_name ?? rawAgent.displayName) ?? globalAgentId,
+    kind: nonEmptyString(rawAgent.kind) ?? "agent",
+    runtime_bindings: normalizeRuntimeBindings(
+      rawAgent.runtime_bindings ?? rawAgent.runtimeBindings ?? rawAgent.runtime_refs ?? rawAgent.runtimeRefs,
+      `${fieldName}.runtime_bindings`
+    ),
+    default_board: defaultBoard == null ? null : assertBoardId(defaultBoard, `${fieldName}.default_board`),
+    memberships
+  };
+}
+
+function addSynthesizedMembership(agents, board, boardAgent) {
+  const globalAgentId = nonEmptyString(boardAgent.global_agent_id) ?? boardAgent.board_agent_id;
+  const existing = agents[globalAgentId];
+  const agent = existing ?? {
+    global_agent_id: globalAgentId,
+    display_name: boardAgent.display_name ?? globalAgentId,
+    kind: boardAgent.kind ?? "agent",
+    runtime_bindings: [],
+    default_board: null,
+    memberships: {}
+  };
+  agent.runtime_bindings = uniqueRuntimeBindings([...(agent.runtime_bindings ?? []), ...(boardAgent.runtime_refs ?? [])]);
+  if (agent.memberships[board.board_id] == null) {
+    agent.memberships[board.board_id] = {
+      board_id: board.board_id,
+      board_agent_id: boardAgent.board_agent_id,
+      roles: boardAgent.roles ?? [],
+      permissions: boardAgent.permissions ?? { preset: "board_admin" }
+    };
+  }
+  agents[globalAgentId] = agent;
+}
+
+function normalizeGlobalAgentRegistry(pluginConfig, boards) {
+  const rawRegistry = pluginConfig.parley_registry ?? pluginConfig.parleyRegistry ?? {};
+  const rawAgents = rawRegistry.agents ?? pluginConfig.parleyAgents ?? {};
+  const agents = {};
+
+  for (const [key, rawAgent, fieldName] of arrayOrObjectEntries(rawAgents, "parleyRegistry.agents")) {
+    const normalized = normalizeGlobalAgent(rawAgent, key, fieldName);
+    agents[normalized.global_agent_id] = normalized;
+  }
+
+  for (const board of Object.values(boards)) {
+    for (const boardAgent of board.agent_registry) {
+      addSynthesizedMembership(agents, board, boardAgent);
+    }
+  }
+
+  for (const agent of Object.values(agents)) {
+    agent.runtime_bindings = uniqueRuntimeBindings(agent.runtime_bindings ?? []);
+    const membershipIds = Object.keys(agent.memberships ?? {});
+    if (agent.default_board == null && membershipIds.length === 1) {
+      agent.default_board = membershipIds[0];
+    }
+    if (agent.default_board != null && agent.memberships[agent.default_board] == null) {
+      throw new Error(`global agent ${agent.global_agent_id} default_board has no membership: ${agent.default_board}`);
+    }
+  }
+
+  for (const agent of Object.values(agents)) {
+    for (const membership of Object.values(agent.memberships)) {
+      const board = boards[membership.board_id];
+      if (board == null) throw new Error(`global agent ${agent.global_agent_id} membership references unknown board: ${membership.board_id}`);
+      if (!board.agent_registry.some((boardAgent) => boardAgent.board_agent_id === membership.board_agent_id)) {
+        board.agent_registry.push(assertBoardAgentRecord({
+          board_agent_id: membership.board_agent_id,
+          global_agent_id: agent.global_agent_id,
+          display_name: agent.display_name,
+          kind: agent.kind,
+          runtime_refs: [],
+          roles: membership.roles,
+          permissions: membership.permissions
+        }, `${board.board_id}.members[${membership.board_agent_id}]`));
+      }
+    }
+  }
+
+  for (const board of Object.values(boards)) {
+    if (board.agent_registry.length === 0) {
+      throw new Error(`board ${board.board_id} requires at least one agent or global registry membership`);
+    }
+  }
+
+  return agents;
 }
 
 export function resolveParleyBoardRegistry(pluginConfig = {}) {
@@ -216,8 +379,9 @@ export function resolveParleyBoardRegistry(pluginConfig = {}) {
     const normalized = normalizeBoard(board, boardId);
     boards[normalized.board_id] = normalized;
   }
+  const agents = normalizeGlobalAgentRegistry(pluginConfig, boards);
 
-  return { boards };
+  return { boards, agents };
 }
 
 export const PARLEY_RUNTIME_DIRECTORIES = Object.freeze(["threads", "messages", "index"]);

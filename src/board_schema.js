@@ -443,6 +443,7 @@ export function assertBoardAgentRecord(record, fieldName = "agent") {
   const raw = assertObject(record, fieldName);
   return {
     board_agent_id: assertBoardAgentId(raw.board_agent_id, `${fieldName}.board_agent_id`),
+    global_agent_id: assertOptionalString(raw.global_agent_id ?? raw.globalAgentId, `${fieldName}.global_agent_id`),
     display_name: assertOptionalString(raw.display_name, `${fieldName}.display_name`),
     kind: assertOptionalString(raw.kind, `${fieldName}.kind`) ?? "agent",
     runtime_refs: assertRuntimeRefs(raw.runtime_refs ?? [], `${fieldName}.runtime_refs`),

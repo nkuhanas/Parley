@@ -7,7 +7,8 @@ export {
   findArtifactNamespace,
   assertPathUnderArtifactNamespaces,
   buildArtifactNamespaceUri,
-  resolveArtifactNamespacePath
+  resolveArtifactNamespacePath,
+  runtimeRefKey
 } from "./src/board.js";
 export { createOpenThreadTool } from "./src/actions/open_thread.js";
 export { createClaimTurnTool } from "./src/actions/claim_turn.js";
@@ -30,3 +31,5 @@ export { createCheckpointProjectionTool } from "./src/actions/checkpoint_project
 export { createValidateStateAction } from "./src/actions/validate_state.js";
 export { createQueryTool } from "./src/actions/query.js";
 export { createMutateTool } from "./src/actions/mutate.js";
+export { createKairosBoardConfig } from "./src/adapters/kairos_board.js";
+export { createParleyBoardConfig } from "./src/adapters/parley_board.js";

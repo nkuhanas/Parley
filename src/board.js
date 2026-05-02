@@ -3,7 +3,7 @@ import path from "node:path";
 import { resolveParleyBoardRegistry } from "./config.js";
 import { assertBoardAgentRecord, assertBoardId, assertRuntimeRef } from "./board_schema.js";
 
-function runtimeRefKey(runtimeRef) {
+export function runtimeRefKey(runtimeRef) {
   return `${runtimeRef.scheme}:${runtimeRef.type}:${runtimeRef.id}`;
 }
 
@@ -55,8 +55,17 @@ function addCandidate(candidateMap, runtimeRef, source, derivedFrom = null) {
   }
 }
 
-function boardAgentIds(registry) {
-  return [...new Set(Object.values(registry.boards).flatMap((board) => board.agent_registry.map((agent) => agent.board_agent_id)))];
+function openClawAgentIds(registry) {
+  const ids = new Set();
+  for (const agent of Object.values(registry.agents ?? {})) {
+    for (const runtimeBinding of agent.runtime_bindings ?? []) {
+      if (runtimeBinding.scheme === "openclaw" && runtimeBinding.type === "agent") ids.add(runtimeBinding.id);
+    }
+  }
+  for (const board of Object.values(registry.boards ?? {})) {
+    for (const boardAgent of board.agent_registry ?? []) ids.add(boardAgent.board_agent_id);
+  }
+  return [...ids];
 }
 
 function deriveOpenClawRuntimeAliases(runtimeRef, registry) {
@@ -67,9 +76,9 @@ function deriveOpenClawRuntimeAliases(runtimeRef, registry) {
   if (agentSessionMatch) {
     aliases.push({ scheme: "openclaw", type: "agent", id: agentSessionMatch[1] });
   }
-  for (const boardAgentId of boardAgentIds(registry)) {
-    if (runtimeRef.id === boardAgentId || runtimeRef.id.startsWith(`${boardAgentId}:`)) {
-      aliases.push({ scheme: "openclaw", type: "agent", id: boardAgentId });
+  for (const agentId of openClawAgentIds(registry)) {
+    if (runtimeRef.id === agentId || runtimeRef.id.startsWith(`${agentId}:`)) {
+      aliases.push({ scheme: "openclaw", type: "agent", id: agentId });
     }
   }
   return aliases;
@@ -89,6 +98,25 @@ function runtimeCandidates(registry, callerRuntimeRef, options = {}) {
   return [...candidateMap.values()];
 }
 
+function matchGlobalAgents(registry, candidates, candidateDiagnostics) {
+  const matchesByGlobalAgent = new Map();
+  for (const globalAgent of Object.values(registry.agents ?? {})) {
+    for (const [candidateIndex, candidate] of candidates.entries()) {
+      if (!(globalAgent.runtime_bindings ?? []).some((runtimeRef) => sameRuntimeRef(runtimeRef, candidate.runtime_ref))) continue;
+      const existing = matchesByGlobalAgent.get(globalAgent.global_agent_id);
+      const match = {
+        global_agent: globalAgent,
+        candidate,
+        candidate_index: candidateIndex
+      };
+      if (existing == null || candidateIndex < existing.candidate_index) matchesByGlobalAgent.set(globalAgent.global_agent_id, match);
+      candidateDiagnostics[candidateIndex].persisted_binding_match = true;
+      candidateDiagnostics[candidateIndex].matched_global_agent_id = globalAgent.global_agent_id;
+    }
+  }
+  return [...matchesByGlobalAgent.values()];
+}
+
 export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
   const registry = resolveParleyBoardRegistry(pluginConfig);
   const callerRuntimeRef = normalizeCallerRuntimeRef(options.callerRuntimeRef, pluginConfig);
@@ -98,64 +126,58 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
 
   const requestedBoardId = options.boardId == null ? null : assertBoardId(options.boardId, "boardId");
   const candidates = runtimeCandidates(registry, callerRuntimeRef, options);
-  const matchesByIdentity = new Map();
   const candidateDiagnostics = candidates.map((candidate) => ({
     runtime_ref: runtimeRefForDiagnostics(candidate.runtime_ref),
     source: candidate.source,
     derived_from: candidate.derived_from,
     persisted_binding_match: false,
-    matched_board_id: null,
-    matched_board_agent_id: null
+    matched_global_agent_id: null
   }));
 
-  for (const board of Object.values(registry.boards)) {
-    if (requestedBoardId != null && board.board_id !== requestedBoardId) continue;
-    for (const agent of board.agent_registry) {
-      const normalizedAgent = assertBoardAgentRecord(agent);
-      for (const [candidateIndex, candidate] of candidates.entries()) {
-        if (!normalizedAgent.runtime_refs.some((runtimeRef) => sameRuntimeRef(runtimeRef, candidate.runtime_ref))) continue;
-        const identityKey = `${board.board_id}:${normalizedAgent.board_agent_id}`;
-        const existing = matchesByIdentity.get(identityKey);
-        const match = {
-          board,
-          board_agent: normalizedAgent,
-          candidate,
-          candidate_index: candidateIndex
-        };
-        if (existing == null || candidateIndex < existing.candidate_index) matchesByIdentity.set(identityKey, match);
-        candidateDiagnostics[candidateIndex].persisted_binding_match = true;
-        candidateDiagnostics[candidateIndex].matched_board_id = board.board_id;
-        candidateDiagnostics[candidateIndex].matched_board_agent_id = normalizedAgent.board_agent_id;
-      }
-    }
-  }
-
-  const matches = [...matchesByIdentity.values()];
-  if (matches.length === 0) {
+  const globalMatches = matchGlobalAgents(registry, candidates, candidateDiagnostics);
+  if (globalMatches.length === 0) {
     const considered = candidateDiagnostics.map((candidate) => candidate.runtime_ref.key).join(", ");
-    throw new Error(`callerRuntimeRef did not resolve to a Parley board agent: ${runtimeRefKey(callerRuntimeRef)}; considered aliases: ${considered}`);
+    throw new Error(`callerRuntimeRef did not resolve to a Parley global agent: ${runtimeRefKey(callerRuntimeRef)}; considered aliases: ${considered}`);
   }
-  if (matches.length > 1) {
-    const matched = matches.map((match) => `${match.board.board_id}:${match.board_agent.board_agent_id}`).join(", ");
-    throw new Error(`callerRuntimeRef resolved ambiguously: ${runtimeRefKey(callerRuntimeRef)}; matched candidates: ${matched}`);
+  if (globalMatches.length > 1) {
+    const matched = globalMatches.map((match) => match.global_agent.global_agent_id).join(", ");
+    throw new Error(`callerRuntimeRef resolved ambiguously to multiple Parley global agents: ${runtimeRefKey(callerRuntimeRef)}; matched global agents: ${matched}`);
   }
 
-  const [{ board, board_agent, candidate: resolvedCandidate }] = matches;
+  const [{ global_agent: globalAgent, candidate: resolvedCandidate }] = globalMatches;
+  const resolvedBoardId = requestedBoardId ?? globalAgent.default_board;
+  if (resolvedBoardId == null) {
+    throw new Error(`Parley global agent has no default board; pass boardId explicitly: ${globalAgent.global_agent_id}`);
+  }
+
+  const board = registry.boards[resolvedBoardId];
+  if (board == null) throw new Error(`Parley board not found: ${resolvedBoardId}`);
+  const membership = globalAgent.memberships?.[resolvedBoardId];
+  if (membership == null) {
+    throw new Error(`Parley global agent ${globalAgent.global_agent_id} is not a member of board: ${resolvedBoardId}`);
+  }
+  const board_agent = requireBoardAgent(board, membership.board_agent_id);
   const callerRuntimeRefPersisted = sameRuntimeRef(resolvedCandidate.runtime_ref, callerRuntimeRef);
   const identity_resolution = {
     source: callerRuntimeRefPersisted ? "persisted_binding" : resolvedCandidate.source,
     caller_runtime_ref_persisted: callerRuntimeRefPersisted,
     persisted_binding: callerRuntimeRefPersisted,
+    global_agent_id: globalAgent.global_agent_id,
     resolved_by_runtime_ref: runtimeRefForDiagnostics(resolvedCandidate.runtime_ref),
     candidates: candidateDiagnostics,
-    matched_identity_count: matches.length,
-    requested_board_id: requestedBoardId
+    matched_global_agent_count: globalMatches.length,
+    matched_identity_count: 1,
+    requested_board_id: requestedBoardId,
+    resolved_board_id: resolvedBoardId,
+    used_default_board: requestedBoardId == null
   };
   return {
     board,
     board_id: board.board_id,
+    global_agent_id: globalAgent.global_agent_id,
     board_agent_id: board_agent.board_agent_id,
     board_agent,
+    membership,
     runtime_ref: callerRuntimeRef,
     runtime_aliases: candidates.map((candidate) => candidate.runtime_ref),
     identity_resolution,
@@ -166,6 +188,7 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
       identity_resolution: {
         source: identity_resolution.source,
         caller_runtime_ref_persisted: identity_resolution.caller_runtime_ref_persisted,
+        global_agent_id: identity_resolution.global_agent_id,
         resolved_by_runtime_ref: identity_resolution.resolved_by_runtime_ref
       }
     }

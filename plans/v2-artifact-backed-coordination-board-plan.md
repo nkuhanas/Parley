@@ -207,7 +207,7 @@ Runtime identities are aliases and provenance metadata.
 Identity resolution flow:
 
 ```txt
-runtime caller identity -> board_id + board_agent_id -> board roles/scopes/permissions
+runtime_ref -> global_agent_id -> board membership -> board_agent_id + permissions
 ```
 
 Rules:
@@ -215,13 +215,18 @@ Rules:
 - Normal state, obligations, approvals, ownership, and checkpoints use `board_agent_id`.
 - Effects and audit records should also store the concrete `runtime_ref` that performed the action.
 - Runtime refs should be structured objects, not opaque strings, so Parley can distinguish OpenClaw agents, sessions, subagents, channel-bound sessions, webchat sessions, and future runtime types.
-- A runtime identity maps to one default board in the MVP.
-- If runtime identity cannot resolve to exactly one board-local agent, Parley must fail closed and return a diagnostic. It must not guess a board or agent.
+- Runtime refs are registered or adapter-discovered at the global agent level.
+- Each global agent has zero or one default board.
+- `where_am_i` without `boardId` uses the global agent's default board.
+- Non-default board operations must pass explicit `boardId`.
+- `where_am_i` with `boardId` checks the global agent's membership and resolves the board-local identity for that board.
+- If runtime identity matches multiple global agents, has no default board when no `boardId` is supplied, or lacks membership in the requested board, Parley must fail closed and return a diagnostic. It must not guess a board or agent.
 
 Identity source-of-truth tradeoff:
 
 - OpenClaw config remains the source of truth for runtime agents, sessions, channels, and tool availability.
-- Parley board config is the source of truth only for board-local participant identity, board roles, Parley permissions, and runtime-to-board mapping.
+- The global Parley registry is the source of truth for durable Parley-wide agent identity, runtime bindings, default board selection, and per-board memberships.
+- Board config is the source of truth for board roots, artifact namespaces, board policy, and board-local member references.
 - This creates some duplication, but it is intentional: Parley needs stable participant ids that survive runtime/session/channel changes, while OpenClaw owns execution configuration.
 - To control drift, Parley should treat runtime refs as resolvable aliases and provide a validation/check command that reports board refs pointing to missing OpenClaw agents/sessions.
 - Do not copy OpenClaw tool policy wholesale into Parley. Store only the minimum runtime refs needed for identity resolution and provenance.
@@ -230,7 +235,7 @@ Runtime-ref authoring UX rule:
 
 > Board authors should not have to model every active session, channel, heartbeat, or UI surface by hand.
 
-The preferred standalone Parley shape is that a board declares durable board agents and one or more high-level runtime bindings, such as an OpenClaw agent id. Runtime adapters may discover or attach current session/channel/heartbeat aliases for identity resolution and provenance. Explicit low-level `runtime_refs` remain available for fail-closed routing and auditability, but they should be treated as adapter-maintained aliases where possible rather than normal human-authored board configuration.
+The preferred standalone Parley shape is that the global registry declares durable global agents and one or more high-level runtime bindings, such as an OpenClaw agent id. Boards declare board-local members and may reference global agents by `agent_id`; a membership maps that global agent to the board-local `board_agent_id` and permissions. Runtime adapters may discover or attach current session/channel/heartbeat aliases for identity resolution and provenance. Explicit low-level `runtime_refs` remain available for fail-closed routing and auditability, but they should be treated as adapter-maintained aliases where possible rather than normal human-authored board configuration.
 
 Example effect actor:
 

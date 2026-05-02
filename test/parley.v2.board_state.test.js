@@ -152,6 +152,103 @@ test("Parley v2 board registry accepts namespace-first plan landing config", asy
   });
 });
 
+test("Parley v2 global registry resolves default and explicit board memberships", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const parleyRoot = path.join(pluginConfig.__tempRoot, "parley-board");
+    const parleyPlansRoot = path.join(pluginConfig.__tempRoot, "parley-repo", "plans");
+    const config = {
+      ...pluginConfig,
+      parleyRegistry: {
+        agents: {
+          "kairos-operator": {
+            display_name: "Rio",
+            kind: "agent",
+            runtime_bindings: [OPERATOR_RUNTIME_REF],
+            default_board: "kairos",
+            memberships: {
+              kairos: {
+                board_agent_id: "kairos-operator",
+                permissions: { preset: "board_admin" },
+                roles: ["implementation", "runtime"]
+              },
+              parley: {
+                board_agent_id: "kairos-operator",
+                permissions: { preset: "board_admin" },
+                roles: ["maintainer", "implementation"]
+              }
+            }
+          }
+        }
+      },
+      parleyBoards: {
+        parley: {
+          board_id: "parley",
+          display_name: "Parley",
+          board_root: parleyRoot,
+          artifact_namespaces: [
+            {
+              id: "parley_plans",
+              roles: ["plan_landing", "explicit_landing", "reference"],
+              default_for: ["plan_landing"],
+              uri_prefix: "repo://plans/",
+              resolved_root: parleyPlansRoot
+            }
+          ],
+          members: [
+            {
+              agent_id: "kairos-operator",
+              board_agent_id: "kairos-operator"
+            }
+          ]
+        }
+      }
+    };
+
+    const defaultIdentity = resolveCallerIdentity(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
+    assert.equal(defaultIdentity.global_agent_id, "kairos-operator");
+    assert.equal(defaultIdentity.board_id, "kairos");
+    assert.equal(defaultIdentity.identity_resolution.used_default_board, true);
+
+    const parleyIdentity = resolveCallerIdentity(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF, boardId: "parley" });
+    assert.equal(parleyIdentity.global_agent_id, "kairos-operator");
+    assert.equal(parleyIdentity.board_id, "parley");
+    assert.equal(parleyIdentity.board_agent_id, "kairos-operator");
+    assert.equal(parleyIdentity.identity_resolution.used_default_board, false);
+  });
+});
+
+test("Parley v2 global registry fails closed for non-member explicit boards", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const config = {
+      ...pluginConfig,
+      parleyRegistry: {
+        agents: {
+          "kairos-operator": {
+            runtime_bindings: [OPERATOR_RUNTIME_REF],
+            default_board: "kairos",
+            memberships: {
+              kairos: { board_agent_id: "kairos-operator" }
+            }
+          }
+        }
+      },
+      parleyBoards: {
+        parley: {
+          board_id: "parley",
+          board_root: path.join(pluginConfig.__tempRoot, "parley-board"),
+          default_plan_landing_root: path.join(pluginConfig.__tempRoot, "parley-plans"),
+          members: [{ agent_id: "another-agent", board_agent_id: "another-agent" }]
+        }
+      }
+    };
+
+    assert.throws(
+      () => resolveCallerIdentity(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF, boardId: "parley" }),
+      /not a member of board: parley/
+    );
+  });
+});
+
 test("Parley v2 tools derive caller identity from trusted OpenClaw runtime context", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const whereTool = createWhereAmITool({ pluginConfig, toolContext: { agentId: "kairos-operator" } });
@@ -250,7 +347,7 @@ test("Parley v2 identity fails closed when a runtime ref is ambiguous", async ()
           id: "agent:kairos-operator:discord:channel:1494492383726010418"
         }
       }),
-      /ambiguously.*kairos:kairos-operator/
+      /ambiguously.*kairos-operator, other-agent/
     );
   });
 });
