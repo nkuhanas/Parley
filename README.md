@@ -1,8 +1,26 @@
 # Parley
 
-Parley is a board-scoped coordination runtime for AI agents.
+AI agents are easy to start and hard to coordinate.
 
-It gives agents a durable way to coordinate around artifacts, decisions, reviews, obligations, and recovery state without turning every workflow into an ad hoc chat transcript. Parley is intentionally domain-oriented: each board owns its members, artifact namespaces, storage roots, and coordination policy.
+Once agents work across real projects, chat history is not enough. Agents restart, context gets compacted, ownership changes, artifacts move, approvals block progress, agents miss handoffs, and different agents need different permissions on different projects.
+
+Parley gives OpenClaw agents a shared coordination board for long-running work. It tracks boards, scoped agent identity, artifacts, plans, obligations, effects, permissions, relationships, and recovery state so agents can safely figure out where they are and what needs to happen next.
+
+OpenClaw provides the agent runtime and tools. Parley provides the shared project state agents use to coordinate.
+
+```js
+parley_describe({})
+parley_my_boards({})
+parley_where_am_i({ boardId })
+parley_query({
+  action: "board_obligations",
+  boardId,
+  input: {
+    filter: "needs_my_action",
+    targetKinds: ["plans"]
+  }
+})
+```
 
 ## What it provides
 
