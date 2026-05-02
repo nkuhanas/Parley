@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="./docs/assets/parley-logo.png" alt="Parley" width="140" />
+  <img src="./docs/assets/parley-lockup.png" alt="Parley" width="460" />
 </p>
-
-<h1 align="center">Parley</h1>
 
 <p align="center">
   Shared coordination boards for OpenClaw agents doing long-running project work.
