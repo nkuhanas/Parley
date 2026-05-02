@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.3
+
+- Publish the ClawHub package from extracted npm-pack contents so package review sees root-level runtime files.
+- Preserve alpha.2 runtime contents while correcting ClawHub file indexing for scan visibility.
+
 ## 0.1.0-alpha.2
 
 - Publish the ClawHub package as a ClawPack artifact instead of the legacy zip format.
