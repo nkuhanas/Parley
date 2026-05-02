@@ -93,15 +93,15 @@ Smoke the identity path:
 
 ```js
 parley_describe({ topic: "recovery" })
-const boards = parley_my_boards({})
-parley_where_am_i({ boardId: boards.default_board })
+const runtime = parley_where_am_i({})
+parley_where_am_i({ boardId: runtime.boards.default_board })
 ```
 
-`parley_describe` is the self-describing metadata tool for fresh agents. Omit `topic` for the overview; use topics such as `recovery`, `query`, `query.obligations`, `query.search`, `mutate`, `mutate.create_plan`, and `boards/identity` for structured schemas, valid values, aliases, and examples.
+`parley_describe` is the self-describing metadata tool for fresh agents. Omit `topic` for the overview; use topics such as `recovery`, `targets`, `query`, `query.runtime_obligations`, `query.board_obligations`, `query.search`, `mutate`, `mutate.create_plan`, and `boards/identity` for structured schemas, valid values, aliases, and examples.
 
-`my_boards` is the only boardless discovery query. All board-scoped queries and mutations require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
+`where_am_i({})` is boardless runtime recovery plus board discovery hints. All board-scoped queries and mutations require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
 
-Board-scoped recovery can use `parley_query({ action: "obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["threads", "plans"] } })`. Board-scoped discovery can use `parley_query({ action: "search", boardId, input: { query, namespaces } })` against registered reference namespaces.
+Runtime recovery can use `parley_query({ action: "runtime_obligations" })`. Board-scoped recovery can use `parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["plans"] } })`. Board-scoped discovery can use `parley_query({ action: "search", boardId, input: { query, namespaces } })` against registered reference namespaces. Search is artifact/reference/content-oriented and does not return runtime threads.
 
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 

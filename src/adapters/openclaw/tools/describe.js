@@ -64,7 +64,7 @@ export function createDescribeTool(api) {
       additionalProperties: false,
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        topic: { type: "string", description: "Optional topic. Omit for overview. Valid topics include recovery, query, query.obligations, query.search, mutate, mutate.create_plan, boards/identity." },
+        topic: { type: "string", description: "Optional topic. Omit for overview. Valid topics include recovery, targets, query, query.runtime_obligations, query.board_obligations, query.search, mutate, mutate.create_plan, boards/identity." },
         boardId: { type: "string", description: "Optional board id. When provided, describe returns board metadata only; no board state records are read." }
       }
     },

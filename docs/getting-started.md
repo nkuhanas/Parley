@@ -35,25 +35,34 @@ Call:
 
 ```js
 parley_describe({ topic: "recovery" })
-const boards = parley_my_boards({})
-parley_where_am_i({ boardId: boards.default_board })
+const runtime = parley_where_am_i({})
+parley_where_am_i({ boardId: runtime.boards.default_board })
 ```
 
-`parley_describe` should return structured topics, schemas, valid values, and examples for fresh agents. Use `parley_describe({})` for an overview, `parley_describe({ topic: "query.obligations" })` for filters/targetKinds/examples, `parley_describe({ topic: "query.search" })` for namespace search shape, and `parley_describe({ boardId: boards.default_board })` for board metadata only.
+`parley_describe` should return structured topics, schemas, valid values, and examples for fresh agents. Use `parley_describe({})` for an overview, `parley_describe({ topic: "targets" })` for target scope ontology, `parley_describe({ topic: "query.runtime_obligations" })` for runtime obligations, `parley_describe({ topic: "query.board_obligations" })` for board obligations, `parley_describe({ topic: "query.search" })` for namespace search shape, and `parley_describe({ boardId: runtime.boards.default_board })` for board metadata only.
 
-`my_boards` should return the caller's accessible boards and `default_board`. Use that value, or another board from the response, as the explicit `boardId` for `where_am_i` and other board-scoped operations. Parley does not silently apply `default_board`.
+`where_am_i({})` should return runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`.
 
 ## 5. Add coordination records
 
-After identity works, register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the obligation appears.
+After identity works, register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the board obligation appears in the board section.
 
-For obligation-centric recovery, use:
+For runtime obligation recovery, use:
 
 ```js
 parley_query({
-  action: "obligations",
-  boardId: boards.default_board,
-  input: { filter: "needs_my_action", targetKinds: ["threads", "plans"] }
+  action: "runtime_obligations",
+  input: { filter: "needs_my_action" }
+})
+```
+
+For board obligation recovery, use:
+
+```js
+parley_query({
+  action: "board_obligations",
+  boardId: runtime.boards.default_board,
+  input: { filter: "needs_my_action", targetKinds: ["plans"] }
 })
 ```
 
@@ -62,7 +71,7 @@ For board namespace discovery, use:
 ```js
 parley_query({
   action: "search",
-  boardId: boards.default_board,
+  boardId: runtime.boards.default_board,
   input: { query: "checkpoint", namespaces: ["project_docs", "project_plans"] }
 })
 ```

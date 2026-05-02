@@ -6,6 +6,8 @@ Parley protocol state is stored as structured records, not implied by prose.
 
 The thread tools support opening, replying, claiming, probing, settling, and concluding coordination threads. Thread control markers are structured fields and should not be inferred from message text.
 
+Threads are runtime protocol records. They are not board-state artifacts or board coordination objects, and they are not board-affined by default.
+
 ## Board-state protocol
 
 Board state is built from:
@@ -19,20 +21,57 @@ Board state is built from:
 
 Effects are append-only. Projections derive current state from records and deterministic ordering.
 
+The board storage record class remains `obligation`. The external target/query kind `board_obligation` is used only when Parley must distinguish board obligations from runtime obligations.
+
+## Target protocol
+
+Targetability is shared. Resolution is scope-specific. Actionability is derived.
+
+Runtime target kinds do not require `boardId` and resolve through runtime protocol state:
+
+- `thread`
+- `message`
+- `turn`
+
+Board target kinds require `boardId` and resolve through board state:
+
+- `plan`
+- `artifact`
+- `object`
+- `phase`
+- `relationship`
+- `checkpoint`
+- `board_obligation`
+
+Resolver rules:
+
+- runtime target + no `boardId` is valid
+- runtime target + `boardId` is rejected unless an action explicitly documents `boardId` as a filter, not a resolver
+- board target + no `boardId` is rejected
+- board target + `boardId` resolves through board state
+
+Scope is not durability: runtime targets may be persisted, and board targets may reference external documents. Scope is about ownership and resolution, not whether JSON or files exist.
+
 ## Recovery protocol
 
 Recommended recovery sequence:
 
 ```txt
-parley_describe({ topic: recovery }) -> parley_my_boards({}) -> parley_where_am_i({ boardId: default_board }) -> obligations({ boardId, filter: needs_my_action }) -> where_am_i({ boardId: each other active board })
+parley_describe({ topic: "recovery" }) -> parley_where_am_i({}) -> parley_where_am_i({ boardId: default_board }) -> parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action" } }) -> parley_where_am_i({ boardId: each other active board })
 ```
 
 `parley_describe` is metadata/introspection and does not mutate board state. Topic omitted returns an overview. Unknown topics return valid topics plus a describe hint. `parley_describe({ boardId })` returns board metadata only, not board state records.
 
-`my_boards` is the only boardless discovery query. All board-scoped queries and mutations require explicit `boardId`; `default_board` is a discovery hint, not implicit routing.
+`parley_where_am_i({})` returns runtime identity, runtime protocol obligations, and available boards/default board metadata. It does not imply there is no board work when runtime obligations are empty.
 
-Use `parley_query({ action: "obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["threads", "plans"] } })` when a caller needs obligation-centric recovery across target kinds without making each target kind its own query action. `scope` is accepted as an alias for `targetKinds`.
+`parley_where_am_i({ boardId })` returns separate runtime and board sections. The runtime section contains runtime protocol obligations. The board section contains board-local identity, board obligations, deferred work, approvals, checkpoints, and projections.
 
-Use `parley_query({ action: "search", boardId, input: { query, namespaces } })` to search board-registered reference namespaces. This keeps discovery routed through board namespace policy instead of host-specific search tools.
+`my_boards` remains a boardless discovery query. All board-scoped queries and mutations require explicit `boardId`; `default_board` is a discovery hint, not implicit routing.
 
-Stay quiet when there is no actionable state. Surface blockers, stale approvals, active obligations, thread reply obligations, or validation errors.
+Use `parley_query({ action: "runtime_obligations" })` when a caller needs runtime protocol obligations such as pending thread turns.
+
+Use `parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["plans"] } })` when a caller needs board-scoped obligations. `targetKinds` filters board target kinds only; it does not accept runtime targets such as threads.
+
+Use `parley_query({ action: "search", boardId, input: { query, namespaces } })` to search board-registered reference namespaces. Search is artifact/reference/content-oriented and does not return runtime threads or messages. Future runtime thread discovery should use an explicit runtime query action.
+
+Stay quiet when there is no actionable state. Surface blockers, stale approvals, active runtime obligations, active board obligations, thread reply obligations, or validation errors.

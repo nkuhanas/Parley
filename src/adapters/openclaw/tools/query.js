@@ -4,7 +4,7 @@ import { createValidateStateAction } from "./validate_state.js";
 import { createWhereAmITool } from "./where_am_i.js";
 import { createMyBoardsTool } from "./my_boards.js";
 import { createNamespaceSearchAction } from "./namespace_search.js";
-import { createObligationsQueryAction } from "./obligations.js";
+import { createBoardObligationsQueryAction, createRuntimeObligationsQueryAction } from "./obligations.js";
 import { createValidationError, QUERY_ACTIONS } from "./descriptors.js";
 import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
 
@@ -52,12 +52,12 @@ export function createQueryTool(api) {
       required: ["action"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Required for board-scoped actions. Omit only for action=my_boards." },
-        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state, obligations, search." },
-        includeTerminal: { type: "boolean", description: "where_am_i only: include resolved/cancelled/superseded obligations. Defaults to false." },
+        boardId: { type: "string", description: "Required for board-scoped actions. Omit for my_boards, runtime_obligations, and runtime-only where_am_i." },
+        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state, runtime_obligations, board_obligations, search." },
+        includeTerminal: { type: "boolean", description: "where_am_i board section only: include resolved/cancelled/superseded obligations. Defaults to false." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },
         recordLimit: { type: "number", description: "board only: maximum records per collection when includeRecords is true. Defaults to 50; 0 returns counts only." },
-        input: { type: "object", description: "Action-specific input. Used by validate_plan, obligations, and search.", additionalProperties: true }
+        input: { type: "object", description: "Action-specific input. Used by validate_plan, runtime_obligations, board_obligations, and search.", additionalProperties: true }
       }
     },
     async execute(toolCallId, params) {
@@ -91,8 +91,23 @@ export function createQueryTool(api) {
         const delegatedParams = { ...shared };
         assertDelegatedParams(delegatedTool, delegatedParams);
         delegated = await delegatedTool.execute(toolCallId, delegatedParams);
-      } else if (params.action === "obligations") {
-        const delegatedTool = createObligationsQueryAction(api);
+      } else if (params.action === "runtime_obligations") {
+        if (params?.boardId != null) {
+          throw createValidationError("runtime_obligations is runtime-scoped and does not accept boardId", {
+            code: "RUNTIME_OBLIGATIONS_BOARD_ID_NOT_ALLOWED",
+            validValues: ["runtime_obligations", "board_obligations"],
+            describeTopic: "query.runtime_obligations"
+          });
+        }
+        const delegatedTool = createRuntimeObligationsQueryAction(api);
+        const delegatedParams = {
+          callerRuntimeRef: params?.callerRuntimeRef,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "board_obligations") {
+        const delegatedTool = createBoardObligationsQueryAction(api);
         const delegatedParams = {
           ...shared,
           ...normalizeInput(params?.input)

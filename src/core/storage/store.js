@@ -136,6 +136,23 @@ export async function loadThreadRecord(pluginConfig = {}, threadId) {
   return raw == null ? null : assertThreadRecord(raw);
 }
 
+export async function listThreadRecords(pluginConfig = {}) {
+  const { threadsDir } = resolveParleyPaths(pluginConfig);
+  try {
+    const entries = await fs.readdir(threadsDir, { withFileTypes: true });
+    const threads = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const raw = await readJsonFile(path.join(threadsDir, entry.name));
+      if (raw != null) threads.push(assertThreadRecord(raw));
+    }
+    return threads.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+}
+
 export async function saveMessageRecord(pluginConfig = {}, record) {
   const validated = assertMessageRecord(record);
   await ensureParleyRuntimeLayout(pluginConfig);

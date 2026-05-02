@@ -9,6 +9,7 @@ import {
   loadCoordinationObjectRecord,
   loadEffectRecord
 } from "../../../core/storage/board_store.js";
+import { runtimeObligationsForCaller } from "./obligations.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 const ACTIVE_STATUSES = new Set(["active", "blocking", "waiting", "deferred"]);
@@ -35,72 +36,110 @@ async function enrichObligation(pluginConfig, board, obligation) {
   };
 }
 
+async function boardWhereAmIProjection(api, identity, params) {
+  const [obligations, artifacts, effects] = await Promise.all([
+    listObligationRecords(api.pluginConfig, identity.board),
+    listArtifactRecords(api.pluginConfig, identity.board),
+    listEffectRecords(api.pluginConfig, identity.board)
+  ]);
+  const assigned = obligations.filter((obligation) => obligation.agent === identity.board_agent_id);
+  const approvalState = deriveApprovalState(artifacts, effects);
+  const activationState = await deriveActivationState(identity.board, artifacts, effects);
+  const checkpointState = await deriveCheckpointState(identity.board, artifacts, obligations);
+  const staleApprovals = approvalState.approvals.filter((approval) => approval.approver === identity.board_agent_id && approval.status === "stale");
+  const activationCandidates = activationCandidatesForAgent(activationState, identity.board_agent_id);
+  const deferredPhases = deferredPhasesForAgent(activationState, identity.board_agent_id);
+  const humanCheckpoints = humanCheckpointsForShepherd(checkpointState, identity.board_agent_id);
+  const visible = params?.includeTerminal === true
+    ? assigned
+    : assigned.filter((obligation) => !TERMINAL_STATUSES.has(obligation.status));
+  const enriched = [];
+  for (const obligation of visible) {
+    enriched.push(await enrichObligation(api.pluginConfig, identity.board, obligation));
+  }
+  return {
+    board_id: identity.board_id,
+    board_agent_id: identity.board_agent_id,
+    blocking_obligations: enriched.filter((item) => item.obligation.status === "blocking"),
+    active_obligations: enriched.filter((item) => item.obligation.status === "active"),
+    waiting_obligations: enriched.filter((item) => item.obligation.status === "waiting"),
+    deferred_obligations: enriched.filter((item) => item.obligation.status === "deferred"),
+    other_visible_obligations: enriched.filter((item) => !ACTIVE_STATUSES.has(item.obligation.status)),
+    stale_approvals: staleApprovals,
+    activation_candidates_needing_attention: activationCandidates.filter((candidate) => candidate.review_required_from.includes(identity.board_agent_id) || candidate.attention_owner === identity.board_agent_id),
+    activation_proposals_you_made: activationCandidates.filter((candidate) => candidate.proposed_by === identity.board_agent_id),
+    deferred_phases_owned_not_actionable: deferredPhases,
+    human_checkpoints_to_shepherd: humanCheckpoints,
+    counts: {
+      assigned: assigned.length,
+      visible: enriched.length,
+      blocking: enriched.filter((item) => item.obligation.status === "blocking").length,
+      active: enriched.filter((item) => item.obligation.status === "active").length,
+      waiting: enriched.filter((item) => item.obligation.status === "waiting").length,
+      deferred: enriched.filter((item) => item.obligation.status === "deferred").length,
+      stale_approvals: staleApprovals.length,
+      activation_candidates: activationCandidates.length,
+      deferred_phases_owned_not_actionable: deferredPhases.length,
+      human_checkpoints_to_shepherd: humanCheckpoints.length
+    }
+  };
+}
+
 export function createWhereAmITool(api) {
   return {
     name: "parley_where_am_i",
     label: "Parley Where Am I",
-    description: "Resolve the caller to a board-local Parley identity and return current obligations for that agent.",
+    description: "Recover runtime obligations, board discovery hints, and optional board-local obligations when boardId is supplied.",
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["boardId"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
-        includeTerminal: { type: "boolean", description: "Include resolved/cancelled/superseded obligations. Defaults to false." }
+        boardId: { type: "string", description: "Optional board id. Omit for runtime-only recovery; pass boardId for runtime plus board-local obligations." },
+        includeTerminal: { type: "boolean", description: "Board section only: include resolved/cancelled/superseded obligations. Defaults to false." }
       }
     },
     async execute(_toolCallId, params) {
-      const identity = resolveToolCaller(api, params);
-      const [obligations, artifacts, effects] = await Promise.all([
-        listObligationRecords(api.pluginConfig, identity.board),
-        listArtifactRecords(api.pluginConfig, identity.board),
-        listEffectRecords(api.pluginConfig, identity.board)
-      ]);
-      const assigned = obligations.filter((obligation) => obligation.agent === identity.board_agent_id);
-      const approvalState = deriveApprovalState(artifacts, effects);
-      const activationState = await deriveActivationState(identity.board, artifacts, effects);
-      const checkpointState = await deriveCheckpointState(identity.board, artifacts, obligations);
-      const staleApprovals = approvalState.approvals.filter((approval) => approval.approver === identity.board_agent_id && approval.status === "stale");
-      const activationCandidates = activationCandidatesForAgent(activationState, identity.board_agent_id);
-      const deferredPhases = deferredPhasesForAgent(activationState, identity.board_agent_id);
-      const humanCheckpoints = humanCheckpointsForShepherd(checkpointState, identity.board_agent_id);
-      const visible = params?.includeTerminal === true
-        ? assigned
-        : assigned.filter((obligation) => !TERMINAL_STATUSES.has(obligation.status));
-      const enriched = [];
-      for (const obligation of visible) {
-        enriched.push(await enrichObligation(api.pluginConfig, identity.board, obligation));
+      const runtime = await runtimeObligationsForCaller(api, params);
+      const runtimeSection = {
+        identity: runtime.identity,
+        participant_ids: runtime.participant_ids,
+        obligations: runtime.obligations,
+        counts: {
+          obligations: runtime.obligations.length,
+          active: runtime.obligations.filter((obligation) => obligation.status === "active").length,
+          blocking: runtime.obligations.filter((obligation) => obligation.status === "blocking").length
+        }
+      };
+      const boardsSection = {
+        default_board: runtime.identity.default_board,
+        available: (runtime.identity.boards ?? []).map((board) => board.board_id),
+        boards: runtime.identity.boards ?? [],
+        hint: "Call parley_where_am_i({ boardId }) for board-local obligations and projections."
+      };
+
+      if (params?.boardId == null) {
+        return boardResult({
+          tool: "parley_where_am_i",
+          scope: "runtime",
+          runtime: runtimeSection,
+          boards: boardsSection
+        });
       }
+
+      const identity = resolveToolCaller(api, params);
+      const projection = await boardWhereAmIProjection(api, identity, params);
       return boardResult({
         tool: "parley_where_am_i",
+        scope: "runtime_and_board",
+        runtime: runtimeSection,
+        boards: boardsSection,
+        board: {
+          identity,
+          projection
+        },
         identity,
-        projection: {
-          board_id: identity.board_id,
-          board_agent_id: identity.board_agent_id,
-          blocking_obligations: enriched.filter((item) => item.obligation.status === "blocking"),
-          active_obligations: enriched.filter((item) => item.obligation.status === "active"),
-          waiting_obligations: enriched.filter((item) => item.obligation.status === "waiting"),
-          deferred_obligations: enriched.filter((item) => item.obligation.status === "deferred"),
-          other_visible_obligations: enriched.filter((item) => !ACTIVE_STATUSES.has(item.obligation.status)),
-          stale_approvals: staleApprovals,
-          activation_candidates_needing_attention: activationCandidates.filter((candidate) => candidate.review_required_from.includes(identity.board_agent_id) || candidate.attention_owner === identity.board_agent_id),
-          activation_proposals_you_made: activationCandidates.filter((candidate) => candidate.proposed_by === identity.board_agent_id),
-          deferred_phases_owned_not_actionable: deferredPhases,
-          human_checkpoints_to_shepherd: humanCheckpoints,
-          counts: {
-            assigned: assigned.length,
-            visible: enriched.length,
-            blocking: enriched.filter((item) => item.obligation.status === "blocking").length,
-            active: enriched.filter((item) => item.obligation.status === "active").length,
-            waiting: enriched.filter((item) => item.obligation.status === "waiting").length,
-            deferred: enriched.filter((item) => item.obligation.status === "deferred").length,
-            stale_approvals: staleApprovals.length,
-            activation_candidates: activationCandidates.length,
-            deferred_phases_owned_not_actionable: deferredPhases.length,
-            human_checkpoints_to_shepherd: humanCheckpoints.length
-          }
-        }
+        projection
       });
     }
   };
