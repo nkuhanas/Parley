@@ -568,6 +568,41 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
       /requires boardId/
     );
 
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "create_obligation",
+      input: {
+        obligationId: "obligation_facade_thread_reply",
+        agent: "parley-agent",
+        type: "preserve_awareness",
+        status: "active",
+        target: { thread_id: "thread_facade", message_id: "message_facade", plan_id: "plan_facade" },
+        reason: "verify generic obligation filters"
+      }
+    });
+    const obligationsResult = await queryTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "obligations",
+      input: { filter: "needs_my_action", scope: ["threads", "plans"] }
+    });
+    assert.equal(obligationsResult.details.action, "obligations");
+    assert.equal(obligationsResult.details.result.counts.matched, 1);
+    assert.deepEqual(obligationsResult.details.result.obligations[0].target_kinds, ["threads", "plans"]);
+
+    await fs.writeFile(path.join(pluginConfig.__tempRoot, "refs", "namespace-search.md"), "Namespace routed recovery needle for Parley query search.\n", "utf8");
+    const searchResult = await queryTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "search",
+      input: { query: "recovery needle", namespaces: ["project_refs"], limit: 5 }
+    });
+    assert.equal(searchResult.details.action, "search");
+    assert.equal(searchResult.details.result.counts.returned, 1);
+    assert.equal(searchResult.details.result.results[0].namespace, "project_refs");
+    assert.match(searchResult.details.result.results[0].uri, /namespace-search\.md$/);
+
     const whereResult = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",

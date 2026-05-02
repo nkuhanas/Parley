@@ -3,9 +3,11 @@ import { createValidatePlanAction } from "./validate_plan.js";
 import { createValidateStateAction } from "./validate_state.js";
 import { createWhereAmITool } from "./where_am_i.js";
 import { createMyBoardsTool } from "./my_boards.js";
+import { createNamespaceSearchAction } from "./namespace_search.js";
+import { createObligationsQueryAction } from "./obligations.js";
 import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
 
-const QUERY_ACTIONS = new Set(["where_am_i", "my_boards", "board", "validate_plan", "validate_state"]);
+const QUERY_ACTIONS = new Set(["where_am_i", "my_boards", "board", "validate_plan", "validate_state", "obligations", "search"]);
 
 function pickSharedParams(params) {
   const shared = {};
@@ -46,11 +48,11 @@ export function createQueryTool(api) {
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
         boardId: { type: "string", description: "Required for board-scoped actions. Omit only for action=my_boards." },
-        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state." },
+        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state, obligations, search." },
         includeTerminal: { type: "boolean", description: "where_am_i only: include resolved/cancelled/superseded obligations. Defaults to false." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },
         recordLimit: { type: "number", description: "board only: maximum records per collection when includeRecords is true. Defaults to 50; 0 returns counts only." },
-        input: { type: "object", description: "Action-specific input. Used by validate_plan.", additionalProperties: true }
+        input: { type: "object", description: "Action-specific input. Used by validate_plan, obligations, and search.", additionalProperties: true }
       }
     },
     async execute(toolCallId, params) {
@@ -82,6 +84,22 @@ export function createQueryTool(api) {
       } else if (params.action === "validate_state") {
         const delegatedTool = createValidateStateAction(api);
         const delegatedParams = { ...shared };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "obligations") {
+        const delegatedTool = createObligationsQueryAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "search") {
+        const delegatedTool = createNamespaceSearchAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
         assertDelegatedParams(delegatedTool, delegatedParams);
         delegated = await delegatedTool.execute(toolCallId, delegatedParams);
       } else {

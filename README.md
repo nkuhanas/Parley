@@ -98,6 +98,8 @@ parley_query({ action: "where_am_i", boardId: boards.default_board })
 
 `my_boards` is the only boardless discovery query. All board-scoped queries and mutations require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
 
+Board-scoped recovery can use `parley_query({ action: "obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["threads", "plans"] } })`. Board-scoped discovery can use `parley_query({ action: "search", boardId, input: { query, namespaces } })` against registered reference namespaces.
+
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 
 ## Status

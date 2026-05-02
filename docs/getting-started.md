@@ -43,3 +43,23 @@ parley_query({ action: "where_am_i", boardId: boards.default_board })
 ## 5. Add coordination records
 
 After identity works, register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the obligation appears.
+
+For obligation-centric recovery, use:
+
+```js
+parley_query({
+  action: "obligations",
+  boardId: boards.default_board,
+  input: { filter: "needs_my_action", targetKinds: ["threads", "plans"] }
+})
+```
+
+For board namespace discovery, use:
+
+```js
+parley_query({
+  action: "search",
+  boardId: boards.default_board,
+  input: { query: "checkpoint", namespaces: ["project_docs", "project_plans"] }
+})
+```
