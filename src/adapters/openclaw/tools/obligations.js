@@ -220,6 +220,7 @@ export function createBoardObligationsQueryAction(api) {
         boardId: { type: "string", description: "Required board id for board-scoped obligations. Call parley_my_boards to discover accessible boards and default_board." },
         filter: { type: "string", description: "Filter to apply: needs_my_action, assigned_to_me, or all. Defaults to needs_my_action." },
         targetKinds: { type: "array", items: { type: "string" }, description: `Optional board target kinds: ${BOARD_OBLIGATION_TARGET_KINDS.join(", ")}.` },
+        scope: { type: "array", items: { type: "string" }, description: "Removed alias; use targetKinds. Present only so Parley can return a scoped deprecation diagnostic." },
         limit: { type: "number", description: "Maximum obligations to return. Defaults to 50; capped at 200." }
       }
     },

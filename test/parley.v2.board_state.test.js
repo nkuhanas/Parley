@@ -654,6 +654,15 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
       }
     );
     await assert.rejects(
+      () => queryTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", action: "board_obligations", input: { scope: ["plans"] } }),
+      (error) => {
+        assert.equal(error.code, "BOARD_OBLIGATIONS_SCOPE_REMOVED");
+        assert.deepEqual(error.validValues, ["targetKinds"]);
+        assert.match(error.describeHint, /query\.board_obligations/);
+        return true;
+      }
+    );
+    await assert.rejects(
       () => mutateTool.execute(null, {
         callerRuntimeRef: AGENT_RUNTIME_REF,
         boardId: "project",
