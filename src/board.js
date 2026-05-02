@@ -117,7 +117,7 @@ function matchGlobalAgents(registry, candidates, candidateDiagnostics) {
   return [...matchesByGlobalAgent.values()];
 }
 
-export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
+function resolveCallerGlobalAgent(pluginConfig = {}, options = {}) {
   const registry = resolveParleyBoardRegistry(pluginConfig);
   const callerRuntimeRef = normalizeCallerRuntimeRef(options.callerRuntimeRef, pluginConfig);
   if (callerRuntimeRef == null) {
@@ -145,6 +145,81 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
   }
 
   const [{ global_agent: globalAgent, candidate: resolvedCandidate }] = globalMatches;
+  const callerRuntimeRefPersisted = sameRuntimeRef(resolvedCandidate.runtime_ref, callerRuntimeRef);
+  const identityResolution = {
+    source: callerRuntimeRefPersisted ? "persisted_binding" : resolvedCandidate.source,
+    caller_runtime_ref_persisted: callerRuntimeRefPersisted,
+    persisted_binding: callerRuntimeRefPersisted,
+    global_agent_id: globalAgent.global_agent_id,
+    resolved_by_runtime_ref: runtimeRefForDiagnostics(resolvedCandidate.runtime_ref),
+    candidates: candidateDiagnostics,
+    matched_global_agent_count: globalMatches.length,
+    matched_identity_count: 1,
+    requested_board_id: requestedBoardId
+  };
+
+  return {
+    registry,
+    callerRuntimeRef,
+    candidates,
+    globalAgent,
+    resolvedCandidate,
+    requestedBoardId,
+    identityResolution
+  };
+}
+
+export function resolveCallerBoardMemberships(pluginConfig = {}, options = {}) {
+  const {
+    registry,
+    callerRuntimeRef,
+    candidates,
+    globalAgent,
+    identityResolution
+  } = resolveCallerGlobalAgent(pluginConfig, options);
+
+  const boards = Object.values(globalAgent.memberships ?? {})
+    .map((membership) => {
+      const board = registry.boards[membership.board_id];
+      if (board == null) throw new Error(`Parley board not found: ${membership.board_id}`);
+      const boardAgent = requireBoardAgent(board, membership.board_agent_id);
+      return {
+        board_id: membership.board_id,
+        display_name: board.display_name,
+        status: board.status,
+        board_agent_id: boardAgent.board_agent_id,
+        roles: membership.roles ?? [],
+        permissions: membership.permissions ?? {},
+        is_default: membership.board_id === globalAgent.default_board
+      };
+    })
+    .sort((left, right) => left.board_id.localeCompare(right.board_id));
+
+  return {
+    global_agent_id: globalAgent.global_agent_id,
+    display_name: globalAgent.display_name,
+    kind: globalAgent.kind,
+    default_board: globalAgent.default_board,
+    runtime_ref: callerRuntimeRef,
+    runtime_aliases: candidates.map((candidate) => candidate.runtime_ref),
+    identity_resolution: {
+      ...identityResolution,
+      accessible_board_count: boards.length
+    },
+    boards
+  };
+}
+
+export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
+  const {
+    registry,
+    callerRuntimeRef,
+    candidates,
+    globalAgent,
+    requestedBoardId,
+    identityResolution
+  } = resolveCallerGlobalAgent(pluginConfig, options);
+
   const resolvedBoardId = requestedBoardId ?? globalAgent.default_board;
   if (resolvedBoardId == null) {
     throw new Error(`Parley global agent has no default board; pass boardId explicitly: ${globalAgent.global_agent_id}`);
@@ -157,17 +232,8 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
     throw new Error(`Parley global agent ${globalAgent.global_agent_id} is not a member of board: ${resolvedBoardId}`);
   }
   const board_agent = requireBoardAgent(board, membership.board_agent_id);
-  const callerRuntimeRefPersisted = sameRuntimeRef(resolvedCandidate.runtime_ref, callerRuntimeRef);
-  const identity_resolution = {
-    source: callerRuntimeRefPersisted ? "persisted_binding" : resolvedCandidate.source,
-    caller_runtime_ref_persisted: callerRuntimeRefPersisted,
-    persisted_binding: callerRuntimeRefPersisted,
-    global_agent_id: globalAgent.global_agent_id,
-    resolved_by_runtime_ref: runtimeRefForDiagnostics(resolvedCandidate.runtime_ref),
-    candidates: candidateDiagnostics,
-    matched_global_agent_count: globalMatches.length,
-    matched_identity_count: 1,
-    requested_board_id: requestedBoardId,
+  const resolvedIdentityResolution = {
+    ...identityResolution,
     resolved_board_id: resolvedBoardId,
     used_default_board: requestedBoardId == null
   };
@@ -180,16 +246,16 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
     membership,
     runtime_ref: callerRuntimeRef,
     runtime_aliases: candidates.map((candidate) => candidate.runtime_ref),
-    identity_resolution,
+    identity_resolution: resolvedIdentityResolution,
     actor: {
       board_agent_id: board_agent.board_agent_id,
       runtime_ref: callerRuntimeRef,
       runtime_aliases: candidates.map((candidate) => candidate.runtime_ref),
       identity_resolution: {
-        source: identity_resolution.source,
-        caller_runtime_ref_persisted: identity_resolution.caller_runtime_ref_persisted,
-        global_agent_id: identity_resolution.global_agent_id,
-        resolved_by_runtime_ref: identity_resolution.resolved_by_runtime_ref
+        source: resolvedIdentityResolution.source,
+        caller_runtime_ref_persisted: resolvedIdentityResolution.caller_runtime_ref_persisted,
+        global_agent_id: resolvedIdentityResolution.global_agent_id,
+        resolved_by_runtime_ref: resolvedIdentityResolution.resolved_by_runtime_ref
       }
     }
   };

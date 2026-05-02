@@ -12,6 +12,7 @@ import { createCreateObjectTool } from "./actions/create_object.js";
 import { createRecordEffectTool } from "./actions/record_effect.js";
 import { createCreateObligationTool } from "./actions/create_obligation.js";
 import { createWhereAmITool } from "./actions/where_am_i.js";
+import { createMyBoardsTool } from "./actions/my_boards.js";
 import { createBoardProjectionTool } from "./actions/board_projection.js";
 import { createRecordRelationshipTool } from "./actions/record_relationship.js";
 import { createRemoveRelationshipTool } from "./actions/remove_relationship.js";
@@ -39,6 +40,7 @@ export function registerParleyTools(api) {
   api.registerTool(withRuntimeContext(api, createRecordEffectTool));
   api.registerTool(withRuntimeContext(api, createCreateObligationTool));
   api.registerTool(withRuntimeContext(api, createWhereAmITool));
+  api.registerTool(withRuntimeContext(api, createMyBoardsTool));
   api.registerTool(withRuntimeContext(api, createBoardProjectionTool));
   api.registerTool(withRuntimeContext(api, createRecordRelationshipTool));
   api.registerTool(withRuntimeContext(api, createRemoveRelationshipTool));

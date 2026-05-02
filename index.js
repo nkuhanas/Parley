@@ -8,7 +8,8 @@ export {
   assertPathUnderArtifactNamespaces,
   buildArtifactNamespaceUri,
   resolveArtifactNamespacePath,
-  runtimeRefKey
+  runtimeRefKey,
+  resolveCallerBoardMemberships
 } from "./src/board.js";
 export { createOpenThreadTool } from "./src/actions/open_thread.js";
 export { createClaimTurnTool } from "./src/actions/claim_turn.js";
@@ -24,6 +25,7 @@ export { createCreateObjectTool } from "./src/actions/create_object.js";
 export { createRecordEffectTool } from "./src/actions/record_effect.js";
 export { createCreateObligationTool } from "./src/actions/create_obligation.js";
 export { createWhereAmITool } from "./src/actions/where_am_i.js";
+export { createMyBoardsTool } from "./src/actions/my_boards.js";
 export { createBoardProjectionTool } from "./src/actions/board_projection.js";
 export { createRecordRelationshipTool } from "./src/actions/record_relationship.js";
 export { createRemoveRelationshipTool } from "./src/actions/remove_relationship.js";

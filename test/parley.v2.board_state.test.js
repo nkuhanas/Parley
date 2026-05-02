@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { resolveCallerIdentity } from "../src/board.js";
+import { resolveCallerBoardMemberships, resolveCallerIdentity } from "../src/board.js";
 import { createKairosBoardConfig } from "../src/adapters/kairos_board.js";
 import { resolveParleyBoardRegistry } from "../src/config.js";
 import { createRegisterArtifactTool } from "../src/actions/register_artifact.js";
@@ -214,6 +214,16 @@ test("Parley v2 global registry resolves default and explicit board memberships"
     assert.equal(parleyIdentity.board_id, "parley");
     assert.equal(parleyIdentity.board_agent_id, "kairos-operator");
     assert.equal(parleyIdentity.identity_resolution.used_default_board, false);
+
+    const memberships = resolveCallerBoardMemberships(config, { callerRuntimeRef: OPERATOR_RUNTIME_REF });
+    assert.equal(memberships.global_agent_id, "kairos-operator");
+    assert.equal(memberships.default_board, "kairos");
+    assert.deepEqual(memberships.boards.map((board) => board.board_id), ["kairos", "parley"]);
+    assert.deepEqual(
+      memberships.boards.map((board) => [board.board_id, board.board_agent_id, board.is_default]),
+      [["kairos", "kairos-operator", true], ["parley", "kairos-operator", false]]
+    );
+    assert.equal(memberships.identity_resolution.accessible_board_count, 2);
   });
 });
 
@@ -471,6 +481,18 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
       action: "where_am_i"
     });
     assert.equal(whereResult.details.result.projection.board_agent_id, "kairos-operator");
+
+    const myBoardsResult = await queryTool.execute(null, {
+      callerRuntimeRef: OPERATOR_RUNTIME_REF,
+      action: "my_boards"
+    });
+    assert.equal(myBoardsResult.details.action, "my_boards");
+    assert.equal(myBoardsResult.details.result.result.global_agent_id, "kairos-operator");
+    assert.deepEqual(myBoardsResult.details.result.result.boards.map((board) => board.board_id), ["kairos"]);
+    await assert.rejects(
+      () => queryTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, action: "my_boards", boardId: "kairos" }),
+      /parley_my_boards does not accept parameter: boardId/
+    );
 
     await assert.rejects(
       () => queryTool.execute(null, { callerRuntimeRef: OPERATOR_RUNTIME_REF, action: "activation_candidates" }),

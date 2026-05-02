@@ -220,6 +220,7 @@ Rules:
 - `where_am_i` without `boardId` uses the global agent's default board.
 - Non-default board operations must pass explicit `boardId`.
 - `where_am_i` with `boardId` checks the global agent's membership and resolves the board-local identity for that board.
+- `my_boards` uses the same caller-derived global agent resolution, but returns the agent's accessible boards and default board without resolving obligations on every board.
 - If runtime identity matches multiple global agents, has no default board when no `boardId` is supplied, or lacks membership in the requested board, Parley must fail closed and return a diagnostic. It must not guess a board or agent.
 
 Identity source-of-truth tradeoff:
@@ -1331,7 +1332,7 @@ Relationship implementation checkpoint, 2026-05-01:
 
 Implementation checkpoint, 2026-05-01:
 
-- `parley_query` now provides a narrow stable façade for `where_am_i` and `board`.
+- `parley_query` now provides a narrow stable façade for `where_am_i`, `my_boards`, and `board`.
 - `parley_mutate` now provides a narrow stable façade for `register_artifact`, `create_object`, `record_effect`, `create_obligation`, and `record_relationship`.
 - Unsupported query/mutate actions fail closed rather than becoming an unbounded generic Parley surface.
 - Gateway-reloaded live smoke verified both supported façade actions and unsupported-action rejection.
