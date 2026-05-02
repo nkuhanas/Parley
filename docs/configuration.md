@@ -59,3 +59,9 @@ parleyBoards: {
 ```
 
 Use explicit `boardId` for every board-scoped operation. `default_board` helps callers choose a board after discovery, but Parley does not silently route board-scoped tools to it.
+
+## Namespace safety
+
+Artifact namespaces are trust boundaries. Parley tools may search reference namespaces and return matching paths and excerpts, and plan/artifact tools may write under landing namespaces. Configure `artifact_namespaces[].resolved_root` to the smallest project/docs/plans directory that agents need. Avoid broad roots such as `$HOME`, an entire vault, `.ssh`, credential stores, directories with `.env` files, or any path containing unrelated secrets.
+
+Use `allowed_subpaths` when only part of a namespace should accept generated or landed artifacts.
