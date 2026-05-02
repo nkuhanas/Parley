@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-alpha.2
+
+- Publish the ClawHub package as a ClawPack artifact instead of the legacy zip format.
+- Add namespace security guidance for reference and landing roots.
+
 ## 0.1.0-alpha.1
 
 - Prepare Parley as a standalone OpenClaw plugin package.
