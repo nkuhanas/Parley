@@ -92,9 +92,11 @@ const pluginConfig = {
 Smoke the identity path:
 
 ```js
-parley_query({ action: "my_boards" })
-parley_query({ action: "where_am_i" })
+const boards = parley_query({ action: "my_boards" })
+parley_query({ action: "where_am_i", boardId: boards.default_board })
 ```
+
+`my_boards` is the only boardless discovery query. All board-scoped queries and mutations require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
 
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 

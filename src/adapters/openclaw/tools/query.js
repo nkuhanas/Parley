@@ -45,7 +45,7 @@ export function createQueryTool(api) {
       required: ["action"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required for board-scoped actions. Omit only for action=my_boards." },
         action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state." },
         includeTerminal: { type: "boolean", description: "where_am_i only: include resolved/cancelled/superseded obligations. Defaults to false." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },

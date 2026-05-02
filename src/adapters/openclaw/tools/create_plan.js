@@ -134,10 +134,10 @@ export function createCreatePlanAction(api) {
     parameters: {
       type: "object",
       additionalProperties: true,
-      required: ["planId", "title", "scope", "filename"],
+      required: ["boardId", "planId", "title", "scope", "filename"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string" },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         planId: { type: "string", description: "Stable plan id, e.g. plan_parley_v2_next_step." },
         title: { type: "string" },
         authority: { type: "string" },

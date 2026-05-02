@@ -12,9 +12,10 @@ export function createValidatePlanAction(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
+      required: ["boardId"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string" },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         markdown: { type: "string", description: "Plan Markdown content to validate." },
         resolvedPath: { type: "string", description: "Optional path to a plan document under an allowed reference namespace." }
       }

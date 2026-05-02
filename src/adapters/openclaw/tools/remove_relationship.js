@@ -24,10 +24,10 @@ export function createRemoveRelationshipTool(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["relationshipId", "reason"],
+      required: ["boardId", "relationshipId", "reason"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         relationshipId: { type: "string", description: "Board-scoped relationship_id to mark inactive in normal projections." },
         effectId: { type: "string", description: "Optional stable effect id for the relationship_removed effect." },
         reason: { type: "string", description: "Required reason for logical removal/correction." },

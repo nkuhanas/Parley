@@ -2,8 +2,10 @@
 
 This example shows one global agent participating in two boards.
 
-Plain `where_am_i()` resolves the default board. Pass `boardId` for non-default boards:
+Discover boards first, then pass `boardId` explicitly for every board-scoped call:
 
 ```js
+const boards = parley_query({ action: "my_boards" })
+parley_query({ action: "where_am_i", boardId: boards.default_board })
 parley_query({ action: "where_am_i", boardId: "research" })
 ```

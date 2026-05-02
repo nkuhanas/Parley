@@ -35,10 +35,10 @@ export function createRegisterArtifactTool(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["kind", "storageMode"],
+      required: ["boardId", "kind", "storageMode"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         artifactId: { type: "string", description: "Optional stable artifact id. Defaults to artifact_<uuid>." },
         kind: { type: "string", description: "Artifact kind, e.g. plan, invariant_spec, decision_record, documentation." },
         storageMode: { type: "string", description: "reference_only, managed_local, or explicit_landing." },

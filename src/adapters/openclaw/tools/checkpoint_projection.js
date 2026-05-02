@@ -40,9 +40,10 @@ export function createCheckpointProjectionTool(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
+      required: ["boardId"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         projectionType: {
           type: "string",
           description: `Projection checkpoint to inspect or advance. Supported: ${SUPPORTED_CHECKPOINT_PROJECTIONS.join(", ")}. Defaults to minimal_board.`

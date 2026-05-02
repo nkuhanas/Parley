@@ -42,10 +42,10 @@ export function createRecordRelationshipTool(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["type", "from", "to"],
+      required: ["boardId", "type", "from", "to"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         relationshipId: { type: "string", description: "Optional stable relationship id. Defaults to relationship_<uuid>." },
         effectId: { type: "string", description: "Optional stable effect id for the relationship_added effect." },
         type: { type: "string", description: "Relationship type, e.g. depends_on, supersedes, refines, related_to." },

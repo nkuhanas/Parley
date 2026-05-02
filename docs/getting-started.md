@@ -34,12 +34,12 @@ Use the package's plugin entrypoint, or call `registerParleyTools(api)` from ano
 Call:
 
 ```js
-parley_query({ action: "my_boards" })
-parley_query({ action: "where_am_i" })
+const boards = parley_query({ action: "my_boards" })
+parley_query({ action: "where_am_i", boardId: boards.default_board })
 ```
 
-`my_boards` should return the caller's accessible boards. `where_am_i` should resolve the caller on its default board and return current obligations.
+`my_boards` should return the caller's accessible boards and `default_board`. Use that value, or another board from the response, as the explicit `boardId` for `where_am_i` and other board-scoped operations. Parley does not silently apply `default_board`.
 
 ## 5. Add coordination records
 
-After identity works, register an artifact, create an object around it, record an effect, and create an obligation. Then call `where_am_i` again and verify the obligation appears.
+After identity works, register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the obligation appears.

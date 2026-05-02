@@ -24,7 +24,9 @@ Effects are append-only. Projections derive current state from records and deter
 Recommended recovery sequence:
 
 ```txt
-my_boards -> where_am_i(default board) -> where_am_i(each other active board)
+my_boards -> where_am_i({ boardId: default_board }) -> where_am_i({ boardId: each other active board })
 ```
+
+`my_boards` is the only boardless discovery query. All board-scoped queries and mutations require explicit `boardId`; `default_board` is a discovery hint, not implicit routing.
 
 Stay quiet when there is no actionable state. Surface blockers, stale approvals, active obligations, or validation errors.

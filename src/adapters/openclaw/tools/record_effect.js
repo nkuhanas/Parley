@@ -51,10 +51,10 @@ export function createRecordEffectTool(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["type", "target"],
+      required: ["boardId", "type", "target"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         effectId: { type: "string", description: "Optional effect id. Defaults to effect_<uuid>." },
         type: { type: "string", description: "Effect type, e.g. artifact_linked or review_requested." },
         target: { type: "object", additionalProperties: true, description: "Effect target payload." },

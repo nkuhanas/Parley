@@ -224,11 +224,11 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
     identityResolution
   } = resolveCallerGlobalAgent(pluginConfig, options);
 
-  const resolvedBoardId = requestedBoardId ?? globalAgent.default_board;
-  if (resolvedBoardId == null) {
-    throw new Error(`Parley global agent has no default board; pass boardId explicitly: ${globalAgent.global_agent_id}`);
+  if (requestedBoardId == null) {
+    throw new Error("Parley board-scoped operation requires boardId. Call parley_my_boards to discover accessible boards and default_board.");
   }
 
+  const resolvedBoardId = requestedBoardId;
   const board = registry.boards[resolvedBoardId];
   if (board == null) throw new Error(`Parley board not found: ${resolvedBoardId}`);
   const membership = globalAgent.memberships?.[resolvedBoardId];
@@ -239,7 +239,7 @@ export function resolveCallerIdentity(pluginConfig = {}, options = {}) {
   const resolvedIdentityResolution = {
     ...identityResolution,
     resolved_board_id: resolvedBoardId,
-    used_default_board: requestedBoardId == null
+    used_default_board: false
   };
   return {
     board,

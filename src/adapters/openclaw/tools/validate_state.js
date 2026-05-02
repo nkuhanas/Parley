@@ -9,9 +9,10 @@ export function createValidateStateAction(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
+      required: ["boardId"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." }
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." }
       }
     },
     async execute(_toolCallId, params) {

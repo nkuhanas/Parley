@@ -52,10 +52,10 @@ export function createMutateTool(api) {
     parameters: {
       type: "object",
       additionalProperties: false,
-      required: ["action"],
+      required: ["boardId", "action"],
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
-        boardId: { type: "string", description: "Optional board override. Normal MVP use derives the board from callerRuntimeRef." },
+        boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         action: {
           type: "string",
           description: "Write action. Supported now: register_artifact, create_object, record_effect, create_obligation, record_relationship, remove_relationship, create_plan."

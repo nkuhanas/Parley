@@ -58,4 +58,4 @@ parleyBoards: {
 }
 ```
 
-Use explicit `boardId` for non-default board operations.
+Use explicit `boardId` for every board-scoped operation. `default_board` helps callers choose a board after discovery, but Parley does not silently route board-scoped tools to it.

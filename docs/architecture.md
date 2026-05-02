@@ -34,6 +34,7 @@ src/
 ## Design constraints
 
 - Identity ambiguity fails closed.
-- Non-default board calls should pass `boardId` explicitly.
+- `my_boards` is boardless discovery; every board-scoped query or mutation requires explicit `boardId`.
+- `default_board` is returned as a selection hint and is not silently applied.
 - Tool actions are bounded; unsupported actions fail closed.
 - Consuming projects own their domain-specific board defaults and execution policy.

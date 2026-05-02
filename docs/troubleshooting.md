@@ -12,9 +12,9 @@ Add a matching `runtime_bindings` entry for the caller under `parleyRegistry.age
 
 Add the board to the global agent's `memberships`, and ensure the board has a matching `members` entry or can synthesize one from membership data.
 
-## Non-default board resolves unexpectedly
+## Board-scoped operation requires boardId
 
-Pass `boardId` explicitly. Plain `where_am_i()` resolves only the caller's default board.
+Call `parley_my_boards` or `parley_query({ action: "my_boards" })` first, choose a board from the response, then pass it as `boardId`. `default_board` is a selection hint; Parley does not silently apply it to `where_am_i`, projections, validation, or mutations.
 
 ## Artifact path rejected
 
