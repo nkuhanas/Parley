@@ -16,6 +16,17 @@
     "test": "node --test"
   },
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nkuhanas/Parley.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nkuhanas/Parley/issues"
+  },
+  "homepage": "https://github.com/nkuhanas/Parley#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "index.js",
     "plugin.js",
