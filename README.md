@@ -74,6 +74,14 @@ parley_query({
 
 ## Install and first run
 
+Install Parley as an OpenClaw plugin from npm:
+
+```sh
+openclaw plugins install @nkuhanas/parley
+```
+
+Or install the package directly:
+
 ```sh
 npm install @nkuhanas/parley
 ```
@@ -83,11 +91,6 @@ For local development:
 ```sh
 npm install
 npm test
-```
-
-Install into OpenClaw during local development:
-
-```sh
 openclaw plugins install -l ./parley
 ```
 
