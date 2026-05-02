@@ -6,7 +6,7 @@
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
-    "./parley/*": "./src/parley/*"
+    "./*": "./src/*"
   },
   "scripts": {
     "test": "node --test"

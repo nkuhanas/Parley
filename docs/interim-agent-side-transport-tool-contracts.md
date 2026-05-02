@@ -7,9 +7,9 @@ Scope: public Parley tool contract deltas for the interim transport branch
 Concrete plugin identity: Parley
 Implementation branch: no-FR/no-PR interim branch
 Depends on:
-- `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
-- `plans/agent-comms/parley/mvp-implementation-plan.md`
-- `docs/agent-comms/parley/interim-agent-side-transport-spec.md`
+- `docs/mvp-thread-protocol-spec.md`
+- `plans/mvp-implementation-plan.md`
+- `docs/interim-agent-side-transport-spec.md`
 
 ## 1. Purpose
 
@@ -161,7 +161,7 @@ When a recorded human-summary anchor exists and the action wants to surface a sp
 The associated `thread` record should also carry any thread-level accountability metadata already established by the protocol, including `origin_kind`, derived internal `report_back_policy`, and `human_summary_anchor` when applicable.
 These fields do not change the transport handoff shape, but they do affect what the initiator still owes after the thread settles back, including whether the final human-facing completion update must reply to a canonical anchor/sendoff message.
 
-A likely next iteration is standardized Parley-generated anchor/sendoff text plus caller-managed anchor recording. That follow-up contract is drafted in `docs/agent-comms/parley/human-summary-anchor-contract.md`.
+A likely next iteration is standardized Parley-generated anchor/sendoff text plus caller-managed anchor recording. That follow-up contract is drafted in `docs/human-summary-anchor-contract.md`.
 
 ## 4. Required result-field semantics
 

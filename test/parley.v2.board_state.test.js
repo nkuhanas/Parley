@@ -4,21 +4,21 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { resolveCallerIdentity } from "../src/parley/board.js";
-import { createKairosBoardConfig } from "../src/parley/adapters/kairos_board.js";
-import { resolveParleyBoardRegistry } from "../src/parley/config.js";
-import { createRegisterArtifactTool } from "../src/parley/actions/register_artifact.js";
-import { createCreateObjectTool } from "../src/parley/actions/create_object.js";
-import { createRecordEffectTool } from "../src/parley/actions/record_effect.js";
-import { createCreateObligationTool } from "../src/parley/actions/create_obligation.js";
-import { createWhereAmITool } from "../src/parley/actions/where_am_i.js";
-import { createBoardProjectionTool } from "../src/parley/actions/board_projection.js";
-import { createRecordRelationshipTool } from "../src/parley/actions/record_relationship.js";
-import { createRemoveRelationshipTool } from "../src/parley/actions/remove_relationship.js";
-import { createCheckpointProjectionTool } from "../src/parley/actions/checkpoint_projection.js";
-import { createValidateStateAction } from "../src/parley/actions/validate_state.js";
-import { createQueryTool } from "../src/parley/actions/query.js";
-import { createMutateTool } from "../src/parley/actions/mutate.js";
+import { resolveCallerIdentity } from "../src/board.js";
+import { createKairosBoardConfig } from "../src/adapters/kairos_board.js";
+import { resolveParleyBoardRegistry } from "../src/config.js";
+import { createRegisterArtifactTool } from "../src/actions/register_artifact.js";
+import { createCreateObjectTool } from "../src/actions/create_object.js";
+import { createRecordEffectTool } from "../src/actions/record_effect.js";
+import { createCreateObligationTool } from "../src/actions/create_obligation.js";
+import { createWhereAmITool } from "../src/actions/where_am_i.js";
+import { createBoardProjectionTool } from "../src/actions/board_projection.js";
+import { createRecordRelationshipTool } from "../src/actions/record_relationship.js";
+import { createRemoveRelationshipTool } from "../src/actions/remove_relationship.js";
+import { createCheckpointProjectionTool } from "../src/actions/checkpoint_projection.js";
+import { createValidateStateAction } from "../src/actions/validate_state.js";
+import { createQueryTool } from "../src/actions/query.js";
+import { createMutateTool } from "../src/actions/mutate.js";
 import {
   createCoordinationObjectRecord,
   createEffectRecord,
@@ -26,7 +26,7 @@ import {
   loadArtifactRecord,
   loadCoordinationObjectRecord,
   loadProjectionCheckpointRecord
-} from "../src/parley/board_store.js";
+} from "../src/board_store.js";
 
 const REPO_ROOT = "/home/agent/workspace/Kairos";
 const OPERATOR_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "kairos-operator" };

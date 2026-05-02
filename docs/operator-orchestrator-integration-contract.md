@@ -7,10 +7,10 @@ Scope: minimal first live Parley integration inside Kairos
 Date: 2026-04-22
 Participants: `kairos-operator`, `kairos-orchestrator`
 Depends on:
-- `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
-- `plans/agent-comms/parley/mvp-implementation-plan.md`
-- `docs/agent-comms/parley/interim-agent-side-transport-spec.md`
-- `docs/agent-comms/parley/interim-agent-side-transport-tool-contracts.md`
+- `docs/mvp-thread-protocol-spec.md`
+- `plans/mvp-implementation-plan.md`
+- `docs/interim-agent-side-transport-spec.md`
+- `docs/interim-agent-side-transport-tool-contracts.md`
 
 ## 1. Purpose
 
@@ -173,7 +173,7 @@ For human-origin threads, that summary should reply to the recorded anchor/sendo
 Do not treat the agent-to-agent settlement itself as the final human-facing closure.
 
 Likely next iteration: standardize the anchor/sendoff text itself as Parley-generated caller-managed output rather than caller-authored prose. Draft contract reference:
-- `docs/agent-comms/parley/human-summary-anchor-contract.md`
+- `docs/human-summary-anchor-contract.md`
 
 ## 9. Probe policy
 

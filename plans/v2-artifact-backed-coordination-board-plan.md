@@ -6,9 +6,9 @@ Owner: Kairos operator
 Scope: Parley v2 object/effect/obligation layer and artifact storage strategy
 Date: 2026-04-30
 Depends on:
-- `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
-- `plans/agent-comms/parley/mvp-implementation-plan.md`
-- `docs/agent-comms/parley/operator-orchestrator-integration-contract.md`
+- `docs/mvp-thread-protocol-spec.md`
+- `plans/mvp-implementation-plan.md`
+- `docs/operator-orchestrator-integration-contract.md`
 
 ## 1. Purpose
 
@@ -49,7 +49,7 @@ Rule:
 
 The current Parley implementation lives under:
 
-- `apps/kairos-openclaw-tools/src/parley/`
+- `src/`
 
 Current runtime state defaults to:
 
@@ -65,7 +65,7 @@ This is appropriate for protocol state. It is not appropriate as the default hom
 
 Current Parley design docs are stored in the Kairos repo under:
 
-- `docs/agent-comms/parley/`
+- `docs/`
 
 That is correct for Kairos-specific canonical plans, specs, and contracts. It should not become the only possible artifact landing location for a general Parley runtime.
 
@@ -316,9 +316,9 @@ A top-level `plans/` directory is the cleanest eventual shape if Kairos wants pa
 Under that model, examples would look like:
 
 ```txt
-plans/agent-comms/parley/v2-artifact-backed-coordination-board-plan.md
+plans/v2-artifact-backed-coordination-board-plan.md
 plans/architecture/ui/persona-manager-console-implementation-plan.md
-docs/agent-comms/parley/mvp-thread-protocol-spec.md
+docs/mvp-thread-protocol-spec.md
 docs/architecture/ui/kairos-console-architecture.md
 ```
 
@@ -334,10 +334,10 @@ Migration guardrails:
 
 Near-term Kairos recommendation:
 
-- keep current Parley/Kairos canonical material in `docs/agent-comms/parley/` until the top-level `plans/` migration is explicitly approved and the canon/ref tooling is updated
+- keep current Parley/Kairos canonical material in `docs/` until the top-level `plans/` migration is explicitly approved and the canon/ref tooling is updated
 - classify artifacts explicitly in Parley records with `kind`, `status`, `version`, and `relationships`
 - allow Parley to reference both `docs/` and `plans/` repo paths once `plans/` exists
-- treat this v2 plan itself as a candidate to move from `docs/agent-comms/parley/` to `plans/agent-comms/parley/` during the repo ontology migration
+- treat this v2 plan itself as a candidate to move from `docs/` to `plans/` during the repo ontology migration
 
 This lets Parley model the truth now without forcing a repo-wide documentation migration as part of the v2 MVP, while preserving a clear path to a cleaner repo ontology.
 
@@ -354,8 +354,8 @@ Use this when the artifact already lives in an authoritative place and Parley sh
 
 Examples:
 
-- a Kairos repo doc under `docs/agent-comms/parley/`
-- a Kairos repo plan under `plans/agent-comms/parley/`
+- a Kairos repo doc under `docs/`
+- a Kairos repo plan under `plans/`
 - a vault/canon ref
 - a GitHub issue or PR
 - an external design document
@@ -382,7 +382,7 @@ artifact_ref:
   artifact_id: artifact_parley_v2_plan
   kind: plan
   storage_mode: reference_only
-  uri: repo://plans/agent-comms/parley/v2-artifact-backed-coordination-board-plan.md
+  uri: repo://plans/v2-artifact-backed-coordination-board-plan.md
   version: 1
   content_hash: null
   status: draft
@@ -433,13 +433,13 @@ Use this when the human or initiating agent knows the artifact should land in a 
 Example before the Kairos repo ontology migration:
 
 ```txt
-docs/agent-comms/parley/
+docs/
 ```
 
 Example after a top-level `plans/` migration:
 
 ```txt
-plans/agent-comms/parley/
+plans/
 ```
 
 Required behavior:
@@ -461,7 +461,7 @@ artifact_ref:
   kind: plan
   storage_mode: explicit_landing
   landing_root: ~/workspace/Kairos/plans
-  uri: repo://plans/agent-comms/parley/v2-artifact-backed-coordination-board-plan.md
+  uri: repo://plans/v2-artifact-backed-coordination-board-plan.md
   version: 1
   status: draft
 ```
@@ -471,13 +471,13 @@ artifact_ref:
 For Kairos foundation/spec/architecture plans, prefer a repo plan body home once the repo ontology migration exists:
 
 ```txt
-/home/agent/workspace/Kairos/plans/agent-comms/parley/
+/home/agent/workspace/Kairos/plans/
 ```
 
 Until then, keep using the current repo doc location for Parley design artifacts:
 
 ```txt
-/home/agent/workspace/Kairos/docs/agent-comms/parley/
+/home/agent/workspace/Kairos/docs/
 ```
 
 For temporary Parley-generated drafts that are not yet canonical, use managed board artifacts under the board root:
@@ -504,7 +504,7 @@ artifact_ref:
   kind: plan
   board_id: kairos
   storage_mode: explicit_landing
-  uri: repo://plans/agent-comms/parley/v2-artifact-backed-coordination-board-plan.md
+  uri: repo://plans/v2-artifact-backed-coordination-board-plan.md
   landing_root: ~/workspace/Kairos/plans
   version: 1
   content_hash: null
@@ -1071,7 +1071,7 @@ Deferred/non-executing items to preserve in the plan:
 
 Non-executing implementation checkpoint, 2026-05-01:
 
-- `parley.plan.v1` now has a Parley-owned schema module under `apps/kairos-openclaw-tools/src/parley/schemas/`.
+- `parley.plan.v1` now has a Parley-owned schema module under `src/schemas/`.
 - `parley_mutate(action="create_plan")` creates a Markdown plan body, validates it against `parley.plan.v1`, writes it through a board artifact namespace, and registers the resulting explicit-landing plan artifact.
 - `parley_query(action="validate_plan")` validates supplied plan Markdown or a plan file under an allowed reference namespace without executing any work.
 - Kairos board config now exposes `artifact_namespaces` and `allowed_reference_namespaces`, while retaining legacy root fields as compatibility aliases for existing call paths.
@@ -1398,7 +1398,7 @@ Next recommended steps:
 This Parley migration plan now lives in the Kairos repo `plans/` tree:
 
 ```txt
-plans/agent-comms/parley/v2-artifact-backed-coordination-board-plan.md
+plans/v2-artifact-backed-coordination-board-plan.md
 ```
 
 Record future Parley runtime state and managed artifacts under one board root:

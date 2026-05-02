@@ -1,5 +1,5 @@
-export { registerParleyTools } from "./src/parley/tools.js";
-export { resolveParleyConfig, resolveParleyPaths, resolveParleyBoardRegistry } from "./src/parley/config.js";
+export { registerParleyTools } from "./src/tools.js";
+export { resolveParleyConfig, resolveParleyPaths, resolveParleyBoardRegistry } from "./src/config.js";
 export {
   resolveCallerIdentity,
   requireBoardAgent,
@@ -8,25 +8,25 @@ export {
   assertPathUnderArtifactNamespaces,
   buildArtifactNamespaceUri,
   resolveArtifactNamespacePath
-} from "./src/parley/board.js";
-export { createOpenThreadTool } from "./src/parley/actions/open_thread.js";
-export { createClaimTurnTool } from "./src/parley/actions/claim_turn.js";
-export { createReplyThreadTool } from "./src/parley/actions/reply.js";
-export { createProbeThreadTool } from "./src/parley/actions/probe.js";
-export { createSettleTurnTool } from "./src/parley/actions/settle_turn.js";
-export { createConcludeThreadTool } from "./src/parley/actions/conclude_thread.js";
-export { createRecordTransportResultTool } from "./src/parley/actions/record_transport_result.js";
-export { createDispatchTransportRequestTool } from "./src/parley/actions/dispatch_transport_request.js";
-export { createRecordHumanSummaryAnchorTool } from "./src/parley/actions/record_human_summary_anchor.js";
-export { createRegisterArtifactTool } from "./src/parley/actions/register_artifact.js";
-export { createCreateObjectTool } from "./src/parley/actions/create_object.js";
-export { createRecordEffectTool } from "./src/parley/actions/record_effect.js";
-export { createCreateObligationTool } from "./src/parley/actions/create_obligation.js";
-export { createWhereAmITool } from "./src/parley/actions/where_am_i.js";
-export { createBoardProjectionTool } from "./src/parley/actions/board_projection.js";
-export { createRecordRelationshipTool } from "./src/parley/actions/record_relationship.js";
-export { createRemoveRelationshipTool } from "./src/parley/actions/remove_relationship.js";
-export { createCheckpointProjectionTool } from "./src/parley/actions/checkpoint_projection.js";
-export { createValidateStateAction } from "./src/parley/actions/validate_state.js";
-export { createQueryTool } from "./src/parley/actions/query.js";
-export { createMutateTool } from "./src/parley/actions/mutate.js";
+} from "./src/board.js";
+export { createOpenThreadTool } from "./src/actions/open_thread.js";
+export { createClaimTurnTool } from "./src/actions/claim_turn.js";
+export { createReplyThreadTool } from "./src/actions/reply.js";
+export { createProbeThreadTool } from "./src/actions/probe.js";
+export { createSettleTurnTool } from "./src/actions/settle_turn.js";
+export { createConcludeThreadTool } from "./src/actions/conclude_thread.js";
+export { createRecordTransportResultTool } from "./src/actions/record_transport_result.js";
+export { createDispatchTransportRequestTool } from "./src/actions/dispatch_transport_request.js";
+export { createRecordHumanSummaryAnchorTool } from "./src/actions/record_human_summary_anchor.js";
+export { createRegisterArtifactTool } from "./src/actions/register_artifact.js";
+export { createCreateObjectTool } from "./src/actions/create_object.js";
+export { createRecordEffectTool } from "./src/actions/record_effect.js";
+export { createCreateObligationTool } from "./src/actions/create_obligation.js";
+export { createWhereAmITool } from "./src/actions/where_am_i.js";
+export { createBoardProjectionTool } from "./src/actions/board_projection.js";
+export { createRecordRelationshipTool } from "./src/actions/record_relationship.js";
+export { createRemoveRelationshipTool } from "./src/actions/remove_relationship.js";
+export { createCheckpointProjectionTool } from "./src/actions/checkpoint_projection.js";
+export { createValidateStateAction } from "./src/actions/validate_state.js";
+export { createQueryTool } from "./src/actions/query.js";
+export { createMutateTool } from "./src/actions/mutate.js";

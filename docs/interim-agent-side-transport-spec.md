@@ -7,8 +7,8 @@ Scope: interim Parley transport branch using existing OpenClaw session-messaging
 Concrete plugin identity: Parley
 Implementation branch: no-FR/no-PR interim branch
 Depends on:
-- `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
-- `plans/agent-comms/parley/mvp-implementation-plan.md`
+- `docs/mvp-thread-protocol-spec.md`
+- `plans/mvp-implementation-plan.md`
 
 ## 1. Purpose
 

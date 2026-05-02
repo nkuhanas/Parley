@@ -5,7 +5,7 @@ Authority: implementation-note
 Owner: Kairos operator + orchestrator
 Scope: first Parley plugin/runtime implementation plan and build boundary
 Concrete plugin identity: Parley
-Depends on: `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
+Depends on: `docs/mvp-thread-protocol-spec.md`
 
 ## Purpose
 
@@ -101,7 +101,7 @@ Extend the current plugin package with the new Parley surface.
 Even while Parley lives inside the Kairos host plugin package, implementation should stay extraction-ready.
 That means:
 
-- keep Parley logic under a clearly bounded `src/parley/` subtree
+- keep Parley logic under a clearly bounded `src/` subtree
 - avoid unnecessary references to Kairos-specific runtime concepts inside Parley modules
 - keep host-package wiring thin and concentrated near the top-level plugin entrypoint
 - prefer default/config/path assumptions that can be replaced later without changing Parley action semantics or record shapes
@@ -116,30 +116,30 @@ Suggested internal layout:
 - `apps/kairos-openclaw-tools/index.js`
   - plugin entrypoint only
   - registers existing Kairos tools plus the new Parley tools
-- `apps/kairos-openclaw-tools/src/parley/config.js`
+- `src/config.js`
   - runtime path resolution
   - config defaults
   - validation of plugin config relevant to agent comms
-- `apps/kairos-openclaw-tools/src/parley/store.js`
+- `src/store.js`
   - canonical thread/message record persistence
   - record lookup and atomic-ish write helpers
-- `apps/kairos-openclaw-tools/src/parley/schema.js`
+- `src/schema.js`
   - runtime validators for kinds, control modes, settling markers, and state transitions
-- `apps/kairos-openclaw-tools/src/parley/transport.js`
+- `src/transport.js`
   - native transport adapter over `sessions_send` or equivalent OpenClaw plugin context facilities
   - transport formatting generation for parseable blocks when needed
-- `apps/kairos-openclaw-tools/src/parley/actions/open_thread.js`
-- `apps/kairos-openclaw-tools/src/parley/actions/claim_turn.js`
-- `apps/kairos-openclaw-tools/src/parley/actions/reply.js`
-- `apps/kairos-openclaw-tools/src/parley/actions/probe.js`
-- `apps/kairos-openclaw-tools/src/parley/actions/settle_turn.js`
-- `apps/kairos-openclaw-tools/src/parley/actions/conclude_thread.js`
-- `apps/kairos-openclaw-tools/src/parley/render.js`
+- `src/actions/open_thread.js`
+- `src/actions/claim_turn.js`
+- `src/actions/reply.js`
+- `src/actions/probe.js`
+- `src/actions/settle_turn.js`
+- `src/actions/conclude_thread.js`
+- `src/render.js`
   - parseable transport block rendering
   - human-readable response shaping that keeps protocol declaration out of prose
-- `apps/kairos-openclaw-tools/src/parley/ids.js`
+- `src/ids.js`
   - canonical `thread_id` and `message_id` generation
-- `apps/kairos-openclaw-tools/src/parley/time.js`
+- `src/time.js`
   - timestamp helpers and probe deadlines
 
 Exact filenames may vary, but the implementation should preserve these separations of concern.
@@ -376,7 +376,7 @@ Follow-up after the current anchored human-summary flow:
 - add a separate caller-recorded anchor step so canonical thread state can move from pending anchor to recorded anchor
 
 Draft contract reference:
-- `docs/agent-comms/parley/human-summary-anchor-contract.md`
+- `docs/human-summary-anchor-contract.md`
 
 ### Phase 4. Probe and stalled-thread handling
 

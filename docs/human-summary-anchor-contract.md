@@ -7,9 +7,9 @@ Scope: standardized Parley-generated anchor/sendoff handling on human-origin sum
 Date: 2026-04-22
 Participants: `kairos-operator`, `kairos-orchestrator`
 Depends on:
-- `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
-- `plans/agent-comms/parley/mvp-implementation-plan.md`
-- `docs/agent-comms/parley/interim-agent-side-transport-tool-contracts.md`
+- `docs/mvp-thread-protocol-spec.md`
+- `plans/mvp-implementation-plan.md`
+- `docs/interim-agent-side-transport-tool-contracts.md`
 
 ## 1. Purpose
 

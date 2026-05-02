@@ -4,14 +4,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { createOpenThreadTool } from "../src/parley/actions/open_thread.js";
-import { createClaimTurnTool } from "../src/parley/actions/claim_turn.js";
-import { createReplyThreadTool } from "../src/parley/actions/reply.js";
-import { createSettleTurnTool } from "../src/parley/actions/settle_turn.js";
-import { createConcludeThreadTool } from "../src/parley/actions/conclude_thread.js";
-import { createDispatchTransportRequestTool } from "../src/parley/actions/dispatch_transport_request.js";
-import { createRecordHumanSummaryAnchorTool } from "../src/parley/actions/record_human_summary_anchor.js";
-import { loadMessageRecord, loadThreadRecord } from "../src/parley/store.js";
+import { createOpenThreadTool } from "../src/actions/open_thread.js";
+import { createClaimTurnTool } from "../src/actions/claim_turn.js";
+import { createReplyThreadTool } from "../src/actions/reply.js";
+import { createSettleTurnTool } from "../src/actions/settle_turn.js";
+import { createConcludeThreadTool } from "../src/actions/conclude_thread.js";
+import { createDispatchTransportRequestTool } from "../src/actions/dispatch_transport_request.js";
+import { createRecordHumanSummaryAnchorTool } from "../src/actions/record_human_summary_anchor.js";
+import { loadMessageRecord, loadThreadRecord } from "../src/store.js";
 
 const REPO_ROOT = "/home/agent/workspace/Kairos";
 const INITIATOR_SESSION_KEY = "agent:kairos-operator:discord:channel:1494492383726010418";

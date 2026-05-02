@@ -7,7 +7,7 @@ import {
   createParleyPlanV1Document,
   parseParleyPlanV1Document,
   validateParleyPlanV1Document
-} from "../src/parley/schemas/plan_v1.js";
+} from "../src/schemas/plan_v1.js";
 
 function validPlanInput(overrides = {}) {
   return {

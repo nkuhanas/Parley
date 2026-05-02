@@ -7,14 +7,14 @@ Scope: by-file implementation plan and landed-reference notes for the interim Pa
 Concrete plugin identity: Parley
 Implementation branch: no-FR/no-PR interim branch
 Depends on:
-- `docs/agent-comms/parley/mvp-thread-protocol-spec.md`
-- `plans/agent-comms/parley/mvp-implementation-plan.md`
-- `docs/agent-comms/parley/interim-agent-side-transport-spec.md`
-- `docs/agent-comms/parley/interim-agent-side-transport-tool-contracts.md`
+- `docs/mvp-thread-protocol-spec.md`
+- `plans/mvp-implementation-plan.md`
+- `docs/interim-agent-side-transport-spec.md`
+- `docs/interim-agent-side-transport-tool-contracts.md`
 
 ## 1. Purpose
 
-Translate the interim Parley transport branch into a concrete by-file implementation plan for the current codebase under `apps/kairos-openclaw-tools/src/parley/`.
+Translate the interim Parley transport branch into a concrete by-file implementation plan for the current codebase under `src/`.
 
 This document now serves two roles:
 
@@ -57,7 +57,7 @@ The current interim branch now does the following instead:
 
 ## 3. File-by-file plan
 
-### 3.1 `apps/kairos-openclaw-tools/src/parley/transport.js`
+### 3.1 `src/transport.js`
 
 #### Current role
 - renders protocol envelope, protocol block, and outbound text
@@ -107,7 +107,7 @@ That keeps later graduation to a native adapter localized to this file.
 
 ---
 
-### 3.2 `apps/kairos-openclaw-tools/src/parley/actions/common.js`
+### 3.2 `src/actions/common.js`
 
 #### Current role
 - thread lookup helpers
@@ -167,7 +167,7 @@ This file should become the main contract assembly layer for all Parley action r
 
 ---
 
-### 3.3 `apps/kairos-openclaw-tools/src/parley/store.js`
+### 3.3 `src/store.js`
 
 #### Current role
 - thread/message record creation
@@ -215,7 +215,7 @@ This is the main persistence change needed to stop conflating rendered output wi
 
 ---
 
-### 3.4 `apps/kairos-openclaw-tools/src/parley/schema.js`
+### 3.4 `src/schema.js`
 
 #### Current role
 - validates thread and message records
@@ -261,7 +261,7 @@ This file is where the interim branch becomes a real canonical contract instead 
 
 ---
 
-### 3.5 `apps/kairos-openclaw-tools/src/parley/actions/open_thread.js`
+### 3.5 `src/actions/open_thread.js`
 
 #### Current role
 - create opening thread and message records
@@ -287,7 +287,7 @@ Initialize transport metadata on the opening message and update note wording.
 
 ---
 
-### 3.6 `apps/kairos-openclaw-tools/src/parley/actions/claim_turn.js`
+### 3.6 `src/actions/claim_turn.js`
 
 #### Required change
 Same pattern as `open_thread.js`.
@@ -302,7 +302,7 @@ Recommended note:
 
 ---
 
-### 3.7 `apps/kairos-openclaw-tools/src/parley/actions/reply.js`
+### 3.7 `src/actions/reply.js`
 
 #### Required change
 Same pattern as above.
@@ -317,7 +317,7 @@ Recommended note:
 
 ---
 
-### 3.8 `apps/kairos-openclaw-tools/src/parley/actions/probe.js`
+### 3.8 `src/actions/probe.js`
 
 #### Required change
 Same pattern as above.
@@ -332,7 +332,7 @@ Recommended note:
 
 ---
 
-### 3.9 `apps/kairos-openclaw-tools/src/parley/actions/settle_turn.js`
+### 3.9 `src/actions/settle_turn.js`
 
 #### Required change
 Same pattern as above.
@@ -347,7 +347,7 @@ Recommended note:
 
 ---
 
-### 3.10 `apps/kairos-openclaw-tools/src/parley/actions/conclude_thread.js`
+### 3.10 `src/actions/conclude_thread.js`
 
 #### Required change
 Same pattern as above.
@@ -362,7 +362,7 @@ Recommended note:
 
 ---
 
-### 3.11 `apps/kairos-openclaw-tools/src/parley/actions/record_transport_result.js` (implemented)
+### 3.11 `src/actions/record_transport_result.js` (implemented)
 
 #### Current status
 This action implementation file exists and is part of the active public tool surface.
@@ -413,7 +413,7 @@ This new file is the main operational addition for the interim branch.
 
 ---
 
-### 3.12 `apps/kairos-openclaw-tools/src/parley/tools.js`
+### 3.12 `src/tools.js`
 
 #### Current role
 - registers current Parley public tools
