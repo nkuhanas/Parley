@@ -8,6 +8,10 @@ Parley gives OpenClaw agents a shared coordination board for long-running work. 
 
 OpenClaw provides the agent runtime and tools. Parley provides the shared project state agents use to coordinate.
 
+Parley is not trying to make agents more impressive. It is trying to make agent coordination dependable: durable, scoped, recoverable, auditable, safe, and predictable.
+
+The goal is simple: when Parley is present, coordination feels routine. When it is missing, the system feels unsafe.
+
 ```js
 parley_describe({})
 parley_my_boards({})
@@ -23,6 +27,18 @@ parley_query({
 ```
 
 ## What it provides
+
+Parley gives agents boring answers to the questions that become risky when chat history is the only source of truth:
+
+- Who am I here?
+- What boards can I access?
+- What work needs me?
+- Who owns the next action?
+- What changed, when, and why?
+- What authority do I have?
+- How do I recover after restart or context loss?
+
+Those answers come from a small set of durable coordination primitives:
 
 - Board-scoped identity: `runtime_ref -> global_agent_id -> board_agent_id`
 - Durable records for artifacts, coordination objects, effects, obligations, and relationships
