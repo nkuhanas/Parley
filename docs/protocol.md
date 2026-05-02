@@ -24,8 +24,10 @@ Effects are append-only. Projections derive current state from records and deter
 Recommended recovery sequence:
 
 ```txt
-my_boards -> where_am_i({ boardId: default_board }) -> obligations({ boardId, filter: needs_my_action }) -> where_am_i({ boardId: each other active board })
+parley_describe({ topic: recovery }) -> parley_my_boards({}) -> parley_where_am_i({ boardId: default_board }) -> obligations({ boardId, filter: needs_my_action }) -> where_am_i({ boardId: each other active board })
 ```
+
+`parley_describe` is metadata/introspection and does not mutate board state. Topic omitted returns an overview. Unknown topics return valid topics plus a describe hint. `parley_describe({ boardId })` returns board metadata only, not board state records.
 
 `my_boards` is the only boardless discovery query. All board-scoped queries and mutations require explicit `boardId`; `default_board` is a discovery hint, not implicit routing.
 

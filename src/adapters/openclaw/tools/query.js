@@ -5,9 +5,10 @@ import { createWhereAmITool } from "./where_am_i.js";
 import { createMyBoardsTool } from "./my_boards.js";
 import { createNamespaceSearchAction } from "./namespace_search.js";
 import { createObligationsQueryAction } from "./obligations.js";
+import { createValidationError, QUERY_ACTIONS } from "./descriptors.js";
 import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
 
-const QUERY_ACTIONS = new Set(["where_am_i", "my_boards", "board", "validate_plan", "validate_state", "obligations", "search"]);
+const QUERY_ACTION_SET = new Set(QUERY_ACTIONS);
 
 function pickSharedParams(params) {
   const shared = {};
@@ -23,8 +24,12 @@ function normalizeInput(input) {
 }
 
 function assertKnownAction(action) {
-  if (!QUERY_ACTIONS.has(action)) {
-    throw new Error(`unsupported parley_query action: ${action}`);
+  if (!QUERY_ACTION_SET.has(action)) {
+    throw createValidationError(`unsupported parley_query action: ${action}`, {
+      code: "INVALID_PARLEY_QUERY_ACTION",
+      validValues: QUERY_ACTIONS,
+      describeTopic: "query"
+    });
   }
 }
 

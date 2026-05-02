@@ -18,6 +18,7 @@ import { createCheckpointProjectionTool } from "../src/adapters/openclaw/tools/c
 import { createValidateStateAction } from "../src/adapters/openclaw/tools/validate_state.js";
 import { createQueryTool } from "../src/adapters/openclaw/tools/query.js";
 import { createMutateTool } from "../src/adapters/openclaw/tools/mutate.js";
+import { createDescribeTool } from "../src/adapters/openclaw/tools/describe.js";
 import {
   createCoordinationObjectRecord,
   createEffectRecord,
@@ -624,11 +625,32 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
 
     await assert.rejects(
       () => queryTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", action: "activation_candidates" }),
-      /unsupported parley_query action/
+      (error) => {
+        assert.match(error.message, /unsupported parley_query action/);
+        assert.equal(error.code, "INVALID_PARLEY_QUERY_ACTION");
+        assert.ok(error.validValues.includes("obligations"));
+        assert.match(error.describeHint, /topic: "query"/);
+        return true;
+      }
     );
     await assert.rejects(
       () => mutateTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", action: "defer_phase" }),
-      /unsupported parley_mutate action/
+      (error) => {
+        assert.match(error.message, /unsupported parley_mutate action/);
+        assert.equal(error.code, "INVALID_PARLEY_MUTATE_ACTION");
+        assert.ok(error.validValues.includes("create_plan"));
+        assert.match(error.describeHint, /topic: "mutate"/);
+        return true;
+      }
+    );
+    await assert.rejects(
+      () => queryTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", action: "obligations", input: { filter: "urgent" } }),
+      (error) => {
+        assert.equal(error.code, "INVALID_OBLIGATIONS_FILTER");
+        assert.deepEqual(error.validValues, ["needs_my_action", "assigned_to_me", "all"]);
+        assert.match(error.describeHint, /query\.obligations/);
+        return true;
+      }
     );
     await assert.rejects(
       () => mutateTool.execute(null, {
@@ -645,6 +667,63 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
       }),
       /parley_register_artifact does not accept parameter: inventedParam/
     );
+  });
+});
+
+test("Parley describe provides fresh-agent discovery and board metadata", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const describeTool = createDescribeTool(toolApi(pluginConfig));
+
+    const overview = await describeTool.execute(null, {});
+    assert.equal(overview.details.tool, "parley_describe");
+    assert.equal(overview.details.topic, "overview");
+    assert.ok(overview.details.descriptor.query_actions.includes("obligations"));
+    assert.ok(overview.details.descriptor.mutate_actions.includes("create_plan"));
+
+    const unknown = await describeTool.execute(null, { topic: "query.cards" });
+    assert.equal(unknown.details.descriptor.known, false);
+    assert.ok(unknown.details.descriptor.valid_topics.includes("query.search"));
+    assert.match(unknown.details.descriptor.hint, /parley_describe/);
+
+    const recovery = await describeTool.execute(null, { topic: "recovery" });
+    assert.equal(recovery.details.descriptor.boot_sequence[1].tool, "parley_my_boards");
+    assert.equal(recovery.details.descriptor.boot_sequence[2].call.boardId, "<default_board>");
+
+    const query = await describeTool.execute(null, { topic: "query" });
+    assert.deepEqual(query.details.descriptor.boardless_actions, ["my_boards"]);
+    assert.ok(query.details.descriptor.actions.includes("search"));
+
+    const mutate = await describeTool.execute(null, { topic: "mutate" });
+    assert.ok(mutate.details.descriptor.actions.includes("create_plan"));
+
+    const obligations = await describeTool.execute(null, { topic: "query.obligations" });
+    assert.deepEqual(obligations.details.descriptor.input_schema.filter.enum, ["needs_my_action", "assigned_to_me", "all"]);
+    assert.equal(obligations.details.descriptor.aliases.scope, "targetKinds");
+    assert.ok(obligations.details.descriptor.examples[0].call.input.targetKinds.includes("threads"));
+
+    const search = await describeTool.execute(null, { topic: "query.search" });
+    assert.ok(search.details.descriptor.searchable_nouns.includes("registered reference namespace files"));
+    assert.equal(search.details.descriptor.input_schema.namespaces.default, "board.allowed_reference_namespaces");
+
+    const createPlan = await describeTool.execute(null, { topic: "mutate.create_plan" });
+    assert.ok(createPlan.details.descriptor.required_fields.includes("input.phases"));
+    assert.match(createPlan.details.descriptor.plan_namespace_behavior[0], /plan_landing/);
+
+    const identity = await describeTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, topic: "boards/identity" });
+    assert.match(identity.details.descriptor.rules.join("\n"), /default_board is a selection hint/);
+    assert.match(identity.details.descriptor.rules.join("\n"), /require explicit boardId/);
+    assert.equal(identity.details.identity.default_board, "project");
+    assert.equal(identity.details.identity.boards[0].board_agent_id, "parley-agent");
+
+    const boardScoped = await describeTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project" });
+    assert.equal(boardScoped.details.topic, "board");
+    assert.equal(boardScoped.details.descriptor.metadata_only, true);
+    assert.equal(boardScoped.details.overview, undefined);
+    assert.equal(boardScoped.details.board.board_id, "project");
+    assert.equal(boardScoped.details.board.explicit_board_required, true);
+    assert.deepEqual(boardScoped.details.board.allowed_reference_namespaces, ["project_plans", "project_refs"]);
+    assert.equal(boardScoped.details.board.artifact_namespaces[0].resolved_root, undefined);
+    assert.equal(boardScoped.details.board.records, undefined);
   });
 });
 

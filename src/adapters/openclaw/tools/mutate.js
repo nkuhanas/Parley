@@ -5,6 +5,7 @@ import { createRecordEffectTool } from "./record_effect.js";
 import { createRecordRelationshipTool } from "./record_relationship.js";
 import { createRemoveRelationshipTool } from "./remove_relationship.js";
 import { createRegisterArtifactTool } from "./register_artifact.js";
+import { createValidationError, MUTATE_ACTIONS } from "./descriptors.js";
 import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
 
 const MUTATE_TOOL_FACTORIES = {
@@ -32,7 +33,13 @@ function normalizeInput(input) {
 
 function getFactory(action) {
   const factory = MUTATE_TOOL_FACTORIES[action];
-  if (factory == null) throw new Error(`unsupported parley_mutate action: ${action}`);
+  if (factory == null) {
+    throw createValidationError(`unsupported parley_mutate action: ${action}`, {
+      code: "INVALID_PARLEY_MUTATE_ACTION",
+      validValues: MUTATE_ACTIONS,
+      describeTopic: "mutate"
+    });
+  }
   return factory;
 }
 

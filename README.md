@@ -92,9 +92,12 @@ const pluginConfig = {
 Smoke the identity path:
 
 ```js
-const boards = parley_query({ action: "my_boards" })
-parley_query({ action: "where_am_i", boardId: boards.default_board })
+parley_describe({ topic: "recovery" })
+const boards = parley_my_boards({})
+parley_where_am_i({ boardId: boards.default_board })
 ```
+
+`parley_describe` is the self-describing metadata tool for fresh agents. Omit `topic` for the overview; use topics such as `recovery`, `query`, `query.obligations`, `query.search`, `mutate`, `mutate.create_plan`, and `boards/identity` for structured schemas, valid values, aliases, and examples.
 
 `my_boards` is the only boardless discovery query. All board-scoped queries and mutations require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
 

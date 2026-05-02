@@ -4,26 +4,11 @@ import {
   listEffectRecords,
   listObligationRecords
 } from "../../../core/storage/board_store.js";
+import { createValidationError, OBLIGATION_FILTERS, TARGET_KIND_ALIASES } from "./descriptors.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 const TERMINAL_STATUSES = new Set(["resolved", "cancelled", "superseded"]);
 const NEEDS_MY_ACTION_STATUSES = new Set(["active", "blocking", "waiting", "deferred", "stale"]);
-const TARGET_KIND_ALIASES = Object.freeze({
-  thread: "threads",
-  threads: "threads",
-  plan: "plans",
-  plans: "plans",
-  artifact: "artifacts",
-  artifacts: "artifacts",
-  object: "objects",
-  objects: "objects",
-  phase: "phases",
-  phases: "phases",
-  relationship: "relationships",
-  relationships: "relationships",
-  obligation: "obligations",
-  obligations: "obligations"
-});
 
 function normalizeStringArray(value, fieldName) {
   if (value == null) return [];
@@ -38,7 +23,13 @@ function normalizeTargetKinds(input = {}) {
   const raw = input.targetKinds ?? input.target_kinds ?? input.scope;
   const normalized = normalizeStringArray(raw, "targetKinds").map((kind) => {
     const mapped = TARGET_KIND_ALIASES[kind];
-    if (mapped == null) throw new Error(`targetKinds item must be one of: ${Object.keys(TARGET_KIND_ALIASES).join(", ")}`);
+    if (mapped == null) {
+      throw createValidationError(`invalid obligations targetKinds item: ${kind}`, {
+        code: "INVALID_OBLIGATIONS_TARGET_KIND",
+        validValues: Object.keys(TARGET_KIND_ALIASES),
+        describeTopic: "query.obligations"
+      });
+    }
     return mapped;
   });
   return [...new Set(normalized)];
@@ -48,8 +39,12 @@ function normalizeFilter(value) {
   const filter = value == null ? "needs_my_action" : value;
   if (typeof filter !== "string" || !filter.trim()) throw new Error("filter must be a non-empty string");
   const normalized = filter.trim();
-  if (!["needs_my_action", "assigned_to_me", "all"].includes(normalized)) {
-    throw new Error("filter must be one of: needs_my_action, assigned_to_me, all");
+  if (!OBLIGATION_FILTERS.includes(normalized)) {
+    throw createValidationError(`invalid obligations filter: ${normalized}`, {
+      code: "INVALID_OBLIGATIONS_FILTER",
+      validValues: OBLIGATION_FILTERS,
+      describeTopic: "query.obligations"
+    });
   }
   return normalized;
 }

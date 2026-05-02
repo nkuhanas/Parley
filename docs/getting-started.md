@@ -34,9 +34,12 @@ Use the package's plugin entrypoint, or call `registerParleyTools(api)` from ano
 Call:
 
 ```js
-const boards = parley_query({ action: "my_boards" })
-parley_query({ action: "where_am_i", boardId: boards.default_board })
+parley_describe({ topic: "recovery" })
+const boards = parley_my_boards({})
+parley_where_am_i({ boardId: boards.default_board })
 ```
+
+`parley_describe` should return structured topics, schemas, valid values, and examples for fresh agents. Use `parley_describe({})` for an overview, `parley_describe({ topic: "query.obligations" })` for filters/targetKinds/examples, `parley_describe({ topic: "query.search" })` for namespace search shape, and `parley_describe({ boardId: boards.default_board })` for board metadata only.
 
 `my_boards` should return the caller's accessible boards and `default_board`. Use that value, or another board from the response, as the explicit `boardId` for `where_am_i` and other board-scoped operations. Parley does not silently apply `default_board`.
 

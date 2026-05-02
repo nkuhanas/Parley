@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { findArtifactNamespace } from "../../../core/board/board.js";
+import { createValidationError } from "./descriptors.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".turbo", ".cache"]);
@@ -20,7 +21,12 @@ function normalizeStringArray(value, fieldName) {
 }
 
 function normalizeQuery(value) {
-  if (typeof value !== "string" || !value.trim()) throw new Error("query required");
+  if (typeof value !== "string" || !value.trim()) {
+    throw createValidationError("query.search input.query required", {
+      code: "MISSING_SEARCH_QUERY",
+      describeTopic: "query.search"
+    });
+  }
   return value.trim();
 }
 

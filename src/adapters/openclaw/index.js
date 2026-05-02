@@ -20,12 +20,14 @@ import { createCheckpointProjectionTool } from "./tools/checkpoint_projection.js
 import { createValidateStateAction } from "./tools/validate_state.js";
 import { createQueryTool } from "./tools/query.js";
 import { createMutateTool } from "./tools/mutate.js";
+import { createDescribeTool } from "./tools/describe.js";
 
 function withRuntimeContext(api, createTool) {
   return (toolContext) => createTool({ ...api, toolContext });
 }
 
 export function registerParleyTools(api) {
+  api.registerTool(withRuntimeContext(api, createDescribeTool));
   api.registerTool(createOpenThreadTool(api));
   api.registerTool(createClaimTurnTool(api));
   api.registerTool(createReplyThreadTool(api));
