@@ -131,26 +131,16 @@ function compactActivationCandidate(candidate) {
 function compactDeferredPhase(candidate) {
   const phase = candidate.phase ?? {};
   return {
-    candidate_key: candidate.candidate_key,
-    board_id: candidate.board_id,
     plan_id: candidate.plan_id,
     phase_id: candidate.phase_id,
-    artifact_id: candidate.artifact_id,
-    artifact_version: candidate.artifact_version,
-    plan_title: candidate.plan_title,
     phase_title: candidate.phase_title,
     status: candidate.status,
     owner: candidate.owner ?? phase.owner ?? null,
     attention_owner: candidate.attention_owner ?? null,
     review_required_from: candidate.review_required_from ?? [],
-    activation_conditions: phase.activation_conditions ?? [],
-    review_trigger: phase.review_trigger ?? [],
-    deferral_reason: phase.deferral_reason ?? [],
-    source: candidate.source == null ? null : {
-      artifact_id: candidate.source.artifact_id,
-      artifact_version: candidate.source.artifact_version,
-      uri: candidate.source.uri
-    }
+    activation_condition_count: Array.isArray(phase.activation_conditions) ? phase.activation_conditions.length : 0,
+    review_trigger_count: Array.isArray(phase.review_trigger) ? phase.review_trigger.length : 0,
+    deferral_reason_count: Array.isArray(phase.deferral_reason) ? phase.deferral_reason.length : 0
   };
 }
 
@@ -382,10 +372,6 @@ export function createWhereAmITool(api) {
           verbosity,
           runtime: fullRuntimeSection,
           boards: fullBoardsSection,
-          board: {
-            identity,
-            projection: fullProjection
-          },
           obligation_summary: obligationSummary,
           identity,
           projection: fullProjection
@@ -400,10 +386,6 @@ export function createWhereAmITool(api) {
         verbosity,
         runtime: compactRuntimeSection,
         boards: compactBoardsSection,
-        board: {
-          identity: compactIdentity,
-          projection: compactProjection
-        },
         obligation_summary: obligationSummary,
         identity: compactIdentity,
         projection: compactProjection

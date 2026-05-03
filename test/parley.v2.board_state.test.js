@@ -1005,7 +1005,12 @@ test("Parley plan artifact registration imports tracked setup state and lifecycl
 
     assert.equal(result.details.artifact.kind, "plan");
     assert.equal(result.details.plan.plan_id, "plan_imported_projection");
+    assert.equal(result.details.plan.phase_count, 1);
+    assert.equal(result.details.plan.phases, undefined);
+    assert.equal(result.details.plan.overview, undefined);
     assert.equal(result.details.setupState.setupComplete, true);
+    assert.equal(result.details.plan_validation.heading_count > 0, true);
+    assert.equal(result.details.plan_validation.headings, undefined);
     assert.equal(result.details.plan_lifecycle.obligations.length, 1);
     assert.equal(result.details.plan_lifecycle.obligations[0].obligation_id, "obligation_plan_imported_projection_lifecycle_owner");
     assert.match(result.details.plan_lifecycle.obligations[0].reason, /setup-complete but not routed/);
@@ -1513,8 +1518,11 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
       boardId: "project",
       action: "where_am_i"
     });
+    assert.equal(whereBefore.details.result.board, undefined);
     assert.equal(whereBefore.details.result.projection.counts.deferred_phases_owned_not_actionable, 1);
     assert.equal(whereBefore.details.result.projection.counts.activation_candidates, 0);
+    assert.equal(whereBefore.details.result.projection.deferred_phases_owned_not_actionable[0].activation_conditions, undefined);
+    assert.equal(whereBefore.details.result.projection.deferred_phases_owned_not_actionable[0].review_trigger_count, 1);
 
     await mutateTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -2011,6 +2019,7 @@ test("Parley v2 where_am_i hides terminal obligations by default", async () => {
     });
 
     const defaultResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project" });
+    assert.equal(defaultResult.details.board, undefined);
     assert.equal(defaultResult.details.projection.counts.assigned, 1);
     assert.equal(defaultResult.details.projection.counts.visible, 0);
 

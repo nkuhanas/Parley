@@ -48,6 +48,53 @@ function summarizeArtifact(artifact) {
   }).filter(([, value]) => value !== undefined));
 }
 
+function summarizePlan(plan) {
+  if (plan == null || typeof plan !== "object" || Array.isArray(plan)) return plan;
+  const phases = Array.isArray(plan.phases) ? plan.phases : [];
+  const checkpoints = phases.filter((phase) => phase?.kind === "human_checkpoint" || phase?.kind === "human_approval_gate");
+  return Object.fromEntries(Object.entries({
+    board_id: plan.board_id,
+    plan_id: plan.plan_id,
+    artifact_id: plan.artifact_id,
+    title: plan.title,
+    authority: plan.authority,
+    status: plan.status,
+    version: plan.version,
+    owner: plan.owner,
+    participant_count: Array.isArray(plan.participants) ? plan.participants.length : undefined,
+    phase_count: phases.length,
+    checkpoint_count: checkpoints.length,
+    path: plan.path,
+    uri: plan.uri,
+    generatedMarkdownPath: plan.generatedMarkdownPath,
+    generatedMarkdownUri: plan.generatedMarkdownUri,
+    projection_validation: summarizePlanValidation(plan.projection_validation),
+    landing: plan.landing == null ? undefined : Object.fromEntries(Object.entries({
+      namespace: plan.landing.namespace,
+      subpath: plan.landing.subpath,
+      filename: plan.landing.filename,
+      uri: plan.landing.uri,
+      resolved_path: plan.landing.resolved_path
+    }).filter(([, value]) => value !== undefined)),
+    created_at: plan.created_at,
+    updated_at: plan.updated_at
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeSetupState(setupState) {
+  if (setupState == null || typeof setupState !== "object" || Array.isArray(setupState)) return setupState;
+  return Object.fromEntries(Object.entries({
+    planId: setupState.planId,
+    setupComplete: setupState.setupComplete,
+    missingRequired: setupState.missingRequired,
+    nextRequiredAction: summarizeValue(setupState.nextRequiredAction),
+    nextRecommendedActionCount: Array.isArray(setupState.nextRecommendedActions) ? setupState.nextRecommendedActions.length : undefined,
+    validOwners: setupState.validOwners,
+    allowedPhaseStatuses: setupState.allowedPhaseStatuses,
+    reminder: setupState.reminder
+  }).filter(([, value]) => value !== undefined));
+}
+
 function summarizeObject(record) {
   if (record == null || typeof record !== "object" || Array.isArray(record)) return record;
   return Object.fromEntries(Object.entries({
@@ -131,10 +178,12 @@ function summarizeValue(value, key = null) {
 
   if (key === "identity") return summarizeIdentity(value);
   if (key === "artifact") return summarizeArtifact(value);
+  if (key === "plan") return summarizePlan(value);
+  if (key === "setupState") return summarizeSetupState(value);
   if (key === "object") return summarizeObject(value);
   if (key === "effect") return summarizeEffect(value);
   if (key === "obligation") return summarizeObligation(value);
-  if (key === "validation") return summarizePlanValidation(value);
+  if (key === "validation" || key === "plan_validation") return summarizePlanValidation(value);
 
   return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, summarizeValue(childValue, childKey)]));
 }
