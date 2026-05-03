@@ -10,10 +10,7 @@ function summarizeIdentity(identity) {
     display_name: identity.display_name,
     kind: identity.kind,
     default_board: identity.default_board,
-    boards: identity.boards,
-    runtime_ref: identity.runtime_ref,
-    runtime_aliases: identity.runtime_aliases,
-    identity_resolution: summarizeIdentityResolution(identity.identity_resolution)
+    boards: identity.boards
   }).filter(([, value]) => value !== undefined));
 }
 
@@ -133,8 +130,8 @@ function summarizeValue(value, key = null) {
   return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, summarizeValue(childValue, childKey)]));
 }
 
-export function boardResult(details) {
-  const summarizedDetails = summarizeValue(details);
+export function boardResult(details, options = {}) {
+  const summarizedDetails = options?.summarize === false ? details : summarizeValue(details);
   return {
     content: [
       {

@@ -64,7 +64,7 @@ export function overviewDescriptor() {
   return {
     topic: "overview",
     purpose: "Discover Parley's agent-facing tool surface, target scopes, valid facade actions, board selection rules, and common examples.",
-    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query", "parley_mutate"],
+    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_mutate"],
     topics: [...DESCRIBE_TOPICS],
     query_actions: [...QUERY_ACTIONS],
     mutate_actions: [...MUTATE_ACTIONS],
@@ -74,6 +74,7 @@ export function overviewDescriptor() {
       "parley_where_am_i({ boardId }) returns compact runtime and board sections by default; pass verbosity: \"full\" for diagnostic detail.",
       "parley_my_boards is the boardless board discovery call.",
       "Board-scoped reads and writes require explicit boardId; default_board is a selection hint, not implicit routing.",
+      "Prefer first-class board write tools during agent work; parley_mutate remains a stable facade for callers that need one action-dispatch surface.",
       "Use topic=targets to understand runtime targets versus board targets."
     ],
     examples: [
@@ -236,6 +237,7 @@ export function mutateDescriptor() {
     required_fields: ["action", "boardId"],
     board_rule: "All parley_mutate actions are board-scoped and require explicit boardId.",
     target_rule: "Mutations that reference targets accept board targets only unless explicitly documented otherwise.",
+    usage_guidance: "Prefer the equivalent first-class write tools during normal agent work; use parley_mutate when a caller specifically needs a single facade action surface.",
     examples: [
       { description: "Create a plan from a parley.plan.v1 package.", call: { action: "create_plan", boardId: "project", input: { planId: "plan_example", title: "Example Plan", shepherd: "parley-agent", namespaceId: "project_plans", subpath: "agent-comms", phases: [] } } }
     ]
@@ -275,12 +277,12 @@ export function createPlanDescriptor() {
 export function boardsIdentityDescriptor() {
   return {
     topic: "boards/identity",
-    tools: ["parley_my_boards", "parley_where_am_i", "parley_query", "parley_mutate", "parley_describe"],
+    tools: ["parley_my_boards", "parley_where_am_i", "parley_query", "first-class board write tools", "parley_mutate", "parley_describe"],
     rules: [
       "parley_my_boards is boardless and returns accessible boards plus default_board.",
       "parley_where_am_i({}) is boardless runtime recovery plus board discovery hints.",
       "default_board is a selection hint. It is not silently applied to board-scoped calls.",
-      "Board-scoped parley_query actions and all parley_mutate actions require explicit boardId.",
+      "Board-scoped parley_query actions, first-class board write tools, and all parley_mutate actions require explicit boardId.",
       "parley_describe({ boardId }) returns board metadata only: namespace/capability/identity metadata, not board state records."
     ],
     examples: [

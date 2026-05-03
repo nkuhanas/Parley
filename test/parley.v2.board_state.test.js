@@ -337,7 +337,7 @@ test("Parley v2 tools derive caller identity from trusted OpenClaw runtime conte
 
     const result = await whereTool.execute(null, { boardId: "project" });
     assert.equal(result.details.identity.board_agent_id, "parley-agent");
-    assert.deepEqual(result.details.identity.runtime_ref, AGENT_RUNTIME_REF);
+    assert.equal(result.details.identity.runtime_ref, undefined);
   });
 });
 
@@ -350,13 +350,8 @@ test("Parley v2 tool caller identity falls back to runtime session key when agen
 
     const result = await whereTool.execute(null, { boardId: "project" });
     assert.equal(result.details.identity.board_agent_id, "parley-agent");
-    assert.deepEqual(result.details.identity.runtime_ref, {
-      scheme: "openclaw",
-      type: "session",
-      id: "agent:parley-agent:discord:channel:channel-test-001"
-    });
-    assert.equal(result.details.identity.identity_resolution.caller_runtime_ref_persisted, false);
-    assert.equal(result.details.identity.identity_resolution.source, "adapter_discovered");
+    assert.equal(result.details.identity.runtime_ref, undefined);
+    assert.equal(result.details.identity.identity_resolution, undefined);
   });
 });
 
@@ -1547,6 +1542,8 @@ test("Parley v2 where_am_i hides terminal obligations by default", async () => {
 
     const fullResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeTerminal: true, verbosity: "full" });
     assert.equal(fullResult.details.verbosity, "full");
+    assert.deepEqual(fullResult.details.identity.runtime_ref, AGENT_RUNTIME_REF);
+    assert.ok(Array.isArray(fullResult.details.identity.runtime_aliases));
     assert.equal(fullResult.details.projection.other_visible_obligations[0].obligation.obligation_id, "obligation_resolved");
   });
 });

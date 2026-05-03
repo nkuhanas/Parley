@@ -29,8 +29,7 @@ function compactRuntimeIdentity(identity) {
     global_agent_id: identity.global_agent_id,
     display_name: identity.display_name,
     kind: identity.kind,
-    default_board: identity.default_board,
-    runtime_ref: identity.runtime_ref
+    default_board: identity.default_board
   };
 }
 
@@ -38,14 +37,8 @@ function compactBoardIdentity(identity) {
   return {
     board_id: identity.board_id,
     board_agent_id: identity.board_agent_id,
-    runtime_ref: identity.runtime_ref,
     roles: identity.membership?.roles ?? [],
-    permissions: identity.membership?.permissions ?? null,
-    identity_resolution: identity.identity_resolution == null ? null : {
-      source: identity.identity_resolution.source,
-      caller_runtime_ref_persisted: identity.identity_resolution.caller_runtime_ref_persisted,
-      global_agent_id: identity.identity_resolution.global_agent_id
-    }
+    permissions: identity.membership?.permissions ?? null
   };
 }
 
@@ -338,7 +331,7 @@ export function createWhereAmITool(api) {
           verbosity,
           runtime: verbosity === "full" ? fullRuntimeSection : compactRuntimeSection,
           boards: verbosity === "full" ? fullBoardsSection : compactBoardsSection
-        });
+        }, { summarize: verbosity !== "full" });
       }
 
       const identity = resolveToolCaller(api, params);
@@ -356,7 +349,7 @@ export function createWhereAmITool(api) {
           },
           identity,
           projection: fullProjection
-        });
+        }, { summarize: false });
       }
 
       const compactIdentity = compactBoardIdentity(identity);

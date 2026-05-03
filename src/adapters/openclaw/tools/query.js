@@ -139,7 +139,7 @@ export function createQueryTool(api) {
         tool: "parley_query",
         action: params.action,
         result: delegated.details
-      });
+      }, { summarize: params.action !== "where_am_i" || params?.verbosity !== "full" });
     }
   };
 }

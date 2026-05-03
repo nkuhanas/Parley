@@ -227,20 +227,117 @@ function buildParleyStatus(details) {
   };
 }
 
-export function formatParleyResult(details) {
-  const enrichedDetails = details?.status ? details : {
-    ...details,
-    status: buildParleyStatus(details)
+function compactThread(thread) {
+  if (thread == null) return null;
+  return {
+    thread_id: thread.thread_id,
+    kind: thread.kind,
+    control_mode: thread.control_mode,
+    thread_state: thread.thread_state,
+    initiator: thread.initiator,
+    recipient: thread.recipient,
+    origin_kind: thread.origin_kind,
+    next_action_owner: thread.next_action_owner ?? null,
+    last_speaker: thread.last_speaker ?? null,
+    meaningful_turn_pending: thread.meaningful_turn_pending,
+    report_back_policy: thread.report_back_policy ?? "none",
+    human_summary_anchor_status: thread.human_summary_anchor_status ?? null,
+    human_summary_anchor: thread.human_summary_anchor == null ? null : {
+      message_id: thread.human_summary_anchor.message_id,
+      channel: thread.human_summary_anchor.channel ?? null,
+      channel_id: thread.human_summary_anchor.channel_id ?? null,
+      target: thread.human_summary_anchor.target ?? null,
+      account_id: thread.human_summary_anchor.account_id ?? null
+    },
+    updated_at: thread.updated_at,
+    concluded_at: thread.concluded_at ?? null,
+    failure_reason: thread.failure_reason ?? null
   };
+}
+
+function compactMessage(message) {
+  if (message == null) return null;
+  return {
+    message_id: message.message_id,
+    thread_id: message.thread_id,
+    sender: message.sender,
+    message_class: message.message_class,
+    control_marker: message.control_marker ?? null,
+    next_action_owner: message.next_action_owner ?? null,
+    created_at: message.created_at,
+    transport_state: message.transport_state ?? null,
+    transport_target_session_key: message.transport_target_session_key ?? null,
+    transport_message_ref: message.transport_message_ref ?? null,
+    transport_idempotency_key: message.transport_idempotency_key ?? null
+  };
+}
+
+function compactTransportRequest(request) {
+  if (request == null || typeof request !== "object") return request;
+  return {
+    mode: request.mode,
+    canonical_thread_id: request.canonical_thread_id ?? request.thread_id,
+    canonical_message_id: request.canonical_message_id ?? request.message_id,
+    target_session_key: request.target_session_key,
+    idempotency_key: request.idempotency_key
+  };
+}
+
+function compactHumanSummaryUpdateRequest(request) {
+  if (request == null || typeof request !== "object") return request;
+  return {
+    mode: request.mode,
+    style: request.style,
+    target_message_id: request.target_message_id,
+    channel: request.channel ?? null,
+    channel_id: request.channel_id ?? null,
+    target: request.target ?? null,
+    account_id: request.account_id ?? null,
+    canonical_thread_id: request.canonical_thread_id,
+    canonical_message_id: request.canonical_message_id,
+    anchor_text: request.anchor_text,
+    update_text: request.update_text
+  };
+}
+
+function compactDispatchResult(result) {
+  if (result == null || typeof result !== "object") return result;
+  return {
+    runId: result.runId,
+    status: result.status,
+    messageSeq: result.messageSeq
+  };
+}
+
+function compactParleyResult(details) {
+  return Object.fromEntries(Object.entries({
+    tool: details?.tool,
+    thread: compactThread(details?.thread),
+    message: compactMessage(details?.message),
+    transport_required: details?.transport_required,
+    dispatch_status: details?.dispatch_status,
+    dispatch_result: compactDispatchResult(details?.dispatch_result),
+    transport_request: compactTransportRequest(details?.transport_request),
+    note: details?.note,
+    human_summary_anchor_required: details?.human_summary_anchor_required,
+    human_summary_anchor_request: compactHumanSummaryUpdateRequest(details?.human_summary_anchor_request),
+    human_summary_update_available: details?.human_summary_update_available,
+    human_summary_update_request: compactHumanSummaryUpdateRequest(details?.human_summary_update_request),
+    status: details?.status ?? buildParleyStatus(details)
+  }).filter(([, value]) => value !== undefined));
+}
+
+export function formatParleyResult(details) {
+  const compactDetails = compactParleyResult(details);
 
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(enrichedDetails, null, 2)
+        text: JSON.stringify(compactDetails, null, 2)
       }
     ],
-    details: enrichedDetails
+    details: compactDetails
   };
 }
 

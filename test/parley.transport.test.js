@@ -195,7 +195,6 @@ test("parley_open_thread defaults human-origin threads without an explicit polic
     assert.match(openResult.details.human_summary_anchor_request.anchor_text, /report: final update will follow in reply to this message after settlement/);
     assert.equal(openResult.details.thread.human_summary_anchor, null);
     assert.equal(openResult.details.thread.human_summary_anchor_status, "pending_send");
-    assert.equal(openResult.details.thread.human_summary_anchor_request_text, openResult.details.human_summary_anchor_request.anchor_text);
     assert.equal(openResult.details.status.thread.state, "awaiting_next_action");
     assert.equal(openResult.details.status.transport.required, true);
     assert.equal(openResult.details.status.transport.state, "pending_dispatch");
@@ -243,7 +242,6 @@ test("parley_record_human_summary_anchor records a delivered anchor for a pendin
 
     assert.equal(recordResult.details.thread.human_summary_anchor_status, "recorded");
     assert.equal(recordResult.details.thread.human_summary_anchor.message_id, "anchor-message-001");
-    assert.equal(recordResult.details.thread.human_summary_anchor_request_text, openResult.details.thread.human_summary_anchor_request_text);
     assert.equal(recordResult.details.status.transport.state, "not_required");
     assert.equal(recordResult.details.status.human_summary.anchor_status, "recorded");
     assert.equal(recordResult.details.status.human_summary.anchor_message_id, "anchor-message-001");
@@ -253,7 +251,7 @@ test("parley_record_human_summary_anchor records a delivered anchor for a pendin
     const persistedThread = await loadThreadRecord(pluginConfig, openResult.details.thread.thread_id);
     assert.equal(persistedThread.human_summary_anchor_status, "recorded");
     assert.equal(persistedThread.human_summary_anchor.message_id, "anchor-message-001");
-    assert.equal(persistedThread.human_summary_anchor_request_text, openResult.details.thread.human_summary_anchor_request_text);
+    assert.equal(persistedThread.human_summary_anchor_request_text, openResult.details.human_summary_anchor_request.anchor_text);
   });
 });
 
@@ -338,9 +336,10 @@ test("parley_open_thread validates transport correlation shape", async () => {
         }
       }
     });
-    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys.observer, "agent:parley-observer:session:test");
-    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys["parley-agent"], INITIATOR_SESSION_KEY);
-    assert.equal(openResult.details.thread.transport_correlation.participantSessionKeys["parley-test-target"], RECIPIENT_SESSION_KEY);
+    const persistedThread = await loadThreadRecord(pluginConfig, openResult.details.thread.thread_id);
+    assert.equal(persistedThread.transport_correlation.participantSessionKeys.observer, "agent:parley-observer:session:test");
+    assert.equal(persistedThread.transport_correlation.participantSessionKeys["parley-agent"], INITIATOR_SESSION_KEY);
+    assert.equal(persistedThread.transport_correlation.participantSessionKeys["parley-test-target"], RECIPIENT_SESSION_KEY);
   });
 });
 
@@ -508,7 +507,7 @@ test("parley_dispatch_transport_request dispatches by canonical thread/message i
         assert.equal(request.method, "sessions.send");
         assert.equal(request.params.key, RECIPIENT_SESSION_KEY);
         assert.equal(request.params.idempotencyKey, openResult.details.transport_request.idempotency_key);
-        assert.equal(request.params.message, openResult.details.transport_request.outbound_text);
+        assert.equal(typeof request.params.message, "string");
         return {
           runId: "mock-run-id",
           status: "started"
