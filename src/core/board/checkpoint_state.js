@@ -49,11 +49,9 @@ async function readPlanCheckpoints(artifact) {
     const markdown = await fs.readFile(artifact.resolved_path, "utf8");
     const parsed = parseParleyPlanV1Document(markdown);
     if (parsed.frontmatter?.schema !== "parley.plan.v1") return [];
-    const phaseGates = collectParleyPlanV1Phases(markdown).filter(isHumanGatePhase);
-    if (phaseGates.length > 0) return phaseGates.map((phase) => normalizeCheckpoint(phase, parsed.frontmatter, artifact));
-    const legacyCheckpoints = parsed.frontmatter.human_checkpoints ?? [];
-    if (!Array.isArray(legacyCheckpoints)) return [];
-    return legacyCheckpoints.map((checkpoint) => normalizeCheckpoint(checkpoint, parsed.frontmatter, artifact));
+    return collectParleyPlanV1Phases(markdown)
+      .filter(isHumanGatePhase)
+      .map((phase) => normalizeCheckpoint(phase, parsed.frontmatter, artifact));
   } catch (error) {
     if (error?.code === "ENOENT") return [];
     return [];

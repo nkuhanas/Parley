@@ -30,6 +30,7 @@ export const PLAN_PHASE_STATUSES = Object.freeze([
 export const PLAN_RELATIONSHIP_FIELDS = Object.freeze([
   "supersedes",
   "superseded_by",
+  "extracts_from",
   "constrains",
   "constrained_by",
   "depends_on",
@@ -86,7 +87,7 @@ export const PARLEY_PLAN_V1_SCHEMA = Object.freeze({
     "relationships",
     "parley"
   ]),
-  optional_frontmatter: Object.freeze(["priority", "coordination_mode", "human_checkpoints"]),
+  optional_frontmatter: Object.freeze(["priority", "coordination_mode"]),
   landing_fields: Object.freeze(["namespace", "subpath", "filename"]),
   relationship_fields: PLAN_RELATIONSHIP_FIELDS,
   parley_binding_fields: PLAN_PARLEY_BINDING_FIELDS,
@@ -162,6 +163,14 @@ function validateObject(value, fieldName, errors) {
   }
 }
 
+function validateAllowedObjectKeys(raw, fieldName, allowedKeys, errors) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return;
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) addError(errors, `${fieldName}.${key} is not allowed`);
+  }
+}
+
 function validateStringArray(value, fieldName, errors, { minItems = 0 } = {}) {
   if (!Array.isArray(value)) {
     addError(errors, `${fieldName} must be an array`);
@@ -171,32 +180,6 @@ function validateStringArray(value, fieldName, errors, { minItems = 0 } = {}) {
     addError(errors, `${fieldName} must contain at least ${minItems} item${minItems === 1 ? "" : "s"}`);
   }
   value.forEach((item, index) => validateRequiredString(item, `${fieldName}[${index}]`, errors));
-  return value;
-}
-
-function validateHumanCheckpoints(value, fieldName, errors) {
-  if (value == null) return [];
-  if (!Array.isArray(value)) {
-    addError(errors, `${fieldName} must be an array`);
-    return value;
-  }
-  for (const [index, checkpoint] of value.entries()) {
-    const itemName = `${fieldName}[${index}]`;
-    if (typeof checkpoint === "string") {
-      validateRecordId(checkpoint, itemName, errors);
-      continue;
-    }
-    const raw = validateObject(checkpoint, itemName, errors);
-    validateRecordId(raw.checkpoint_id, `${itemName}.checkpoint_id`, errors);
-    validateRequiredString(raw.title, `${itemName}.title`, errors);
-    if (raw.kind != null) validateRequiredString(raw.kind, `${itemName}.kind`, errors);
-    if (raw.required_from != null) validateRequiredString(raw.required_from, `${itemName}.required_from`, errors);
-    if (raw.shepherd != null) validateRequiredString(raw.shepherd, `${itemName}.shepherd`, errors);
-    if (raw.trigger != null) validateRequiredString(raw.trigger, `${itemName}.trigger`, errors);
-    if (raw.status != null) validateRequiredString(raw.status, `${itemName}.status`, errors);
-    if (raw.requested_decision != null) validateRequiredString(raw.requested_decision, `${itemName}.requested_decision`, errors);
-    if (raw.due_at != null) validateIsoTimestamp(raw.due_at, `${itemName}.due_at`, errors);
-  }
   return value;
 }
 
@@ -382,8 +365,11 @@ export function validateParleyPlanV1Frontmatter(frontmatter) {
   assertAllowed(raw.status, COORDINATION_STATUSES, "status", errors);
 
   if (raw.priority != null) assertAllowed(raw.priority, PLAN_PRIORITIES, "priority", errors);
+  validateAllowedObjectKeys(raw, "frontmatter", [
+    ...PARLEY_PLAN_V1_SCHEMA.required_frontmatter,
+    ...PARLEY_PLAN_V1_SCHEMA.optional_frontmatter
+  ], errors);
   if (raw.coordination_mode != null) validateRequiredString(raw.coordination_mode, "coordination_mode", errors);
-  if (raw.human_checkpoints != null) validateHumanCheckpoints(raw.human_checkpoints, "human_checkpoints", errors);
 
   validateStringArray(raw.participants, "participants", errors, { minItems: 1 });
 
@@ -691,8 +677,79 @@ function defaultParleyBindings() {
   return Object.fromEntries(PLAN_PARLEY_BINDING_FIELDS.map((field) => [field, null]));
 }
 
+function listBodySection(items, fallback = "TBD") {
+  if (!Array.isArray(items)) return bodySection(items, fallback);
+  const lines = items.map((item) => {
+    if (item == null) return null;
+    if (typeof item === "string") return item.trim();
+    return JSON.stringify(item);
+  }).filter(Boolean);
+  if (lines.length === 0) return fallback;
+  return lines.map((line) => (line.startsWith("-") || line.startsWith("#") ? line : `- ${line}`)).join("\n");
+}
+
+function phaseItemBodySection(phase, index) {
+  if (typeof phase === "string") return phase.trim();
+  if (phase == null || typeof phase !== "object" || Array.isArray(phase)) return String(phase ?? "").trim();
+  const title = phase.title ?? `Phase ${index + 1}`;
+  const requiredFrom = phase.requiredFrom ?? phase.required_from ?? "N/A";
+  const requestedDecision = phase.requestedDecision ?? phase.requested_decision ?? "N/A";
+  const dueAt = phase.dueAt ?? phase.due_at ?? "N/A";
+  return [
+    `### Phase ${index + 1} — ${title}`,
+    "",
+    `Kind: ${phase.kind ?? phase.type ?? "implementation"}`,
+    `Status: ${phase.status ?? "draft"}`,
+    `Owner: ${phase.owner ?? phase.shepherd ?? "TBD"}`,
+    "",
+    "Required from:",
+    requiredFrom,
+    "",
+    "Requested decision:",
+    requestedDecision,
+    "",
+    "Due at:",
+    dueAt,
+    "",
+    "Entry criteria:",
+    listBodySection(phase.entryCriteria ?? phase.entry_criteria),
+    "",
+    "Work:",
+    listBodySection(phase.work),
+    "",
+    "Exit criteria:",
+    listBodySection(phase.exitCriteria ?? phase.exit_criteria),
+    "",
+    "Supporting agents:",
+    listBodySection(phase.supportingAgents ?? phase.supporting_agents, "None."),
+    "",
+    "Activation conditions:",
+    listBodySection(phase.activationConditions ?? phase.activation_conditions),
+    "",
+    "Review trigger:",
+    listBodySection(phase.reviewTrigger ?? phase.review_trigger),
+    "",
+    "Deferral reason:",
+    listBodySection(phase.deferralReason ?? phase.deferral_reason),
+    "",
+    "Non-goals before activation:",
+    listBodySection(phase.nonGoalsBeforeActivation ?? phase.non_goals_before_activation)
+  ].join("\n");
+}
+
+function phaseBodySection(value, fallback = "No phases defined yet.") {
+  if (Array.isArray(value)) {
+    const phases = value.map(phaseItemBodySection).filter(Boolean);
+    return phases.length === 0 ? fallback : phases.join("\n\n");
+  }
+  return bodySection(value, fallback);
+}
+
 function bodySection(value, fallback = "TBD") {
-  return value == null || value === "" ? fallback : String(value).trim();
+  if (value == null || value === "") return fallback;
+  if (Array.isArray(value)) return listBodySection(value, fallback);
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value).trim();
 }
 
 export function createParleyPlanV1Document(input) {
@@ -720,7 +777,6 @@ export function createParleyPlanV1Document(input) {
 
   if (raw.priority != null) frontmatter.priority = raw.priority;
   if (raw.coordination_mode != null) frontmatter.coordination_mode = raw.coordination_mode;
-  if (raw.human_checkpoints != null) frontmatter.human_checkpoints = raw.human_checkpoints;
 
   const sections = raw.sections ?? {};
   const markdown = [
@@ -764,7 +820,7 @@ export function createParleyPlanV1Document(input) {
     "",
     "## Phases",
     "",
-    bodySection(sections.phases, "No phases defined yet."),
+    phaseBodySection(sections.phases, "No phases defined yet."),
     "",
     "## Acceptance Criteria",
     "",

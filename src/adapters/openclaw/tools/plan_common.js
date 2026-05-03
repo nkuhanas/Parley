@@ -185,12 +185,11 @@ export async function createPlanShell(api, identity, params) {
     },
     overview: null,
     phases: [],
-    human_checkpoints: [],
     review: params?.review ?? { required_reviewers: [], approvals: [], objections: [] },
     relationships: params?.relationships,
     parley: params?.parley,
     priority: params?.priority ?? null,
-    coordination_mode: params?.coordinationMode ?? params?.coordination_mode ?? "single_agent_with_human_checkpoints",
+    coordination_mode: params?.coordinationMode ?? params?.coordination_mode ?? "single_agent_with_human_gates",
     created_at: timestamp,
     updated_at: timestamp
   };

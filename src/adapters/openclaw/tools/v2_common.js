@@ -119,8 +119,7 @@ function summarizePlanValidation(validation) {
       owner: frontmatter.owner,
       participants: frontmatter.participants,
       landing: frontmatter.landing,
-      coordination_mode: frontmatter.coordination_mode,
-      human_checkpoints_count: Array.isArray(frontmatter.human_checkpoints) ? frontmatter.human_checkpoints.length : 0
+      coordination_mode: frontmatter.coordination_mode
     },
     heading_count: Array.isArray(validation.headings) ? validation.headings.length : undefined
   }).filter(([, value]) => value !== undefined));

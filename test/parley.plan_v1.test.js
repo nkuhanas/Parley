@@ -63,39 +63,47 @@ test("createParleyPlanV1Document emits a valid Markdown plan", () => {
   assert.match(markdown, /# Parley Plan Schema Validation/);
 });
 
-test("parseParleyPlanV1Document reads structured human checkpoint frontmatter", () => {
+test("human checkpoints are represented as human gate phases, not frontmatter", () => {
   const markdown = createParleyPlanV1Document(validPlanInput({
-    coordination_mode: "single_agent_with_human_checkpoints",
-    human_checkpoints: [
-      {
-        checkpoint_id: "checkpoint_initial_review",
-        title: "Initial human review",
-        kind: "review",
-        required_from: "human:sensei",
-        shepherd: "parley-agent",
-        trigger: "plan_created",
-        status: "pending",
-        requested_decision: "approve_or_request_changes"
-      }
-    ]
+    coordination_mode: "single_agent_with_human_gates",
+    sections: {
+      ...validPlanInput().sections,
+      phases: [
+        {
+          title: "Initial human review",
+          kind: "human_approval_gate",
+          owner: "parley-agent",
+          status: "deferred",
+          requiredFrom: "human:sensei",
+          requestedDecision: "approve_or_request_changes",
+          reviewTrigger: ["Plan is ready for human review."],
+          deferralReason: ["Human approval is not needed until preparation is complete."],
+          nonGoalsBeforeActivation: ["Do not notify the human before the gate opens."]
+        }
+      ]
+    }
   }));
   const result = validateParleyPlanV1Document(markdown);
   const parsed = parseParleyPlanV1Document(markdown);
 
   assert.equal(result.ok, true, result.errors.join("\n"));
-  assert.equal(parsed.frontmatter.coordination_mode, "single_agent_with_human_checkpoints");
-  assert.deepEqual(parsed.frontmatter.human_checkpoints, [
-    {
-      checkpoint_id: "checkpoint_initial_review",
-      title: "Initial human review",
-      kind: "review",
-      required_from: "human:sensei",
-      shepherd: "parley-agent",
-      trigger: "plan_created",
-      status: "pending",
-      requested_decision: "approve_or_request_changes"
-    }
-  ]);
+  assert.equal(parsed.frontmatter.coordination_mode, "single_agent_with_human_gates");
+  assert.equal(parsed.frontmatter.human_checkpoints, undefined);
+  assert.doesNotMatch(markdown, /^human_checkpoints:/m);
+  assert.match(markdown, /Kind: human_approval_gate/);
+  assert.match(markdown, /Required from:\nhuman:sensei/);
+});
+
+test("validateParleyPlanV1Document rejects legacy human_checkpoints frontmatter", () => {
+  const markdown = createParleyPlanV1Document(validPlanInput({ coordination_mode: "single_agent_with_human_gates" }));
+  const invalid = markdown.replace(
+    "coordination_mode: single_agent_with_human_gates\n",
+    "coordination_mode: single_agent_with_human_gates\nhuman_checkpoints:\n  - checkpoint_initial_review\n"
+  );
+  const result = validateParleyPlanV1Document(invalid);
+
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((error) => error.includes("frontmatter.human_checkpoints is not allowed")));
 });
 
 test("parseParleyPlanV1Document reads generated YAML frontmatter", () => {
@@ -105,7 +113,24 @@ test("parseParleyPlanV1Document reads generated YAML frontmatter", () => {
   assert.equal(parsed.frontmatter.title, "Plan: Namespaced Landing");
   assert.deepEqual(parsed.frontmatter.scope.in, ["Define parley.plan.v1", "Validate required frontmatter and headings"]);
   assert.deepEqual(parsed.frontmatter.relationships.depends_on, []);
+  assert.deepEqual(parsed.frontmatter.relationships.extracts_from, []);
   assert.equal(parsed.frontmatter.parley.object_id, null);
+});
+
+test("createParleyPlanV1Document renders array body sections as newline bullets", () => {
+  const markdown = createParleyPlanV1Document(validPlanInput({
+    sections: {
+      ...validPlanInput().sections,
+      plan: ["Do the first thing.", "Do the second thing."],
+      open_questions: ["Which slice goes first?", "Who reviews it?"]
+    }
+  }));
+  const result = validateParleyPlanV1Document(markdown);
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.match(markdown, /## Plan\n\n- Do the first thing\.\n- Do the second thing\./);
+  assert.match(markdown, /## Open Questions\n\n- Which slice goes first\?\n- Who reviews it\?/);
+  assert.doesNotMatch(markdown, /Do the first thing\.,Do the second thing\./);
 });
 
 test("validateParleyPlanV1Document rejects missing namespace landing", () => {

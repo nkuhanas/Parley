@@ -111,7 +111,6 @@ export function assertPlanSetupRecord(record) {
     landing: raw.landing && typeof raw.landing === "object" ? raw.landing : {},
     overview: raw.overview == null ? null : normalizePlanOverview(raw.overview),
     phases: Array.isArray(raw.phases) ? raw.phases.map((phase, index) => ({ ...phase, kind: kindValue(phase.kind ?? phase.type, "implementation"), phase_id: assertRecordId(phase.phase_id ?? `phase_${index + 1}`, `phases[${index}].phase_id`) })) : [],
-    human_checkpoints: [],
     review: raw.review ?? { required_reviewers: [], approvals: [], objections: [] },
     relationships: raw.relationships,
     parley: raw.parley,
