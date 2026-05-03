@@ -1,15 +1,148 @@
 import { resolveCallerIdentity } from "../../../core/board/board.js";
 import { requireBoardAgent } from "../../../core/board/board.js";
 
+function summarizeIdentity(identity) {
+  if (identity == null || typeof identity !== "object" || Array.isArray(identity)) return identity;
+  return Object.fromEntries(Object.entries({
+    board_id: identity.board_id,
+    global_agent_id: identity.global_agent_id,
+    board_agent_id: identity.board_agent_id,
+    display_name: identity.display_name,
+    kind: identity.kind,
+    default_board: identity.default_board,
+    boards: identity.boards,
+    runtime_ref: identity.runtime_ref,
+    runtime_aliases: identity.runtime_aliases,
+    identity_resolution: summarizeIdentityResolution(identity.identity_resolution)
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeIdentityResolution(resolution) {
+  if (resolution == null || typeof resolution !== "object" || Array.isArray(resolution)) return resolution;
+  return Object.fromEntries(Object.entries({
+    source: resolution.source,
+    caller_runtime_ref_persisted: resolution.caller_runtime_ref_persisted,
+    persisted_binding: resolution.persisted_binding,
+    global_agent_id: resolution.global_agent_id,
+    requested_board_id: resolution.requested_board_id,
+    resolved_board_id: resolution.resolved_board_id,
+    used_default_board: resolution.used_default_board,
+    accessible_board_count: resolution.accessible_board_count,
+    matched_global_agent_count: resolution.matched_global_agent_count,
+    matched_identity_count: resolution.matched_identity_count
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeArtifact(artifact) {
+  if (artifact == null || typeof artifact !== "object" || Array.isArray(artifact)) return artifact;
+  return Object.fromEntries(Object.entries({
+    artifact_id: artifact.artifact_id,
+    kind: artifact.kind,
+    storage_mode: artifact.storage_mode,
+    uri: artifact.uri,
+    version: artifact.version,
+    status: artifact.status,
+    title: artifact.title,
+    content_hash: artifact.content_hash,
+    resolved_path: artifact.resolved_path,
+    created_at: artifact.created_at,
+    updated_at: artifact.updated_at
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeObject(record) {
+  if (record == null || typeof record !== "object" || Array.isArray(record)) return record;
+  return Object.fromEntries(Object.entries({
+    object_id: record.object_id,
+    kind: record.kind,
+    title: record.title,
+    status: record.status,
+    artifact_ref: record.artifact_ref,
+    participants: record.participants,
+    created_at: record.created_at,
+    updated_at: record.updated_at
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeEffect(effect) {
+  if (effect == null || typeof effect !== "object" || Array.isArray(effect)) return effect;
+  return Object.fromEntries(Object.entries({
+    effect_id: effect.effect_id,
+    type: effect.type,
+    actor: summarizeIdentity(effect.actor),
+    target: summarizeValue(effect.target),
+    payload: summarizeValue(effect.payload),
+    source_thread_id: effect.source_thread_id,
+    source_message_id: effect.source_message_id,
+    created_at: effect.created_at
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeObligation(obligation) {
+  if (obligation == null || typeof obligation !== "object" || Array.isArray(obligation)) return obligation;
+  return Object.fromEntries(Object.entries({
+    obligation_id: obligation.obligation_id,
+    agent: obligation.agent,
+    type: obligation.type,
+    status: obligation.status,
+    target: summarizeValue(obligation.target),
+    scope: obligation.scope,
+    reason: obligation.reason,
+    source_effect_id: obligation.source_effect_id,
+    created_at: obligation.created_at,
+    updated_at: obligation.updated_at
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizePlanValidation(validation) {
+  if (validation == null || typeof validation !== "object" || Array.isArray(validation)) return validation;
+  if (validation.frontmatter == null && validation.headings == null) return summarizeValue(validation);
+  const frontmatter = validation.frontmatter ?? null;
+  return Object.fromEntries(Object.entries({
+    ok: validation.ok,
+    errors: validation.errors,
+    warnings: validation.warnings,
+    frontmatter: frontmatter == null ? null : {
+      schema: frontmatter.schema,
+      plan_id: frontmatter.plan_id,
+      board_id: frontmatter.board_id,
+      title: frontmatter.title,
+      status: frontmatter.status,
+      version: frontmatter.version,
+      owner: frontmatter.owner,
+      participants: frontmatter.participants,
+      landing: frontmatter.landing,
+      coordination_mode: frontmatter.coordination_mode,
+      human_checkpoints_count: Array.isArray(frontmatter.human_checkpoints) ? frontmatter.human_checkpoints.length : 0
+    },
+    heading_count: Array.isArray(validation.headings) ? validation.headings.length : undefined
+  }).filter(([, value]) => value !== undefined));
+}
+
+function summarizeValue(value, key = null) {
+  if (value == null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((item) => summarizeValue(item));
+
+  if (key === "identity") return summarizeIdentity(value);
+  if (key === "artifact") return summarizeArtifact(value);
+  if (key === "object") return summarizeObject(value);
+  if (key === "effect") return summarizeEffect(value);
+  if (key === "obligation") return summarizeObligation(value);
+  if (key === "validation") return summarizePlanValidation(value);
+
+  return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [childKey, summarizeValue(childValue, childKey)]));
+}
+
 export function boardResult(details) {
+  const summarizedDetails = summarizeValue(details);
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(details, null, 2)
+        text: JSON.stringify(summarizedDetails, null, 2)
       }
     ],
-    details
+    details: summarizedDetails
   };
 }
 
