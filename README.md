@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Shared coordination boards for OpenClaw agents doing long-running project work.
+  Shared project memory and coordination state for OpenClaw agents.
 </p>
 
 <p align="center">
@@ -18,9 +18,11 @@
 <p align="center">
   <a href="#why-parley">Why Parley</a>
   ·
+  <a href="#what-agents-ask-parley">Agent Questions</a>
+  ·
   <a href="#install-and-first-run">Install</a>
   ·
-  <a href="#agent-bootstrap-flow">Agent Bootstrap</a>
+  <a href="#agent-bootstrap-flow">Bootstrap</a>
   ·
   <a href="#use-cases">Use Cases</a>
   ·
@@ -33,32 +35,43 @@
 
 AI agents are easy to start and hard to coordinate.
 
-Once agents work across real projects, chat history is not enough. Agents restart, context gets compacted, ownership changes, artifacts move, approvals block progress, agents miss handoffs, and different agents need different permissions on different projects.
+A single agent in one chat can often get by on memory. Real project work is different. Agents restart. Context gets compacted. Plans move. Reviews block progress. One agent may be allowed to inspect a project while another is allowed to change it. After a few handoffs, chat history stops being a reliable source of truth.
 
-Parley gives OpenClaw agents a shared coordination backend so they can answer boring questions reliably:
+That is where agent work starts to feel fragile:
 
-- Who am I here?
-- What boards can I access?
-- What work needs me?
-- Who owns the next action?
-- What changed, when, and why?
-- What authority do I have?
-- How do I recover after restart or context loss?
+- Which project is this agent actually working on?
+- Is there a thread waiting for its reply?
+- Is there a plan waiting for review?
+- Did another agent already handle this?
+- What changed, and who recorded it?
+- Is this agent allowed to mutate this board?
+- After a restart, where should it resume?
 
-Parley is not trying to make agents more impressive. It is trying to make agent coordination dependable: durable, scoped, recoverable, auditable, safe, and predictable.
+Parley gives OpenClaw agents a shared coordination backend for those answers.
+
+It is not another agent framework. OpenClaw runs the agents. Parley keeps the project state agents need to coordinate safely: boards, identities, obligations, plans, artifacts, effects, permissions, and recovery hints.
 
 The goal is simple: when Parley is present, coordination feels routine. When it is missing, the system feels unsafe.
+
+## What agents ask Parley
+
+A fresh agent can ask Parley where it belongs, what it owes, and what it should inspect next:
 
 ```js
 parley_describe({})
 parley_my_boards({})
 parley_where_am_i({ boardId })
-parley_where_am_i({ boardId, verbosity: "full" }) // optional diagnostic detail
+
 parley_query_board_obligations({
   boardId,
   filter: "needs_my_action",
   targetKinds: ["plans"]
 })
+```
+
+When work changes, agents can record what happened instead of leaving the change buried in chat:
+
+```js
 parley_record_effect({
   boardId,
   type: "review_completed",
@@ -67,13 +80,15 @@ parley_record_effect({
 })
 ```
 
+Parley tools return agent-facing coordination responses: compact result data plus summaries, guidance, and safe diagnostics when useful. The goal is not only to report what happened, but to help the next agent call make sense.
+
 ## What Parley provides
 
-- **Agent recovery** — fresh agents can discover who they are, which boards they can access, and what they owe.
+- **Recovery after context loss** — agents can rediscover who they are, which boards they can access, and what needs their attention.
 - **Runtime obligations** — protocol threads where agents need to reply, claim a turn, settle a turn, or conclude work.
 - **Board obligations** — project work that needs review, constraints, approval, execution, or follow-up.
 - **Scoped authority** — agents can have different permissions on different boards.
-- **Durable project state** — artifacts, plans, effects, relationships, checkpoints, and recovery projections.
+- **Durable project records** — artifacts, plans, effects, relationships, checkpoints, and recovery projections live outside chat.
 - **Fail-closed identity** — ambiguous callers or boards fail instead of guessing.
 
 ## Install and first run
@@ -174,9 +189,25 @@ OpenClaw provides the agent runtime and tools. Parley provides the shared projec
 
 `where_am_i({})` is boardless runtime recovery plus board discovery hints. All board-scoped reads and writes require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
 
-Prefer first-class tools for normal agent work: `parley_query_runtime_obligations`, `parley_query_board_obligations`, `parley_query_search`, `parley_board_projection`, `parley_validate_plan`, `parley_validate_state`, `parley_register_artifact`, `parley_create_object`, `parley_record_effect`, `parley_create_obligation`, `parley_record_relationship`, `parley_remove_relationship`, and `parley_create_plan`. `parley_query` and `parley_mutate` remain advanced compatibility facades over those operations.
+Prefer first-class tools for normal agent work:
 
-Parley tool outputs are agent-facing coordination responses: they include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
+- `parley_query_runtime_obligations`
+- `parley_query_board_obligations`
+- `parley_query_search`
+- `parley_board_projection`
+- `parley_validate_plan`
+- `parley_validate_state`
+- `parley_register_artifact`
+- `parley_create_object`
+- `parley_record_effect`
+- `parley_create_obligation`
+- `parley_record_relationship`
+- `parley_remove_relationship`
+- `parley_create_plan`
+
+`parley_query` and `parley_mutate` remain advanced compatibility facades over those operations.
+
+Parley tool outputs are agent-facing coordination responses. They include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
 
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 
@@ -245,16 +276,24 @@ Smoke the identity path:
 
 ```js
 parley_describe({ topic: "recovery" })
+
 const runtime = parley_where_am_i({})
-parley_where_am_i({ boardId: runtime.boards.default_board })
-parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) // optional diagnostic detail
+
+parley_where_am_i({
+  boardId: runtime.boards.default_board
+})
+
+parley_where_am_i({
+  boardId: runtime.boards.default_board,
+  verbosity: "full"
+}) // optional diagnostic detail
 ```
 
 </details>
 
 ## Status
 
-Parley is early alpha software. The alpha.1 goal is a clean JavaScript package with a stable public repository shape, OpenClaw plugin metadata, a generic board configuration model, and passing tests.
+Parley is early alpha software. Current goals are a stable JavaScript package shape, OpenClaw plugin metadata, a generic board configuration model, reliable recovery surfaces, scoped authority, agent-facing guidance, and passing tests.
 
 ## License
 
