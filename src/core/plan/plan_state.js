@@ -2,8 +2,10 @@ import { PLAN_PHASE_STATUSES, createParleyPlanV1Document } from "../schema/index
 import { assertBoardAgentId, assertBoardId, assertNonEmptyString, assertRecordId } from "../board/board_schema.js";
 
 export const PLAN_SETUP_REQUIRED = Object.freeze(["overview", "phase"]);
-export const PLAN_CHECKPOINT_KINDS = Object.freeze(["review", "approval", "decision"]);
-export const PLAN_CHECKPOINT_STATUSES = Object.freeze(["pending", "active", "complete", "cancelled", "deferred"]);
+export const PLAN_PHASE_KINDS = Object.freeze(["implementation", "review", "approval", "decision_gate", "human_checkpoint", "human_approval_gate"]);
+export const HUMAN_GATE_PHASE_KINDS = Object.freeze(["human_checkpoint", "human_approval_gate"]);
+export const PLAN_CHECKPOINT_KINDS = HUMAN_GATE_PHASE_KINDS;
+export const PLAN_CHECKPOINT_STATUSES = PLAN_PHASE_STATUSES;
 
 function optionalString(value, fallback = null) {
   if (value == null) return fallback;
@@ -21,6 +23,15 @@ function stringArray(value) {
 function statusValue(value, fallback = "draft") {
   const status = optionalString(value, fallback);
   return PLAN_PHASE_STATUSES.includes(status) ? status : fallback;
+}
+
+function kindValue(value, fallback = "implementation") {
+  const kind = optionalString(value, fallback);
+  return PLAN_PHASE_KINDS.includes(kind) ? kind : fallback;
+}
+
+export function isHumanGatePhase(phase) {
+  return HUMAN_GATE_PHASE_KINDS.includes(phase?.kind);
 }
 
 export function boardAgentIds(board) {
@@ -46,15 +57,22 @@ export function normalizePlanOverview(input = {}) {
 }
 
 export function normalizePlanPhase(input = {}, board) {
-  const owner = assertBoardAgentId(input.owner, "owner");
+  const kind = kindValue(input.kind ?? input.type, "implementation");
+  const owner = assertBoardAgentId(input.owner ?? input.shepherd, "owner");
   if (!boardAgentIds(board).includes(owner)) throw new Error(`owner must be a board agent: ${owner}`);
-  const status = statusValue(input.status, "draft");
+  const status = statusValue(input.status, isHumanGatePhase({ kind }) ? "active" : "draft");
+  const requiredFrom = input.requiredFrom ?? input.required_from;
+  if (HUMAN_GATE_PHASE_KINDS.includes(kind)) assertNonEmptyString(requiredFrom, "requiredFrom");
   return {
     phase_id: input.phaseId ?? input.phase_id,
     title: assertNonEmptyString(input.title, "title"),
+    kind,
     owner,
     status,
     trigger: optionalString(input.trigger),
+    required_from: requiredFrom == null ? null : assertNonEmptyString(requiredFrom, "requiredFrom"),
+    requested_decision: optionalString(input.requestedDecision ?? input.requested_decision, kind === "human_approval_gate" ? "approve_or_request_changes" : null),
+    due_at: input.dueAt ?? input.due_at ?? null,
     entry_criteria: stringArray(input.entryCriteria ?? input.entry_criteria),
     work: stringArray(input.work),
     exit_criteria: stringArray(input.exitCriteria ?? input.exit_criteria),
@@ -67,21 +85,14 @@ export function normalizePlanPhase(input = {}, board) {
 }
 
 export function normalizePlanCheckpoint(input = {}, plan, board) {
-  const requiredFrom = assertNonEmptyString(input.requiredFrom ?? input.required_from, "requiredFrom");
-  const shepherd = assertBoardAgentId(input.shepherd ?? plan.owner, "shepherd");
-  if (!boardAgentIds(board).includes(shepherd)) throw new Error(`shepherd must be a board agent: ${shepherd}`);
-  return {
-    checkpoint_id: input.checkpointId ?? input.checkpoint_id,
-    title: assertNonEmptyString(input.title, "title"),
-    kind: optionalString(input.kind, "review"),
-    required_from: requiredFrom,
-    shepherd,
-    trigger: optionalString(input.trigger, "manual"),
-    status: optionalString(input.status, "pending"),
-    requested_decision: optionalString(input.requestedDecision ?? input.requested_decision, "review"),
-    due_at: input.dueAt ?? input.due_at ?? null,
-    related_phase_id: input.relatedPhaseId ?? input.related_phase_id ?? null
-  };
+  return normalizePlanPhase({
+    ...input,
+    phaseId: input.phaseId ?? input.phase_id ?? input.checkpointId ?? input.checkpoint_id,
+    kind: input.kind ?? input.type ?? "human_checkpoint",
+    owner: input.owner ?? input.shepherd ?? plan.owner,
+    status: input.status ?? "active",
+    trigger: input.trigger ?? "manual"
+  }, board);
 }
 
 export function assertPlanSetupRecord(record) {
@@ -99,8 +110,8 @@ export function assertPlanSetupRecord(record) {
     participants: stringArray(raw.participants),
     landing: raw.landing && typeof raw.landing === "object" ? raw.landing : {},
     overview: raw.overview == null ? null : normalizePlanOverview(raw.overview),
-    phases: Array.isArray(raw.phases) ? raw.phases.map((phase, index) => ({ ...phase, phase_id: assertRecordId(phase.phase_id ?? `phase_${index + 1}`, `phases[${index}].phase_id`) })) : [],
-    human_checkpoints: Array.isArray(raw.human_checkpoints) ? raw.human_checkpoints.map((checkpoint, index) => ({ ...checkpoint, checkpoint_id: assertRecordId(checkpoint.checkpoint_id ?? `checkpoint_${index + 1}`, `human_checkpoints[${index}].checkpoint_id`) })) : [],
+    phases: Array.isArray(raw.phases) ? raw.phases.map((phase, index) => ({ ...phase, kind: kindValue(phase.kind ?? phase.type, "implementation"), phase_id: assertRecordId(phase.phase_id ?? `phase_${index + 1}`, `phases[${index}].phase_id`) })) : [],
+    human_checkpoints: [],
     review: raw.review ?? { required_reviewers: [], approvals: [], objections: [] },
     relationships: raw.relationships,
     parley: raw.parley,
@@ -128,7 +139,7 @@ export function derivePlanSetupState(plan, board) {
     missingRequired,
     nextRequiredAction,
     nextRecommendedActions: nextRequiredAction == null
-      ? [{ tool: "parley_add_plan_checkpoint", reason: "Add human checkpoints when review or approval requires a human gate." }]
+      ? [{ tool: "parley_add_plan_phase", reason: "Add human gates as phases with kind human_checkpoint or human_approval_gate when review or approval requires a human gate." }]
       : [nextRequiredAction],
     validOwners,
     allowedPhaseStatuses: [...PLAN_PHASE_STATUSES],
@@ -146,8 +157,18 @@ function phaseMarkdown(phase, index) {
   return [
     `### Phase ${label} — ${phase.title}`,
     "",
+    `Kind: ${phase.kind ?? "implementation"}`,
     `Status: ${phase.status ?? "draft"}`,
     `Owner: ${phase.owner}`,
+    "",
+    "Required from:",
+    phase.required_from ?? "N/A",
+    "",
+    "Requested decision:",
+    phase.requested_decision ?? "N/A",
+    "",
+    "Due at:",
+    phase.due_at ?? "N/A",
     "",
     "Entry criteria:",
     listMarkdown(phase.entry_criteria),
@@ -201,7 +222,6 @@ export function renderPlanSetupMarkdown(plan) {
     parley: plan.parley,
     priority: plan.priority,
     coordination_mode: plan.coordination_mode,
-    human_checkpoints: plan.human_checkpoints,
     sections: {
       purpose: overview.purpose,
       background: overview.background,
@@ -213,7 +233,7 @@ export function renderPlanSetupMarkdown(plan) {
       acceptance_criteria: listMarkdown(overview.acceptance_criteria),
       risks_and_constraints: listMarkdown(overview.risks_and_constraints),
       open_questions: listMarkdown(overview.open_questions, "None recorded."),
-      review_and_approval: plan.human_checkpoints.length === 0 ? "No review recorded yet." : listMarkdown(plan.human_checkpoints.map((checkpoint) => `${checkpoint.title} (${checkpoint.required_from})`)),
+      review_and_approval: plan.phases.filter(isHumanGatePhase).length === 0 ? "No review recorded yet." : listMarkdown(plan.phases.filter(isHumanGatePhase).map((phase) => `${phase.title} (${phase.required_from})`)),
       change_log: `- v${plan.version}: Generated from Parley plan setup state.`
     }
   });

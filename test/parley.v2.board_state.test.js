@@ -935,7 +935,7 @@ test("Parley query/mutate façade creates and validates parley.plan.v1 documents
   });
 });
 
-test("Parley create_plan creates shepherd obligations for human checkpoints", async () => {
+test("Parley human checkpoint phases create shepherd obligations", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);
     const queryTool = createQueryTool(api);
@@ -955,7 +955,7 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
         planId: "plan_human_checkpoint",
         checkpointId: "checkpoint_initial_review",
         title: "Initial human review",
-        kind: "review",
+        kind: "human_checkpoint",
         requiredFrom: "human:sensei",
         shepherd: "parley-agent",
         trigger: "manual",
@@ -980,6 +980,8 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
     assert.equal(boardResultValue.details.result.projection.counts.human_checkpoints, 1);
     assert.equal(boardResultValue.details.result.projection.counts.active_human_checkpoint_obligations, 1);
     assert.equal(checkpointState.human_checkpoints[0].checkpoint_id, "checkpoint_initial_review");
+    assert.equal(checkpointState.human_checkpoints[0].phase_id, "checkpoint_initial_review");
+    assert.equal(checkpointState.human_checkpoints[0].kind, "human_checkpoint");
     assert.equal(checkpointState.human_checkpoints[0].obligation_id, created[0].obligation.obligation_id);
 
     const whereResult = await queryTool.execute(null, {
@@ -989,6 +991,49 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
     });
     assert.equal(whereResult.details.result.projection.counts.human_checkpoints_to_shepherd, 1);
     assert.equal(whereResult.details.result.projection.human_checkpoints_to_shepherd[0].required_from, "human:sensei");
+  });
+});
+
+test("Parley deferred human approval gate phases do not create notify obligations", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const mutateTool = createMutateTool(toolApi(pluginConfig));
+    const queryTool = createQueryTool(toolApi(pluginConfig));
+
+    await createGuidedPlan(mutateTool, {
+      planId: "plan_deferred_approval_gate",
+      title: "Deferred Approval Gate Plan",
+      filename: "deferred-approval-gate-plan.md"
+    });
+    const gateResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "add_plan_phase",
+      input: {
+        planId: "plan_deferred_approval_gate",
+        phaseId: "phase_human_approval",
+        title: "Human approval gate",
+        kind: "human_approval_gate",
+        owner: "parley-agent",
+        status: "deferred",
+        requiredFrom: "human:sensei",
+        requestedDecision: "approve_or_request_changes",
+        reviewTrigger: ["Implementation changes are ready for Sensei review."],
+        deferralReason: ["Implementation is not ready for human approval yet."],
+        nonGoalsBeforeActivation: ["Do not notify the human while deferred."]
+      }
+    });
+    assert.equal(gateResult.details.result.accepted.phase.kind, "human_approval_gate");
+    assert.equal(gateResult.details.result.accepted.phase.owner, "parley-agent");
+    assert.equal(gateResult.details.result.human_checkpoints.created_obligations.length, 0);
+
+    const boardResultValue = await queryTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "board"
+    });
+    assert.equal(boardResultValue.details.result.projection.counts.human_checkpoints, 1);
+    assert.equal(boardResultValue.details.result.projection.counts.active_human_checkpoint_obligations, 0);
+    assert.equal(boardResultValue.details.result.projection.checkpoint_state.human_checkpoints[0].status, "deferred");
   });
 });
 

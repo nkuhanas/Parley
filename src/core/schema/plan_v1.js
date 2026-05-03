@@ -11,6 +11,9 @@ export const PARLEY_PLAN_V1_SCHEMA_ID = "parley.plan.v1";
 export const PARLEY_PLAN_V1_ARTIFACT_KIND = "plan";
 
 export const PLAN_PRIORITIES = Object.freeze(["low", "normal", "high", "urgent"]);
+export const PLAN_PHASE_KINDS = Object.freeze(["implementation", "review", "approval", "decision_gate", "human_checkpoint", "human_approval_gate"]);
+export const HUMAN_GATE_PHASE_KINDS = Object.freeze(["human_checkpoint", "human_approval_gate"]);
+
 export const PLAN_PHASE_STATUSES = Object.freeze([
   "draft",
   "proposed",
@@ -18,6 +21,7 @@ export const PLAN_PHASE_STATUSES = Object.freeze([
   "active",
   "blocked",
   "deferred",
+  "failed",
   "complete",
   "superseded",
   "cancelled"
@@ -498,9 +502,17 @@ function validatePhaseBlocks(body, errors) {
   for (const phaseBlock of phaseBlocks) {
     const block = phaseBlock.block;
     const titleLine = phaseBlock.heading;
+    const kind = parsePlanPhaseField(block, "Kind") ?? "implementation";
     const status = parsePlanPhaseField(block, "Status");
     const owner = parsePlanPhaseField(block, "Owner");
+    if (kind != null) assertAllowed(kind, PLAN_PHASE_KINDS, `${titleLine} kind`, errors);
     if (status != null) assertAllowed(status, PLAN_PHASE_STATUSES, `${titleLine} status`, errors);
+    if (HUMAN_GATE_PHASE_KINDS.includes(kind)) {
+      if (!hasConcretePhaseContent(owner)) addError(errors, `${titleLine} human gate phase requires Owner`);
+      if (!hasConcretePhaseContent(parsePlanPhaseField(block, "Required from"))) {
+        addError(errors, `${titleLine} human gate phase requires Required from`);
+      }
+    }
     if (status === "deferred") {
       if (!hasConcretePhaseContent(owner)) addError(errors, `${titleLine} deferred phase requires Owner`);
       if (!hasConcretePhaseContent(parsePlanPhaseField(block, "Deferral reason"))) {
@@ -550,8 +562,12 @@ export function collectParleyPlanV1Phases(markdownOrBody, options = {}) {
       phase_id: slugifyPhaseId(phaseBlock.heading, phaseBlock.index),
       title: phaseTitle(phaseBlock.heading),
       heading: phaseBlock.heading,
+      kind: parsePlanPhaseField(phaseBlock.block, "Kind") ?? "implementation",
       status,
       owner: hasConcretePhaseContent(owner) ? owner.trim() : null,
+      required_from: parsePlanPhaseField(phaseBlock.block, "Required from"),
+      requested_decision: parsePlanPhaseField(phaseBlock.block, "Requested decision"),
+      due_at: parsePlanPhaseField(phaseBlock.block, "Due at"),
       supporting_agents: stringListFromField(parsePlanPhaseField(phaseBlock.block, "Supporting agents")),
       entry_criteria: stringListFromField(parsePlanPhaseField(phaseBlock.block, "Entry criteria")),
       work: stringListFromField(parsePlanPhaseField(phaseBlock.block, "Work")),

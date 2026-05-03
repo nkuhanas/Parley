@@ -297,8 +297,8 @@ export function planSetupDescriptor() {
     required_sequence: [
       { tool: "parley_create_plan", purpose: "Create the tracked shell and store returned planId." },
       { tool: "parley_write_plan_overview", purpose: "Define purpose, scope, current/target state, approach, risks, and open questions." },
-      { tool: "parley_add_plan_phase", purpose: "Add at least one phase through shallow validated fields." },
-      { tool: "parley_add_plan_checkpoint", purpose: "Add human checkpoints when review/approval needs a human gate." },
+      { tool: "parley_add_plan_phase", purpose: "Add at least one phase through shallow validated fields. Use kind human_checkpoint or human_approval_gate for human gates; owner is the shepherd." },
+      { tool: "parley_add_plan_checkpoint", purpose: "Compatibility helper for adding a human gate phase; prefer parley_add_plan_phase for new plan setup." },
       { tool: "parley_get_plan_setup_status", purpose: "Recover current completion state and valid next actions." }
     ],
     rule: "Do not author plans as objects. Assemble plans through these narrow tools and follow each latest setupState response."

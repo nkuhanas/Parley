@@ -1,11 +1,11 @@
-import { loadPlanOrThrow, saveAndExportPlan, withAddedPhase } from "./plan_common.js";
+import { loadPlanOrThrow, maybeGateForObligation, saveAndExportPlan, withAddedPhase } from "./plan_common.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 export function createAddPlanPhaseAction(api) {
   return {
     name: "parley_add_plan_phase",
     label: "Parley Add Plan Phase",
-    description: "Add one structured phase to a tracked Parley plan and return updated setup guidance.",
+    description: "Add one structured phase to a tracked Parley plan. Human gates are phases with kind human_checkpoint or human_approval_gate and owner as shepherd.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -16,9 +16,13 @@ export function createAddPlanPhaseAction(api) {
         planId: { type: "string" },
         phaseId: { type: "string" },
         title: { type: "string" },
-        owner: { type: "string" },
-        status: { type: "string" },
+        kind: { type: "string", description: "Phase kind, e.g. implementation, human_checkpoint, or human_approval_gate." },
+        owner: { type: "string", description: "Board-local phase owner. For human gates this is the shepherd." },
+        status: { type: "string", description: "Phase status. Human gates support deferred, blocked, and failed for non-passing outcomes." },
         trigger: { type: "string" },
+        requiredFrom: { type: "string", description: "Human or party required for human gate review/approval." },
+        requestedDecision: { type: "string" },
+        dueAt: { type: "string" },
         entryCriteria: { type: "array", items: { type: "string" } },
         work: { type: "array", items: { type: "string" } },
         exitCriteria: { type: "array", items: { type: "string" } },
@@ -34,13 +38,16 @@ export function createAddPlanPhaseAction(api) {
       const plan = await loadPlanOrThrow(api, identity, params.planId ?? params.plan_id);
       const nextPlan = withAddedPhase(plan, params, identity.board);
       const addedPhase = nextPlan.phases[nextPlan.phases.length - 1];
-      const result = await saveAndExportPlan(api, identity, nextPlan);
+      const result = await saveAndExportPlan(api, identity, nextPlan, { checkpointForObligation: maybeGateForObligation(addedPhase) });
       return boardResult({
         tool: "parley_add_plan_phase",
         identity,
         plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
         accepted: { phase: addedPhase },
         artifact: result.artifact,
+        human_checkpoints: {
+          created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]
+        },
         setupState: result.setupState
       });
     }

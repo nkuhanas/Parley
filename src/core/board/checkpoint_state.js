@@ -1,28 +1,28 @@
 import fs from "node:fs/promises";
 
-import { parseParleyPlanV1Document } from "../schema/index.js";
+import { collectParleyPlanV1Phases, parseParleyPlanV1Document } from "../schema/index.js";
+import { isHumanGatePhase } from "../plan/plan_state.js";
 
 function normalizeCheckpoint(raw, frontmatter, artifact) {
-  const checkpoint = typeof raw === "string"
-    ? { checkpoint_id: raw, title: raw }
-    : raw;
+  const phaseId = raw.phase_id ?? raw.checkpoint_id;
   const planId = frontmatter.plan_id;
   const artifactVersion = artifact.version ?? frontmatter.version ?? 1;
   return {
-    checkpoint_key: `${frontmatter.board_id}:${planId}:${checkpoint.checkpoint_id}:v${artifactVersion}`,
+    checkpoint_key: `${frontmatter.board_id}:${planId}:${phaseId}:v${artifactVersion}`,
     board_id: frontmatter.board_id,
     plan_id: planId,
     artifact_id: artifact.artifact_id,
     artifact_version: artifactVersion,
-    checkpoint_id: checkpoint.checkpoint_id,
-    title: checkpoint.title,
-    kind: checkpoint.kind ?? "review",
-    required_from: checkpoint.required_from ?? "human",
-    shepherd: checkpoint.shepherd ?? frontmatter.owner,
-    trigger: checkpoint.trigger ?? "plan_created",
-    status: checkpoint.status ?? "pending",
-    requested_decision: checkpoint.requested_decision ?? "review",
-    due_at: checkpoint.due_at ?? null,
+    checkpoint_id: phaseId,
+    phase_id: phaseId,
+    title: raw.title,
+    kind: raw.kind ?? "human_checkpoint",
+    required_from: raw.required_from ?? "human",
+    shepherd: raw.owner ?? raw.shepherd ?? frontmatter.owner,
+    trigger: raw.trigger ?? "manual",
+    status: raw.status ?? "active",
+    requested_decision: raw.requested_decision ?? (raw.kind === "human_approval_gate" ? "approve_or_request_changes" : "review"),
+    due_at: raw.due_at ?? null,
     source: {
       artifact_id: artifact.artifact_id,
       artifact_version: artifactVersion,
@@ -33,12 +33,13 @@ function normalizeCheckpoint(raw, frontmatter, artifact) {
 }
 
 function checkpointsFromPlanState(plan, artifact = null) {
-  return (plan.human_checkpoints ?? []).map((checkpoint) => normalizeCheckpoint(checkpoint, plan, artifact ?? {
+  const sourceArtifact = artifact ?? {
     artifact_id: plan.artifact_id,
     version: plan.version,
     uri: plan.landing?.uri,
     resolved_path: plan.landing?.resolved_path
-  }));
+  };
+  return (plan.phases ?? []).filter(isHumanGatePhase).map((phase) => normalizeCheckpoint(phase, plan, sourceArtifact));
 }
 
 async function readPlanCheckpoints(artifact) {
@@ -47,9 +48,11 @@ async function readPlanCheckpoints(artifact) {
     const markdown = await fs.readFile(artifact.resolved_path, "utf8");
     const parsed = parseParleyPlanV1Document(markdown);
     if (parsed.frontmatter?.schema !== "parley.plan.v1") return [];
-    const checkpoints = parsed.frontmatter.human_checkpoints ?? [];
-    if (!Array.isArray(checkpoints)) return [];
-    return checkpoints.map((checkpoint) => normalizeCheckpoint(checkpoint, parsed.frontmatter, artifact));
+    const phaseGates = collectParleyPlanV1Phases(markdown).filter(isHumanGatePhase);
+    if (phaseGates.length > 0) return phaseGates.map((phase) => normalizeCheckpoint(phase, parsed.frontmatter, artifact));
+    const legacyCheckpoints = parsed.frontmatter.human_checkpoints ?? [];
+    if (!Array.isArray(legacyCheckpoints)) return [];
+    return legacyCheckpoints.map((checkpoint) => normalizeCheckpoint(checkpoint, parsed.frontmatter, artifact));
   } catch (error) {
     if (error?.code === "ENOENT") return [];
     return [];
@@ -67,7 +70,7 @@ function countBy(records, fieldName) {
 
 function matchingObligation(checkpoint, obligations) {
   return obligations.find((obligation) => (
-    obligation.target?.checkpoint_id === checkpoint.checkpoint_id
+    (obligation.target?.phase_id === checkpoint.phase_id || obligation.target?.checkpoint_id === checkpoint.checkpoint_id)
     && obligation.target?.plan_id === checkpoint.plan_id
     && obligation.target?.artifact_id === checkpoint.artifact_id
     && obligation.target?.artifact_version === checkpoint.artifact_version

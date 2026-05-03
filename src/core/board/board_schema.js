@@ -274,9 +274,9 @@ function assertApprovalTarget(value, fieldName) {
 
 function assertReviewTarget(value, fieldName) {
   const raw = assertObject(value, fieldName);
-  assertAllowedKeys(raw, fieldName, ["object_id", "artifact_id", "artifact_version", "checkpoint_id", "plan_id", "review_required_from", "scope"]);
+  assertAllowedKeys(raw, fieldName, ["object_id", "artifact_id", "artifact_version", "checkpoint_id", "phase_id", "plan_id", "review_required_from", "scope"]);
   const validated = {};
-  for (const key of ["object_id", "artifact_id", "checkpoint_id", "plan_id"]) {
+  for (const key of ["object_id", "artifact_id", "checkpoint_id", "phase_id", "plan_id"]) {
     const normalized = assertBoardScopedRefId(raw, key, fieldName);
     if (normalized != null) validated[key] = normalized;
   }
@@ -284,12 +284,12 @@ function assertReviewTarget(value, fieldName) {
   if (raw.review_required_from != null) validated.review_required_from = assertFlexibleParticipant(raw.review_required_from, `${fieldName}.review_required_from`);
   if (raw.scope != null) validated.scope = assertNonEmptyString(raw.scope, `${fieldName}.scope`);
   if (Object.keys(validated).length === 0) return validated;
-  if (validated.object_id == null && validated.artifact_id == null && validated.checkpoint_id == null) {
-    throw new Error(`${fieldName} requires object_id, artifact_id, or checkpoint_id`);
+  if (validated.object_id == null && validated.artifact_id == null && validated.checkpoint_id == null && validated.phase_id == null) {
+    throw new Error(`${fieldName} requires object_id, artifact_id, checkpoint_id, or phase_id`);
   }
-  if (validated.checkpoint_id != null) {
+  if (validated.checkpoint_id != null || validated.phase_id != null) {
     for (const required of ["plan_id", "artifact_id", "artifact_version", "review_required_from"]) {
-      if (validated[required] == null) throw new Error(`${fieldName}.${required} required for checkpoint review target`);
+      if (validated[required] == null) throw new Error(`${fieldName}.${required} required for phase/checkpoint review target`);
     }
   }
   return validated;
@@ -402,9 +402,10 @@ export function assertEffectPayload(type, value, fieldName = "payload") {
 export function assertObligationTarget(type, value, fieldName = "target") {
   const raw = assertObject(value, fieldName);
   if (type === "notify_human") {
-    assertAllowedKeys(raw, fieldName, ["checkpoint_id", "plan_id", "artifact_id", "artifact_version", "review_required_from", "requested_decision", "due_at"]);
+    assertAllowedKeys(raw, fieldName, ["checkpoint_id", "phase_id", "plan_id", "artifact_id", "artifact_version", "review_required_from", "requested_decision", "due_at"]);
     return {
       checkpoint_id: assertRecordId(raw.checkpoint_id, `${fieldName}.checkpoint_id`),
+      phase_id: raw.phase_id == null ? assertRecordId(raw.checkpoint_id, `${fieldName}.checkpoint_id`) : assertRecordId(raw.phase_id, `${fieldName}.phase_id`),
       plan_id: assertRecordId(raw.plan_id, `${fieldName}.plan_id`),
       artifact_id: assertRecordId(raw.artifact_id, `${fieldName}.artifact_id`),
       artifact_version: assertPositiveInteger(raw.artifact_version, `${fieldName}.artifact_version`),

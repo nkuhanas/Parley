@@ -5,7 +5,7 @@ export function createAddPlanCheckpointAction(api) {
   return {
     name: "parley_add_plan_checkpoint",
     label: "Parley Add Plan Checkpoint",
-    description: "Add one human/agent checkpoint to a tracked Parley plan and create the shepherd obligation when pending.",
+    description: "Compatibility helper that adds a human_checkpoint or human_approval_gate phase to a tracked Parley plan. Owner is the shepherd.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -16,9 +16,9 @@ export function createAddPlanCheckpointAction(api) {
         planId: { type: "string" },
         checkpointId: { type: "string" },
         title: { type: "string" },
-        kind: { type: "string" },
+        kind: { type: "string", description: "Gate phase kind. Use human_checkpoint or human_approval_gate." },
         requiredFrom: { type: "string" },
-        shepherd: { type: "string" },
+        shepherd: { type: "string", description: "Board-local shepherd; stored as phase owner." },
         trigger: { type: "string" },
         status: { type: "string" },
         requestedDecision: { type: "string" },
@@ -35,7 +35,7 @@ export function createAddPlanCheckpointAction(api) {
         tool: "parley_add_plan_checkpoint",
         identity,
         plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
-        accepted: { checkpoint },
+        accepted: { phase: checkpoint, checkpoint },
         artifact: result.artifact,
         human_checkpoints: {
           created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]

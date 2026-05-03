@@ -1,5 +1,5 @@
 import { loadPlanOrThrow } from "./plan_common.js";
-import { derivePlanSetupState } from "../../../core/plan/plan_state.js";
+import { derivePlanSetupState, isHumanGatePhase } from "../../../core/plan/plan_state.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 export function createGetPlanSetupStatusAction(api) {
@@ -28,7 +28,7 @@ export function createGetPlanSetupStatusAction(api) {
           title: plan.title,
           status: plan.status,
           phase_count: plan.phases.length,
-          checkpoint_count: plan.human_checkpoints.length,
+          checkpoint_count: plan.phases.filter(isHumanGatePhase).length,
           generatedMarkdownPath: plan.landing.resolved_path,
           generatedMarkdownUri: plan.landing.uri
         },

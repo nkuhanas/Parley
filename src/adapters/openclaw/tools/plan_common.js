@@ -7,7 +7,7 @@ import { createArtifactRecord, createCoordinationObjectRecord, createEffectRecor
 import { createPlanCheckpointId, createPlanId, createPlanPhaseId } from "../../../core/ids.js";
 import { nowIso } from "../../../core/time.js";
 import { assertBoardAgentForTool } from "./v2_common.js";
-import { derivePlanSetupState, normalizePlanCheckpoint, normalizePlanOverview, normalizePlanPhase, renderPlanSetupMarkdown } from "../../../core/plan/plan_state.js";
+import { derivePlanSetupState, isHumanGatePhase, normalizePlanCheckpoint, normalizePlanOverview, normalizePlanPhase, renderPlanSetupMarkdown } from "../../../core/plan/plan_state.js";
 import { validateParleyPlanV1Document } from "../../../core/schema/index.js";
 
 function camelOrSnake(value, camelKey, snakeKey) {
@@ -50,14 +50,15 @@ export async function loadPlanOrThrow(api, identity, planId) {
 
 function checkpointForObligation(raw, plan, artifact) {
   return {
-    checkpoint_id: raw.checkpoint_id,
+    checkpoint_id: raw.phase_id ?? raw.checkpoint_id,
+    phase_id: raw.phase_id ?? raw.checkpoint_id,
     title: raw.title,
-    kind: raw.kind ?? "review",
+    kind: raw.kind ?? "human_checkpoint",
     required_from: raw.required_from ?? "human",
-    shepherd: raw.shepherd ?? plan.owner,
+    shepherd: raw.owner ?? raw.shepherd ?? plan.owner,
     trigger: raw.trigger ?? "manual",
-    status: raw.status ?? "pending",
-    requested_decision: raw.requested_decision ?? "review",
+    status: raw.status ?? "active",
+    requested_decision: raw.requested_decision ?? (raw.kind === "human_approval_gate" ? "approve_or_request_changes" : "review"),
     due_at: raw.due_at ?? null,
     artifact_id: artifact.artifact_id,
     artifact_version: artifact.version,
@@ -65,9 +66,13 @@ function checkpointForObligation(raw, plan, artifact) {
   };
 }
 
+function gateShouldCreateObligation(gate) {
+  return isHumanGatePhase(gate) && !["draft", "deferred", "blocked", "failed", "cancelled", "complete", "superseded"].includes(gate.status);
+}
+
 async function createCheckpointObligation(api, identity, plan, artifact, rawCheckpoint) {
   const checkpoint = checkpointForObligation(rawCheckpoint, plan, artifact);
-  if (checkpoint.status !== "pending") return null;
+  if (!gateShouldCreateObligation(checkpoint)) return null;
   const shepherd = assertBoardAgentForTool(identity.board, checkpoint.shepherd);
   const effect = createEffectRecord({
     board_id: identity.board_id,
@@ -75,6 +80,7 @@ async function createCheckpointObligation(api, identity, plan, artifact, rawChec
     actor: identity.actor,
     target: {
       checkpoint_id: checkpoint.checkpoint_id,
+      phase_id: checkpoint.phase_id,
       plan_id: checkpoint.plan_id,
       artifact_id: checkpoint.artifact_id,
       artifact_version: checkpoint.artifact_version,
@@ -93,12 +99,13 @@ async function createCheckpointObligation(api, identity, plan, artifact, rawChec
   const savedEffect = await saveEffectRecord(api.pluginConfig, identity.board, effect);
   const obligation = createObligationRecord({
     board_id: identity.board_id,
-    obligation_id: `obligation_${checkpoint.plan_id}_${checkpoint.checkpoint_id}_human_checkpoint`,
+    obligation_id: `obligation_${checkpoint.plan_id}_${checkpoint.phase_id}_human_gate`,
     agent: shepherd,
     type: "notify_human",
     status: "active",
     target: {
       checkpoint_id: checkpoint.checkpoint_id,
+      phase_id: checkpoint.phase_id,
       plan_id: checkpoint.plan_id,
       artifact_id: checkpoint.artifact_id,
       artifact_version: checkpoint.artifact_version,
@@ -216,6 +223,10 @@ export function withAddedPhase(plan, input, board) {
 
 export function withAddedCheckpoint(plan, input, board) {
   const normalized = normalizePlanCheckpoint(input, plan, board);
-  const checkpoint = { ...normalized, checkpoint_id: normalized.checkpoint_id ?? createPlanCheckpointId() };
-  return { plan: { ...plan, human_checkpoints: [...(plan.human_checkpoints ?? []), checkpoint] }, checkpoint };
+  const phase = { ...normalized, phase_id: normalized.phase_id ?? createPlanCheckpointId() };
+  return { plan: { ...plan, phases: [...(plan.phases ?? []), phase] }, checkpoint: phase };
+}
+
+export function maybeGateForObligation(phase) {
+  return isHumanGatePhase(phase) ? phase : null;
 }
