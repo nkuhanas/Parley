@@ -10,6 +10,8 @@ import { createRegisterArtifactTool } from "../src/adapters/openclaw/tools/regis
 import { createCreateObjectTool } from "../src/adapters/openclaw/tools/create_object.js";
 import { createRecordEffectTool } from "../src/adapters/openclaw/tools/record_effect.js";
 import { createCreateObligationTool } from "../src/adapters/openclaw/tools/create_obligation.js";
+import { createCreateTriggerTool } from "../src/adapters/openclaw/tools/create_trigger.js";
+import { createResolveObligationTool } from "../src/adapters/openclaw/tools/resolve_obligation.js";
 import { createWhereAmITool } from "../src/adapters/openclaw/tools/where_am_i.js";
 import { createBoardProjectionTool } from "../src/adapters/openclaw/tools/board_projection.js";
 import { createRecordRelationshipTool } from "../src/adapters/openclaw/tools/record_relationship.js";
@@ -25,6 +27,8 @@ import {
   saveEffectRecord,
   loadArtifactRecord,
   loadCoordinationObjectRecord,
+  loadObligationRecord,
+  listEffectRecords,
   loadProjectionCheckpointRecord
 } from "../src/core/storage/board_store.js";
 import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
@@ -1034,6 +1038,162 @@ test("Parley deferred human approval gate phases do not create notify obligation
     assert.equal(boardResultValue.details.result.projection.counts.human_checkpoints, 1);
     assert.equal(boardResultValue.details.result.projection.counts.active_human_checkpoint_obligations, 0);
     assert.equal(boardResultValue.details.result.projection.checkpoint_state.human_checkpoints[0].status, "deferred");
+  });
+});
+
+test("Parley resolves obligations through bound board-scoped triggers", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const mutateTool = createMutateTool(toolApi(pluginConfig));
+    const createTriggerTool = createCreateTriggerTool(toolApi(pluginConfig));
+    const createObligationTool = createCreateObligationTool(toolApi(pluginConfig));
+    const resolveObligationTool = createResolveObligationTool(toolApi(pluginConfig));
+
+    await createGuidedPlan(mutateTool, {
+      planId: "plan_trigger_flow",
+      title: "Trigger Flow Plan",
+      filename: "trigger-flow-plan.md",
+      phase: {
+        planId: "plan_trigger_flow",
+        phaseId: "phase_1",
+        title: "Complete phase one",
+        owner: "parley-agent",
+        status: "complete",
+        entryCriteria: ["Plan exists."],
+        work: ["Complete the first phase."],
+        exitCriteria: ["Phase one is complete."],
+        supportingAgents: []
+      }
+    });
+
+    const triggerResult = await createTriggerTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      triggerId: "trigger_phase_1_done",
+      title: "Route completed phase one",
+      source: {
+        eventType: "obligation.resolved",
+        obligationTemplateId: "template_phase_1_execution",
+        subjectRef: { kind: "plan_phase", plan_id: "plan_trigger_flow", phase_id: "phase_1" }
+      },
+      condition: {
+        obligationResolutionIn: ["completed"],
+        subjectStatusIn: ["complete"]
+      },
+      action: {
+        type: "create_obligation",
+        obligation: {
+          obligationId: "obligation_phase_2_status",
+          templateId: "template_phase_2_status",
+          agent: "project-reviewer",
+          type: "report_status",
+          target: { plan_id: "plan_trigger_flow", phase_id: "phase_2", status: "waiting" },
+          reason: "Phase one completed; report phase two readiness."
+        }
+      },
+      firePolicy: "once_per_source_obligation"
+    });
+    assert.equal(triggerResult.details.trigger.trigger_id, "trigger_phase_1_done");
+
+    const obligationResult = await createObligationTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      obligationId: "obligation_phase_1_execution",
+      templateId: "template_phase_1_execution",
+      agent: "parley-agent",
+      type: "report_status",
+      target: { plan_id: "plan_trigger_flow", phase_id: "phase_1", status: "complete" },
+      reason: "Report phase one execution result.",
+      onResolveTriggerIds: ["trigger_phase_1_done"]
+    });
+    assert.deepEqual(obligationResult.details.obligation.on_resolve_trigger_ids, ["trigger_phase_1_done"]);
+
+    const resolveResult = await resolveObligationTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      obligationId: "obligation_phase_1_execution",
+      resolution: "completed",
+      note: "Phase one is complete."
+    });
+
+    assert.equal(resolveResult.details.obligation.status, "resolved");
+    assert.equal(resolveResult.details.obligation.resolution, "completed");
+    assert.equal(resolveResult.details.trigger_evaluation.mode, "obligation_bound");
+    assert.equal(resolveResult.details.trigger_evaluation.fired_count, 1);
+    assert.equal(resolveResult.details.created_obligations[0].obligation_id, "obligation_phase_2_status");
+    assert.equal(resolveResult.details.next_expected_actions[0].actor, "project-reviewer");
+
+    const createdNext = await loadObligationRecord(pluginConfig, resolveParleyBoardRegistry(pluginConfig).boards.project, "obligation_phase_2_status");
+    assert.equal(createdNext.agent, "project-reviewer");
+    assert.equal(createdNext.source_effect_id, resolveResult.details.effect.effect_id);
+
+    const effects = await listEffectRecords(pluginConfig, resolveParleyBoardRegistry(pluginConfig).boards.project);
+    assert.equal(effects.some((effect) => effect.type === "obligation_resolved" && effect.target.obligation_id === "obligation_phase_1_execution"), true);
+    assert.equal(effects.some((effect) => effect.effect_id === "effect_trigger_phase_1_done_obligation_phase_1_execution_fired" && effect.type === "trigger_fired"), true);
+  });
+});
+
+test("Parley once triggers fire before recording side effects only once globally", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const createTriggerTool = createCreateTriggerTool(toolApi(pluginConfig));
+    const createObligationTool = createCreateObligationTool(toolApi(pluginConfig));
+    const resolveObligationTool = createResolveObligationTool(toolApi(pluginConfig));
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+
+    await createTriggerTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      triggerId: "trigger_once_decision",
+      title: "Record first completion decision only",
+      source: {
+        eventType: "obligation.resolved",
+        obligationTemplateId: "template_once_source"
+      },
+      condition: { obligationResolutionIn: ["completed"] },
+      action: {
+        type: "record_effect",
+        effect: {
+          effectId: "effect_once_side_effect",
+          type: "decision_recorded",
+          target: { trigger_id: "trigger_once_decision" },
+          payload: { decision: "first completion observed" }
+        }
+      },
+      firePolicy: "once"
+    });
+
+    for (const obligationId of ["obligation_once_a", "obligation_once_b"]) {
+      await createObligationTool.execute(null, {
+        callerRuntimeRef: AGENT_RUNTIME_REF,
+        boardId: "project",
+        obligationId,
+        templateId: "template_once_source",
+        agent: "parley-agent",
+        type: "report_status",
+        target: { status: "complete" },
+        onResolveTriggerIds: ["trigger_once_decision"]
+      });
+    }
+
+    const firstResolve = await resolveObligationTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      obligationId: "obligation_once_a",
+      resolution: "completed"
+    });
+    const secondResolve = await resolveObligationTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      obligationId: "obligation_once_b",
+      resolution: "completed"
+    });
+
+    assert.equal(firstResolve.details.trigger_evaluation.fired_count, 1);
+    assert.equal(secondResolve.details.trigger_evaluation.fired_count, 0);
+    assert.equal(secondResolve.details.skipped_triggers[0].reason, "fire_policy_already_satisfied");
+
+    const effects = await listEffectRecords(pluginConfig, board);
+    assert.equal(effects.filter((effect) => effect.effect_id === "effect_once_side_effect").length, 1);
+    assert.equal(effects.filter((effect) => effect.effect_id === "effect_trigger_once_decision_fired").length, 1);
   });
 });
 

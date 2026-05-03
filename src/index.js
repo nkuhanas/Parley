@@ -25,6 +25,8 @@ export { createRegisterArtifactTool } from "./adapters/openclaw/tools/register_a
 export { createCreateObjectTool } from "./adapters/openclaw/tools/create_object.js";
 export { createRecordEffectTool } from "./adapters/openclaw/tools/record_effect.js";
 export { createCreateObligationTool } from "./adapters/openclaw/tools/create_obligation.js";
+export { createCreateTriggerTool } from "./adapters/openclaw/tools/create_trigger.js";
+export { createResolveObligationTool } from "./adapters/openclaw/tools/resolve_obligation.js";
 export { createWhereAmITool } from "./adapters/openclaw/tools/where_am_i.js";
 export { createMyBoardsTool } from "./adapters/openclaw/tools/my_boards.js";
 export { createBoardProjectionTool } from "./adapters/openclaw/tools/board_projection.js";

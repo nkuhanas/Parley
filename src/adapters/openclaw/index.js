@@ -11,6 +11,8 @@ import { createRegisterArtifactTool } from "./tools/register_artifact.js";
 import { createCreateObjectTool } from "./tools/create_object.js";
 import { createRecordEffectTool } from "./tools/record_effect.js";
 import { createCreateObligationTool } from "./tools/create_obligation.js";
+import { createCreateTriggerTool } from "./tools/create_trigger.js";
+import { createResolveObligationTool } from "./tools/resolve_obligation.js";
 import { createWhereAmITool } from "./tools/where_am_i.js";
 import { createMyBoardsTool } from "./tools/my_boards.js";
 import { createBoardProjectionTool } from "./tools/board_projection.js";
@@ -49,6 +51,8 @@ export function registerParleyTools(api) {
   api.registerTool(withRuntimeContext(api, createCreateObjectTool));
   api.registerTool(withRuntimeContext(api, createRecordEffectTool));
   api.registerTool(withRuntimeContext(api, createCreateObligationTool));
+  api.registerTool(withRuntimeContext(api, createCreateTriggerTool));
+  api.registerTool(withRuntimeContext(api, createResolveObligationTool));
   api.registerTool(withRuntimeContext(api, createWhereAmITool));
   api.registerTool(withRuntimeContext(api, createMyBoardsTool));
   api.registerTool(withRuntimeContext(api, createBoardProjectionTool));

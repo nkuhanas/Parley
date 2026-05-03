@@ -28,6 +28,10 @@ export function createObligationId() {
   return `obligation_${compactUuid()}`;
 }
 
+export function createTriggerId() {
+  return `trigger_${compactUuid()}`;
+}
+
 export function createRelationshipId() {
   return `relationship_${compactUuid()}`;
 }

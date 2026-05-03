@@ -16,11 +16,13 @@ export function createCreateObligationTool(api) {
         obligationId: { type: "string", description: "Optional obligation id. Defaults to obligation_<uuid>." },
         agent: { type: "string", description: "Board-local agent id assigned the obligation." },
         type: { type: "string", description: "Obligation type, e.g. review or approve_or_object." },
+        templateId: { type: "string", description: "Optional stable planned/template identity copied into the runtime obligation." },
         status: { type: "string", description: "Obligation status. Defaults to active." },
         target: { type: "object", additionalProperties: true, description: "Obligation target payload." },
         scope: { type: "string", description: "Optional authority/review scope." },
         reason: { type: "string", description: "Optional reason for the obligation." },
-        sourceEffectId: { type: "string", description: "Optional source effect id." }
+        sourceEffectId: { type: "string", description: "Optional source effect id." },
+        onResolveTriggerIds: { type: "array", items: { type: "string" }, description: "Trigger ids evaluated by parley_resolve_obligation when this obligation is resolved." }
       }
     },
     async execute(_toolCallId, params) {
@@ -31,11 +33,13 @@ export function createCreateObligationTool(api) {
         obligation_id: params?.obligationId,
         agent,
         type: params?.type,
+        template_id: params?.templateId,
         status: params?.status,
         target: params?.target,
         scope: params?.scope,
         reason: params?.reason,
-        source_effect_id: params?.sourceEffectId
+        source_effect_id: params?.sourceEffectId,
+        on_resolve_trigger_ids: params?.onResolveTriggerIds
       });
       const saved = await saveObligationRecord(api.pluginConfig, identity.board, obligation);
       return boardResult({ tool: "parley_create_obligation", identity, obligation: saved });

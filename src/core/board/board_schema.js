@@ -46,6 +46,7 @@ export const EFFECT_TYPES = Object.freeze([
   "decision_recorded",
   "obligation_created",
   "obligation_resolved",
+  "trigger_fired",
   "artifact_superseded",
   "relationship_added",
   "relationship_removed",
@@ -76,6 +77,18 @@ export const OBLIGATION_STATUSES = Object.freeze([
   "cancelled",
   "superseded"
 ]);
+export const OBLIGATION_RESOLUTIONS = Object.freeze([
+  "completed",
+  "failed",
+  "blocked",
+  "rejected",
+  "superseded",
+  "cancelled"
+]);
+export const TRIGGER_STATUSES = Object.freeze(["active", "disabled", "retired"]);
+export const TRIGGER_FIRE_POLICIES = Object.freeze(["once", "once_per_source_obligation", "many"]);
+export const TRIGGER_EVENT_TYPES = Object.freeze(["obligation.resolved"]);
+export const TRIGGER_ACTION_TYPES = Object.freeze(["create_obligation", "record_effect"]);
 export const RELATIONSHIP_TYPES = Object.freeze([
   "supersedes",
   "superseded_by",
@@ -216,6 +229,18 @@ function assertFlexibleParticipantArray(value, fieldName) {
   return value.map((item, index) => assertFlexibleParticipant(item, `${fieldName}[${index}]`));
 }
 
+function assertRecordIdArray(value, fieldName, { defaultValue = [] } = {}) {
+  if (value == null) return defaultValue;
+  if (!Array.isArray(value)) throw new Error(`${fieldName} must be an array`);
+  return value.map((item, index) => assertRecordId(item, `${fieldName}[${index}]`));
+}
+
+function assertOptionalEnumArray(value, allowedValues, fieldName) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error(`${fieldName} must be an array`);
+  return value.map((item, index) => assertEnum(item, allowedValues, `${fieldName}[${index}]`));
+}
+
 export function assertActorRecord(value, fieldName = "actor") {
   const raw = assertObject(value, fieldName);
   const validated = {
@@ -297,10 +322,10 @@ function assertReviewTarget(value, fieldName) {
 
 function assertGenericBoardTarget(value, fieldName) {
   const raw = assertNonEmptyObject(value, fieldName);
-  const allowedKeys = ["object_id", "artifact_id", "artifact_version", "plan_id", "phase_id", "relationship_id", "obligation_id", "thread_id", "message_id", "scope"];
+  const allowedKeys = ["object_id", "artifact_id", "artifact_version", "plan_id", "phase_id", "checkpoint_id", "relationship_id", "obligation_id", "trigger_id", "thread_id", "message_id", "scope"];
   assertAllowedKeys(raw, fieldName, allowedKeys);
   const validated = {};
-  for (const key of ["object_id", "artifact_id", "plan_id", "phase_id", "relationship_id", "obligation_id"]) {
+  for (const key of ["object_id", "artifact_id", "plan_id", "phase_id", "checkpoint_id", "relationship_id", "obligation_id", "trigger_id"]) {
     const normalized = assertBoardScopedRefId(raw, key, fieldName);
     if (normalized != null) validated[key] = normalized;
   }
@@ -368,6 +393,7 @@ export function assertEffectTarget(type, value, fieldName = "target") {
       return assertReviewTarget(value, fieldName);
     case "obligation_created":
     case "obligation_resolved":
+    case "trigger_fired":
       return assertGenericBoardTarget(value, fieldName);
     default:
       return assertGenericBoardTarget(value, fieldName);
@@ -392,6 +418,8 @@ export function assertEffectPayload(type, value, fieldName = "payload") {
       return assertKnownPayload(value, fieldName, ["note", "reason", "carry_forward_from_version"]);
     case "decision_recorded":
       return assertKnownPayload(value, fieldName, ["decision", "note", "reason"]);
+    case "trigger_fired":
+      return assertKnownPayload(value, fieldName, ["trigger_id", "source_event_type", "source_obligation_id", "action_type", "created_obligation_id", "created_effect_id", "result", "skipped", "reason"]);
     case "phase_deferred":
       return assertKnownPayload(value, fieldName, ["reason", "activation_conditions", "review_trigger", "non_executing"]);
     default:
@@ -428,6 +456,94 @@ export function assertObligationTarget(type, value, fieldName = "target") {
     return { ...raw };
   }
   return assertGenericBoardTarget(raw, fieldName);
+}
+
+export function assertSubjectRef(value, fieldName = "subject_ref") {
+  if (value == null) return null;
+  const raw = assertObject(value, fieldName);
+  assertAllowedKeys(raw, fieldName, ["kind", "id", "object_id", "artifact_id", "artifact_version", "plan_id", "phase_id", "checkpoint_id", "obligation_id", "thread_id", "message_id"]);
+  const kind = assertNonEmptyString(raw.kind, `${fieldName}.kind`);
+  const validated = { kind };
+  if (raw.id != null) validated.id = assertRecordId(raw.id, `${fieldName}.id`);
+  for (const key of ["object_id", "artifact_id", "plan_id", "phase_id", "checkpoint_id", "obligation_id"]) {
+    const normalized = assertBoardScopedRefId(raw, key, fieldName);
+    if (normalized != null) validated[key] = normalized;
+  }
+  if (raw.artifact_version != null) validated.artifact_version = assertPositiveInteger(raw.artifact_version, `${fieldName}.artifact_version`);
+  if (raw.thread_id != null) validated.thread_id = assertRecordId(raw.thread_id, `${fieldName}.thread_id`);
+  if (raw.message_id != null) validated.message_id = assertRecordId(raw.message_id, `${fieldName}.message_id`);
+  return validated;
+}
+
+function assertTriggerSource(value, fieldName = "source") {
+  const raw = assertObject(value, fieldName);
+  assertAllowedKeys(raw, fieldName, ["event_type", "eventType", "obligation_id", "obligationId", "obligation_template_id", "obligationTemplateId", "subject_ref", "subjectRef"]);
+  return {
+    event_type: assertEnum(raw.event_type ?? raw.eventType, TRIGGER_EVENT_TYPES, `${fieldName}.event_type`),
+    obligation_id: (raw.obligation_id ?? raw.obligationId) == null ? null : assertRecordId(raw.obligation_id ?? raw.obligationId, `${fieldName}.obligation_id`),
+    obligation_template_id: (raw.obligation_template_id ?? raw.obligationTemplateId) == null ? null : assertRecordId(raw.obligation_template_id ?? raw.obligationTemplateId, `${fieldName}.obligation_template_id`),
+    subject_ref: assertSubjectRef(raw.subject_ref ?? raw.subjectRef, `${fieldName}.subject_ref`)
+  };
+}
+
+function assertTriggerCondition(value, fieldName = "condition") {
+  const raw = assertPlainOptionalObject(value, fieldName);
+  assertAllowedKeys(raw, fieldName, ["obligation_resolution_in", "obligationResolutionIn", "subject_status_in", "subjectStatusIn", "required_subject_kind", "requiredSubjectKind"]);
+  return {
+    obligation_resolution_in: assertOptionalEnumArray(raw.obligation_resolution_in ?? raw.obligationResolutionIn, OBLIGATION_RESOLUTIONS, `${fieldName}.obligation_resolution_in`),
+    subject_status_in: (raw.subject_status_in ?? raw.subjectStatusIn) == null ? [] : assertStringArray(raw.subject_status_in ?? raw.subjectStatusIn, `${fieldName}.subject_status_in`),
+    required_subject_kind: assertOptionalString(raw.required_subject_kind ?? raw.requiredSubjectKind, `${fieldName}.required_subject_kind`)
+  };
+}
+
+function assertTriggerAction(value, fieldName = "action") {
+  const raw = assertObject(value, fieldName);
+  const type = assertEnum(raw.type, TRIGGER_ACTION_TYPES, `${fieldName}.type`);
+  if (type === "create_obligation") {
+    const obligation = assertObject(raw.obligation, `${fieldName}.obligation`);
+    const obligationType = obligation.type ?? obligation.obligation_type ?? obligation.obligationType;
+    return {
+      type,
+      obligation: {
+        obligation_id: (obligation.obligation_id ?? obligation.obligationId) == null ? null : assertRecordId(obligation.obligation_id ?? obligation.obligationId, `${fieldName}.obligation.obligation_id`),
+        template_id: (obligation.template_id ?? obligation.templateId) == null ? null : assertRecordId(obligation.template_id ?? obligation.templateId, `${fieldName}.obligation.template_id`),
+        agent: assertBoardAgentId(obligation.agent, `${fieldName}.obligation.agent`),
+        type: assertEnum(obligationType, OBLIGATION_TYPES, `${fieldName}.obligation.type`),
+        status: assertEnum(obligation.status ?? "active", OBLIGATION_STATUSES, `${fieldName}.obligation.status`),
+        target: assertObligationTarget(obligationType, obligation.target ?? {}, `${fieldName}.obligation.target`),
+        scope: assertOptionalString(obligation.scope, `${fieldName}.obligation.scope`),
+        reason: assertOptionalString(obligation.reason, `${fieldName}.obligation.reason`),
+        on_resolve_trigger_ids: assertRecordIdArray(obligation.on_resolve_trigger_ids ?? obligation.onResolveTriggerIds, `${fieldName}.obligation.on_resolve_trigger_ids`)
+      }
+    };
+  }
+  const effect = assertObject(raw.effect, `${fieldName}.effect`);
+  const effectType = assertEnum(effect.type, EFFECT_TYPES, `${fieldName}.effect.type`);
+  return {
+    type,
+    effect: {
+      effect_id: (effect.effect_id ?? effect.effectId) == null ? null : assertRecordId(effect.effect_id ?? effect.effectId, `${fieldName}.effect.effect_id`),
+      type: effectType,
+      target: assertEffectTarget(effectType, effect.target ?? {}, `${fieldName}.effect.target`),
+      payload: assertEffectPayload(effectType, effect.payload ?? {}, `${fieldName}.effect.payload`)
+    }
+  };
+}
+
+export function assertTriggerRecord(record) {
+  const raw = assertObject(record, "trigger record");
+  return {
+    board_id: assertBoardId(raw.board_id),
+    trigger_id: assertRecordId(raw.trigger_id, "trigger_id"),
+    title: assertNonEmptyString(raw.title, "title"),
+    status: assertEnum(raw.status ?? "active", TRIGGER_STATUSES, "status"),
+    source: assertTriggerSource(raw.source, "source"),
+    condition: assertTriggerCondition(raw.condition ?? {}, "condition"),
+    action: assertTriggerAction(raw.action, "action"),
+    fire_policy: assertEnum(raw.fire_policy ?? raw.firePolicy ?? "once", TRIGGER_FIRE_POLICIES, "fire_policy"),
+    created_at: assertIsoTimestamp(raw.created_at, "created_at"),
+    updated_at: assertIsoTimestamp(raw.updated_at, "updated_at")
+  };
 }
 
 function assertStringArray(value, fieldName) {
@@ -520,11 +636,16 @@ export function assertObligationRecord(record) {
     obligation_id: assertRecordId(raw.obligation_id, "obligation_id"),
     agent: assertBoardAgentId(raw.agent, "agent"),
     type,
+    template_id: raw.template_id == null ? null : assertRecordId(raw.template_id, "template_id"),
     status: assertEnum(raw.status ?? "active", OBLIGATION_STATUSES, "status"),
+    resolution: raw.resolution == null ? null : assertEnum(raw.resolution, OBLIGATION_RESOLUTIONS, "resolution"),
+    resolution_note: assertOptionalString(raw.resolution_note, "resolution_note"),
+    resolved_at: raw.resolved_at == null ? null : assertIsoTimestamp(raw.resolved_at, "resolved_at"),
     target: assertObligationTarget(type, raw.target ?? {}, "target"),
     scope: assertOptionalString(raw.scope, "scope"),
     reason: assertOptionalString(raw.reason, "reason"),
     source_effect_id: assertOptionalString(raw.source_effect_id, "source_effect_id"),
+    on_resolve_trigger_ids: assertRecordIdArray(raw.on_resolve_trigger_ids, "on_resolve_trigger_ids"),
     created_at: assertIsoTimestamp(raw.created_at, "created_at"),
     updated_at: assertIsoTimestamp(raw.updated_at, "updated_at")
   };

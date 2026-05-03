@@ -82,12 +82,17 @@ function summarizeObligation(obligation) {
     obligation_id: obligation.obligation_id,
     agent: obligation.agent,
     type: obligation.type,
+    template_id: obligation.template_id,
     status: obligation.status,
+    resolution: obligation.resolution,
+    resolution_note: obligation.resolution_note,
+    resolved_at: obligation.resolved_at,
     priority: obligation.priority,
     target: summarizeValue(obligation.target),
     scope: obligation.scope,
     reason: obligation.reason,
     source_effect_id: obligation.source_effect_id,
+    on_resolve_trigger_ids: obligation.on_resolve_trigger_ids,
     created_at: obligation.created_at,
     updated_at: obligation.updated_at
   }).filter(([, value]) => value !== undefined));

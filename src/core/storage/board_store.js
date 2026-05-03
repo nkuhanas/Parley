@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { resolveParleyBoardRegistry } from "../config.js";
 import { compareEffectRecords } from "../effect_ordering.js";
-import { createArtifactId, createEffectId, createObjectId, createObligationId, createRelationshipId } from "../ids.js";
+import { createArtifactId, createEffectId, createObjectId, createObligationId, createRelationshipId, createTriggerId } from "../ids.js";
 import { assertPlanSetupRecord } from "../plan/plan_state.js";
 import { nowIso } from "../time.js";
 import {
@@ -16,6 +16,7 @@ import {
   assertProjectionCheckpointRecord,
   assertRecordId,
   assertRelationshipRecord,
+  assertTriggerRecord,
   assertEnum,
   PROJECTION_TYPES
 } from "../board/board_schema.js";
@@ -103,6 +104,7 @@ export async function ensureParleyBoardLayout(pluginConfig = {}, board) {
     ensureDir(path.join(targetBoard.state_root, "effects")),
     ensureDir(path.join(targetBoard.state_root, "obligations")),
     ensureDir(path.join(targetBoard.state_root, "relationships")),
+    ensureDir(path.join(targetBoard.state_root, "triggers")),
     ensureDir(path.join(targetBoard.state_root, "plans")),
     ensureDir(path.join(targetBoard.state_root, "checkpoints")),
     ensureDir(path.join(targetBoard.state_root, "index"))
@@ -165,11 +167,32 @@ export function createObligationRecord(input) {
     obligation_id: input?.obligation_id ?? createObligationId(),
     agent: input?.agent,
     type: input?.type,
+    template_id: input?.template_id ?? null,
     status: input?.status ?? "active",
+    resolution: input?.resolution ?? null,
+    resolution_note: input?.resolution_note ?? null,
+    resolved_at: input?.resolved_at ?? null,
     target: input?.target ?? {},
     scope: input?.scope ?? null,
     reason: input?.reason ?? null,
     source_effect_id: input?.source_effect_id ?? null,
+    on_resolve_trigger_ids: input?.on_resolve_trigger_ids ?? [],
+    created_at: timestamp,
+    updated_at: input?.updated_at ?? timestamp
+  });
+}
+
+export function createTriggerRecord(input) {
+  const timestamp = input?.created_at ?? nowIso();
+  return assertTriggerRecord({
+    board_id: input?.board_id,
+    trigger_id: input?.trigger_id ?? createTriggerId(),
+    title: input?.title,
+    status: input?.status ?? "active",
+    source: input?.source,
+    condition: input?.condition ?? {},
+    action: input?.action,
+    fire_policy: input?.fire_policy ?? "once",
     created_at: timestamp,
     updated_at: input?.updated_at ?? timestamp
   });
@@ -242,6 +265,11 @@ export async function saveObligationRecord(pluginConfig, board, record) {
   return saveRecord(pluginConfig, board, "obligations", validated.obligation_id, validated, assertObligationRecord);
 }
 
+export async function saveTriggerRecord(pluginConfig, board, record) {
+  const validated = assertTriggerRecord(record);
+  return saveRecord(pluginConfig, board, "triggers", validated.trigger_id, validated, assertTriggerRecord);
+}
+
 export async function saveRelationshipRecord(pluginConfig, board, record) {
   const validated = assertRelationshipRecord(record);
   return saveRecord(pluginConfig, board, "relationships", validated.relationship_id, validated, assertRelationshipRecord);
@@ -274,6 +302,16 @@ export async function loadEffectRecord(_pluginConfig, board, effectId) {
   return raw == null ? null : assertEffectRecord(raw);
 }
 
+export async function loadObligationRecord(_pluginConfig, board, obligationId) {
+  const raw = await readJsonFile(recordPath(board, "obligations", obligationId));
+  return raw == null ? null : assertObligationRecord(raw);
+}
+
+export async function loadTriggerRecord(_pluginConfig, board, triggerId) {
+  const raw = await readJsonFile(recordPath(board, "triggers", triggerId));
+  return raw == null ? null : assertTriggerRecord(raw);
+}
+
 export async function loadRelationshipRecord(_pluginConfig, board, relationshipId) {
   const raw = await readJsonFile(recordPath(board, "relationships", relationshipId));
   return raw == null ? null : assertRelationshipRecord(raw);
@@ -303,6 +341,10 @@ export async function listEffectRecords(_pluginConfig, board) {
 
 export async function listObligationRecords(_pluginConfig, board) {
   return listRecords(board, "obligations", assertObligationRecord);
+}
+
+export async function listTriggerRecords(_pluginConfig, board) {
+  return listRecords(board, "triggers", assertTriggerRecord);
 }
 
 export async function listRelationshipRecords(_pluginConfig, board) {
