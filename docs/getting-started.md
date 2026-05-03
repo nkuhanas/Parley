@@ -78,4 +78,4 @@ parley_query_search({
 
 `parley_query` and `parley_mutate` remain available as advanced facades for compatibility or single-dispatch callers, but the preferred agent-facing path is the first-class tool whose name matches the operation.
 
-Tool responses include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Guidance text lives in the OpenClaw adapter guidance catalog so operational wording can change without searching through every tool implementation.
+Tool responses include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Obligation responses include derived `priority` labels, and `needs_my_action` lists sort by priority before age so agents know what to inspect first. Guidance text lives in the OpenClaw adapter guidance catalog so operational wording can change without searching through every tool implementation.

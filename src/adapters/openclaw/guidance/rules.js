@@ -1,4 +1,5 @@
 import { GUIDANCE_TEXT } from "./catalog.js";
+import { obligationPriorityRank } from "../tools/obligation_priority.js";
 
 function clean(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -145,9 +146,42 @@ function threadNext(details) {
   return next;
 }
 
+function whereAmIObligationNext(details, boardId) {
+  const summary = details?.obligation_summary ?? details?.result?.obligation_summary ?? null;
+  if (summary == null) return [];
+  const runtimePriority = summary.runtime?.highest_priority ?? null;
+  const boardPriority = summary.board?.highest_priority ?? null;
+  const runtimeCount = summary.runtime?.needs_action ?? 0;
+  const boardCount = summary.board?.needs_action ?? 0;
+  const runtimeWins = runtimePriority != null && runtimeCount > 0 && (boardPriority == null || obligationPriorityRank(runtimePriority) <= obligationPriorityRank(boardPriority));
+  const boardWins = boardPriority != null && boardCount > 0;
+  const next = [];
+  if (runtimeWins) {
+    pushNext(next, {
+      tool: "parley_query_runtime_obligations",
+      args: { filter: "needs_my_action" },
+      reason: GUIDANCE_TEXT.nextReasons.inspect_runtime_obligations
+    });
+    return next;
+  }
+  if (boardWins && boardId) {
+    pushNext(next, {
+      tool: "parley_query_board_obligations",
+      args: { boardId, filter: "needs_my_action" },
+      reason: GUIDANCE_TEXT.nextReasons.inspect_board_obligations
+    });
+  }
+  return next;
+}
+
 function boardNext(details, boardId) {
   const next = [];
   if (!boardId) return next;
+
+  if (details?.tool === "parley_where_am_i" || details?.action === "where_am_i") {
+    const obligationNext = whereAmIObligationNext(details, boardId);
+    if (obligationNext.length > 0) return obligationNext;
+  }
 
   if (runtimeNeedsActionCount(details) > 0) {
     pushNext(next, {

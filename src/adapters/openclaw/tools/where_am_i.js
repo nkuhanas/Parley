@@ -10,6 +10,7 @@ import {
   loadEffectRecord
 } from "../../../core/storage/board_store.js";
 import { runtimeObligationsForCaller } from "./obligations.js";
+import { decorateBoardObligationItem, obligationPrioritySummary, sortBoardObligationItemsByPriority } from "./obligation_priority.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 const ACTIVE_STATUSES = new Set(["active", "blocking", "waiting", "deferred"]);
@@ -55,6 +56,7 @@ function compactRuntimeObligation(obligation) {
     obligation_id: obligation.obligation_id,
     type: obligation.type,
     status: obligation.status,
+    priority: obligation.priority,
     agent: obligation.agent,
     target: compactTarget(obligation.target),
     reason: obligation.reason
@@ -67,6 +69,7 @@ function compactBoardObligation(item) {
     obligation_id: obligation.obligation_id,
     type: obligation.type,
     status: obligation.status,
+    priority: obligation.priority,
     agent: obligation.agent,
     scope: obligation.scope ?? null,
     target: compactTarget(obligation.target),
@@ -195,6 +198,34 @@ function compactBoardProjection(projection) {
   };
 }
 
+function boardProjectionObligations(projection) {
+  return [
+    ...(projection?.blocking_obligations ?? []),
+    ...(projection?.active_obligations ?? []),
+    ...(projection?.waiting_obligations ?? []),
+    ...(projection?.deferred_obligations ?? []),
+    ...(projection?.other_visible_obligations ?? [])
+  ]
+    .map((item) => item.obligation ?? item)
+    .filter((obligation) => !TERMINAL_STATUSES.has(obligation?.status));
+}
+
+function buildObligationSummary(runtimeObligations, boardProjection = null) {
+  const runtimeSummary = obligationPrioritySummary(runtimeObligations);
+  const boardObligations = boardProjection == null ? [] : boardProjectionObligations(boardProjection);
+  const boardSummary = obligationPrioritySummary(boardObligations);
+  return {
+    runtime: {
+      needs_action: runtimeObligations.length,
+      highest_priority: runtimeSummary.highest_priority
+    },
+    board: boardProjection == null ? undefined : {
+      needs_action: boardObligations.length,
+      highest_priority: boardSummary.highest_priority
+    }
+  };
+}
+
 function boardNextActions({ blocking, active, waiting, deferred, activationCandidates, humanCheckpoints, deferredPhases, projection }) {
   const actions = [];
   if (blocking.length > 0) actions.push(`Handle ${blocking.length} blocking board obligation(s).`);
@@ -250,14 +281,15 @@ async function boardWhereAmIProjection(api, identity, params) {
   for (const obligation of visible) {
     enriched.push(await enrichObligation(api.pluginConfig, identity.board, obligation));
   }
+  const triaged = sortBoardObligationItemsByPriority(enriched.map(decorateBoardObligationItem));
   return {
     board_id: identity.board_id,
     board_agent_id: identity.board_agent_id,
-    blocking_obligations: enriched.filter((item) => item.obligation.status === "blocking"),
-    active_obligations: enriched.filter((item) => item.obligation.status === "active"),
-    waiting_obligations: enriched.filter((item) => item.obligation.status === "waiting"),
-    deferred_obligations: enriched.filter((item) => item.obligation.status === "deferred"),
-    other_visible_obligations: enriched.filter((item) => !ACTIVE_STATUSES.has(item.obligation.status)),
+    blocking_obligations: triaged.filter((item) => item.obligation.status === "blocking"),
+    active_obligations: triaged.filter((item) => item.obligation.status === "active"),
+    waiting_obligations: triaged.filter((item) => item.obligation.status === "waiting"),
+    deferred_obligations: triaged.filter((item) => item.obligation.status === "deferred"),
+    other_visible_obligations: triaged.filter((item) => !ACTIVE_STATUSES.has(item.obligation.status)),
     stale_approvals: staleApprovals,
     activation_candidates_needing_attention: activationCandidates.filter((candidate) => candidate.review_required_from.includes(identity.board_agent_id) || candidate.attention_owner === identity.board_agent_id),
     activation_proposals_you_made: activationCandidates.filter((candidate) => candidate.proposed_by === identity.board_agent_id),
@@ -265,11 +297,11 @@ async function boardWhereAmIProjection(api, identity, params) {
     human_checkpoints_to_shepherd: humanCheckpoints,
     counts: {
       assigned: assigned.length,
-      visible: enriched.length,
-      blocking: enriched.filter((item) => item.obligation.status === "blocking").length,
-      active: enriched.filter((item) => item.obligation.status === "active").length,
-      waiting: enriched.filter((item) => item.obligation.status === "waiting").length,
-      deferred: enriched.filter((item) => item.obligation.status === "deferred").length,
+      visible: triaged.length,
+      blocking: triaged.filter((item) => item.obligation.status === "blocking").length,
+      active: triaged.filter((item) => item.obligation.status === "active").length,
+      waiting: triaged.filter((item) => item.obligation.status === "waiting").length,
+      deferred: triaged.filter((item) => item.obligation.status === "deferred").length,
       stale_approvals: staleApprovals.length,
       activation_candidates: activationCandidates.length,
       deferred_phases_owned_not_actionable: deferredPhases.length,
@@ -296,6 +328,7 @@ export function createWhereAmITool(api) {
     async execute(_toolCallId, params) {
       const verbosity = normalizeVerbosity(params?.verbosity);
       const runtime = await runtimeObligationsForCaller(api, params);
+      const runtimePrioritySummary = obligationPrioritySummary(runtime.obligations);
       const fullRuntimeSection = {
         identity: runtime.identity,
         participant_ids: runtime.participant_ids,
@@ -303,7 +336,9 @@ export function createWhereAmITool(api) {
         counts: {
           obligations: runtime.obligations.length,
           active: runtime.obligations.filter((obligation) => obligation.status === "active").length,
-          blocking: runtime.obligations.filter((obligation) => obligation.status === "blocking").length
+          blocking: runtime.obligations.filter((obligation) => obligation.status === "blocking").length,
+          by_priority: runtimePrioritySummary.by_priority,
+          highest_priority: runtimePrioritySummary.highest_priority
         }
       };
       const compactRuntimeSection = {
@@ -330,12 +365,14 @@ export function createWhereAmITool(api) {
           scope: "runtime",
           verbosity,
           runtime: verbosity === "full" ? fullRuntimeSection : compactRuntimeSection,
-          boards: verbosity === "full" ? fullBoardsSection : compactBoardsSection
+          boards: verbosity === "full" ? fullBoardsSection : compactBoardsSection,
+          obligation_summary: buildObligationSummary(runtime.obligations)
         }, { summarize: verbosity !== "full" });
       }
 
       const identity = resolveToolCaller(api, params);
       const fullProjection = await boardWhereAmIProjection(api, identity, params);
+      const obligationSummary = buildObligationSummary(runtime.obligations, fullProjection);
       if (verbosity === "full") {
         return boardResult({
           tool: "parley_where_am_i",
@@ -347,6 +384,7 @@ export function createWhereAmITool(api) {
             identity,
             projection: fullProjection
           },
+          obligation_summary: obligationSummary,
           identity,
           projection: fullProjection
         }, { summarize: false });
@@ -364,6 +402,7 @@ export function createWhereAmITool(api) {
           identity: compactIdentity,
           projection: compactProjection
         },
+        obligation_summary: obligationSummary,
         identity: compactIdentity,
         projection: compactProjection
       });

@@ -7,6 +7,13 @@ import {
 import { listThreadRecords } from "../../../core/storage/store.js";
 import { resolveCallerBoardMemberships } from "../../../core/board/board.js";
 import { createValidationError, BOARD_OBLIGATION_TARGET_KINDS, BOARD_OBLIGATION_TARGET_KIND_ALIASES, OBLIGATION_FILTERS } from "./descriptors.js";
+import {
+  decorateBoardObligationItem,
+  decorateRuntimeObligation,
+  obligationPrioritySummary,
+  sortBoardObligationItemsByPriority,
+  sortObligationsByPriority
+} from "./obligation_priority.js";
 import { boardResult, callerRuntimeAliasesFromToolContext, callerRuntimeRefFromToolContext, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 const TERMINAL_STATUSES = new Set(["resolved", "cancelled", "superseded"]);
@@ -130,6 +137,8 @@ function runtimeObligationsForThread(thread, participantIds) {
       agent: thread.next_action_owner,
       target: { kind: "thread", thread_id: thread.thread_id },
       reason: "caller is the thread next_action_owner",
+      created_at: thread.created_at,
+      updated_at: thread.updated_at,
       thread
     });
   }
@@ -147,6 +156,8 @@ function runtimeObligationsForThread(thread, participantIds) {
       agent: thread.initiator,
       target: { kind: "thread", thread_id: thread.thread_id },
       reason: "human-origin summary thread needs a human-visible summary anchor",
+      created_at: thread.created_at,
+      updated_at: thread.updated_at,
       thread
     });
   }
@@ -157,7 +168,7 @@ export async function runtimeObligationsForCaller(api, params = {}) {
   const identity = resolveRuntimeIdentity(api, params);
   const participantIds = runtimeParticipantIds(identity);
   const threads = await listThreadRecords(api.pluginConfig);
-  const obligations = threads.flatMap((thread) => runtimeObligationsForThread(thread, participantIds));
+  const obligations = sortObligationsByPriority(threads.flatMap((thread) => runtimeObligationsForThread(thread, participantIds)).map(decorateRuntimeObligation));
   return {
     identity,
     participant_ids: [...participantIds],
@@ -188,6 +199,7 @@ export function createRuntimeObligationsQueryAction(api) {
         return NEEDS_MY_ACTION_STATUSES.has(obligation.status) && !TERMINAL_STATUSES.has(obligation.status);
       });
       const returned = matched.slice(0, limit);
+      const prioritySummary = obligationPrioritySummary(matched);
       return boardResult({
         tool: "parley_query_runtime_obligations",
         identity: runtime.identity,
@@ -198,7 +210,9 @@ export function createRuntimeObligationsQueryAction(api) {
           returned: returned.length,
           truncated: matched.length > returned.length,
           by_status: countBy(matched, "status"),
-          by_type: countBy(matched, "type")
+          by_type: countBy(matched, "type"),
+          by_priority: prioritySummary.by_priority,
+          highest_priority: prioritySummary.highest_priority
         },
         obligations: returned
       });
@@ -240,15 +254,16 @@ export function createBoardObligationsQueryAction(api) {
       const artifactsById = byId(artifacts, "artifact_id");
       const objectsById = byId(objects, "object_id");
       const targetKindSet = new Set(targetKinds);
-      const matched = obligations
+      const matched = sortBoardObligationItemsByPriority(obligations
         .filter((obligation) => includeBoardObligationByFilter(obligation, identity, filter))
-        .map((obligation) => ({ obligation, target_kinds: boardTargetKindsForObligation(obligation) }))
-        .filter((item) => targetKindSet.size === 0 || item.target_kinds.some((kind) => targetKindSet.has(kind)));
+        .map((obligation) => decorateBoardObligationItem({ obligation, target_kinds: boardTargetKindsForObligation(obligation) }))
+        .filter((item) => targetKindSet.size === 0 || item.target_kinds.some((kind) => targetKindSet.has(kind))));
       const returned = matched.slice(0, limit).map((item) => {
         const sourceEffect = item.obligation.source_effect_id == null ? null : effectsById.get(item.obligation.source_effect_id) ?? null;
         const objectId = item.obligation.target?.object_id ?? sourceEffect?.target?.object_id ?? null;
         const artifactId = item.obligation.target?.artifact_id ?? sourceEffect?.target?.artifact_id ?? null;
         return {
+          priority: item.priority,
           obligation: item.obligation,
           target_kinds: item.target_kinds,
           source_effect: sourceEffect,
@@ -268,6 +283,7 @@ export function createBoardObligationsQueryAction(api) {
           }
         };
       });
+      const prioritySummary = obligationPrioritySummary(matched.map((item) => item.obligation));
       return boardResult({
         tool: "parley_query_board_obligations",
         identity,
@@ -281,7 +297,9 @@ export function createBoardObligationsQueryAction(api) {
           returned: returned.length,
           truncated: matched.length > returned.length,
           by_status: countBy(matched.map((item) => item.obligation), "status"),
-          by_type: countBy(matched.map((item) => item.obligation), "type")
+          by_type: countBy(matched.map((item) => item.obligation), "type"),
+          by_priority: prioritySummary.by_priority,
+          highest_priority: prioritySummary.highest_priority
         },
         obligations: returned
       });

@@ -26,7 +26,7 @@ src/
 
 `src/adapters/openclaw` exposes OpenClaw plugin registration and tool factories. The adapter translates OpenClaw caller context into Parley runtime refs, then delegates to core logic.
 
-The `guidance/` package centralizes agent-facing response text and next-call guidance. Tool implementations should return structured facts; shared response helpers enrich those facts with compact `ok`, `summary`, `guidance`, and `diagnostics` fields. Avoid scattering prompt-like/plaintext operational guidance through individual tool files.
+The `guidance/` package centralizes agent-facing response text and next-call guidance. Tool implementations should return structured facts; shared response helpers enrich those facts with compact `ok`, `summary`, `guidance`, and `diagnostics` fields. Obligation priority is derived by shared obligation helpers before guidance chooses which obligation class to inspect first. Avoid scattering prompt-like/plaintext operational guidance through individual tool files.
 
 ## Public entrypoints
 

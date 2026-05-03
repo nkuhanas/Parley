@@ -174,6 +174,7 @@ export function runtimeObligationsDescriptor() {
       filter: { type: "string", enum: [...OBLIGATION_FILTERS], default: "needs_my_action" },
       limit: { type: "integer", minimum: 0, maximum: 200, default: 50 }
     },
+    output_priority: "Returned obligations include derived priority labels; needs_my_action results are sorted by priority, then age. Runtime turn/reply obligations default to high or critical priority because they can block coordination.",
     target_scope: "runtime",
     target_kinds: [...RUNTIME_TARGET_KINDS],
     examples: [
@@ -200,6 +201,7 @@ export function boardObligationsDescriptor() {
       all: "All matching board obligations on the board, regardless of assignee."
     },
     target_scope: "board",
+    output_priority: "Returned obligations include derived priority labels; needs_my_action results are sorted by priority, then age. Blocking obligations and review/human-gate obligations rank above normal implementation or awareness work.",
     targetKinds: [...BOARD_OBLIGATION_TARGET_KINDS],
     examples: [
       { description: "Find plan obligations needing my action.", call: { boardId: "project", filter: "needs_my_action", targetKinds: ["plans"] } },

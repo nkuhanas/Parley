@@ -77,6 +77,14 @@ Use `parley_query_search({ boardId, query, namespaces })` to search board-regist
 
 `parley_query` and `parley_mutate` are advanced compatibility facades over first-class read/write tools. Prefer first-class tools in agent-facing workflows because the tool name should match the caller's operational intent.
 
+## Obligation priority
+
+Runtime and board obligation outputs include a derived `priority` label: `critical`, `high`, `normal`, or `low`. Priority is operational sequencing, not a full scheduler. `needs_my_action` obligation lists sort by priority first, then age.
+
+Runtime turn/reply obligations rank high by default because they can block the coordination protocol. Board obligations derive priority from status and type: blocking, review, approval/objection, validation, and human-gate obligations rank above ordinary implementation/status work; passive awareness ranks low.
+
+`where_am_i` includes an `obligation_summary` and uses it when choosing whether guidance should point first at runtime obligations or board obligations.
+
 ## Agent-facing output protocol
 
 Parley tool responses are coordination-service responses, not raw developer API returns. A successful response includes compact state plus `ok`, `summary`, optional `guidance.next`, optional `guidance.avoid`, and safe `diagnostics` such as tool/action/board/agent context. Operational guidance text is centralized under `src/adapters/openclaw/guidance/` rather than embedded throughout tool implementations.

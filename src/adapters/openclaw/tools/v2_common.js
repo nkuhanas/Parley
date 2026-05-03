@@ -83,6 +83,7 @@ function summarizeObligation(obligation) {
     agent: obligation.agent,
     type: obligation.type,
     status: obligation.status,
+    priority: obligation.priority,
     target: summarizeValue(obligation.target),
     scope: obligation.scope,
     reason: obligation.reason,

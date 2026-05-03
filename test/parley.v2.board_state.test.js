@@ -592,6 +592,9 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
     });
     assert.equal(obligationsResult.details.action, "board_obligations");
     assert.equal(obligationsResult.details.result.counts.matched, 1);
+    assert.equal(obligationsResult.details.result.counts.highest_priority, "low");
+    assert.equal(obligationsResult.details.result.obligations[0].priority, "low");
+    assert.equal(obligationsResult.details.result.obligations[0].obligation.priority, "low");
     assert.deepEqual(obligationsResult.details.result.obligations[0].target_kinds, ["plans"]);
 
     await fs.writeFile(path.join(pluginConfig.__tempRoot, "refs", "namespace-search.md"), "Namespace routed recovery needle for Parley query search.\n", "utf8");
@@ -701,6 +704,8 @@ test("Parley runtime obligations remain separate from board obligations", async 
       action: "runtime_obligations"
     });
     assert.equal(runtimeResult.details.result.counts.matched, 1);
+    assert.equal(runtimeResult.details.result.counts.highest_priority, "high");
+    assert.equal(runtimeResult.details.result.obligations[0].priority, "high");
     assert.equal(runtimeResult.details.result.obligations[0].target.kind, "thread");
     assert.equal(runtimeResult.details.result.obligations[0].target.thread_id, "thread_runtime_action");
 
@@ -709,6 +714,8 @@ test("Parley runtime obligations remain separate from board obligations", async 
       action: "where_am_i"
     });
     assert.equal(whereResult.details.result.runtime.obligations.length, 1);
+    assert.equal(whereResult.details.result.runtime.obligations[0].priority, "high");
+    assert.equal(whereResult.details.result.obligation_summary.runtime.highest_priority, "high");
     assert.equal(whereResult.details.result.boards.default_board, "project");
 
     await assert.rejects(
@@ -1289,6 +1296,8 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(whereResult.details.identity.board_agent_id, "parley-agent");
     assert.equal(whereResult.details.projection.counts.blocking, 1);
     assert.equal(whereResult.details.projection.blocking_obligations[0].obligation_id, "obligation_demo");
+    assert.equal(whereResult.details.projection.blocking_obligations[0].priority, "high");
+    assert.equal(whereResult.details.obligation_summary.board.highest_priority, "high");
     assert.equal(whereResult.details.projection.blocking_obligations[0].source_refs.source_thread_id, "thread_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].source_refs.source_message_id, "message_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].object.object_id, "object_demo");

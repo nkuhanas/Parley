@@ -207,7 +207,7 @@ Prefer first-class tools for normal agent work:
 
 `parley_query` and `parley_mutate` remain advanced compatibility facades over those operations.
 
-Parley tool outputs are agent-facing coordination responses. They include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
+Parley tool outputs are agent-facing coordination responses. They include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Obligation outputs also include derived `priority` labels (`critical`, `high`, `normal`, `low`), and `needs_my_action` lists sort by priority, then age. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
 
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 
