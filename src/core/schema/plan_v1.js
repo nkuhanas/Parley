@@ -12,6 +12,7 @@ export const PARLEY_PLAN_V1_ARTIFACT_KIND = "plan";
 
 export const PLAN_PRIORITIES = Object.freeze(["low", "normal", "high", "urgent"]);
 export const PLAN_PHASE_STATUSES = Object.freeze([
+  "draft",
   "proposed",
   "ready",
   "active",

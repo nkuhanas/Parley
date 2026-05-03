@@ -1,6 +1,9 @@
 import { createCreateObjectTool } from "./create_object.js";
 import { createCreateObligationTool } from "./create_obligation.js";
 import { createCreatePlanAction } from "./create_plan.js";
+import { createWritePlanOverviewAction } from "./write_plan_overview.js";
+import { createAddPlanPhaseAction } from "./add_plan_phase.js";
+import { createAddPlanCheckpointAction } from "./add_plan_checkpoint.js";
 import { createRecordEffectTool } from "./record_effect.js";
 import { createRecordRelationshipTool } from "./record_relationship.js";
 import { createRemoveRelationshipTool } from "./remove_relationship.js";
@@ -15,7 +18,10 @@ const MUTATE_TOOL_FACTORIES = {
   create_obligation: createCreateObligationTool,
   record_relationship: createRecordRelationshipTool,
   remove_relationship: createRemoveRelationshipTool,
-  create_plan: createCreatePlanAction
+  create_plan: createCreatePlanAction,
+  write_plan_overview: createWritePlanOverviewAction,
+  add_plan_phase: createAddPlanPhaseAction,
+  add_plan_checkpoint: createAddPlanCheckpointAction
 };
 
 function pickSharedParams(params) {
@@ -65,7 +71,7 @@ export function createMutateTool(api) {
         boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         action: {
           type: "string",
-          description: "Write action. Supported now: register_artifact, create_object, record_effect, create_obligation, record_relationship, remove_relationship, create_plan."
+          description: "Write action. Supported now: register_artifact, create_object, record_effect, create_obligation, record_relationship, remove_relationship, create_plan, write_plan_overview, add_plan_phase, add_plan_checkpoint."
         },
         input: {
           type: "object",

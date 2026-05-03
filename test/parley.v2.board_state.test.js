@@ -120,6 +120,58 @@ function toolApi(pluginConfig) {
   return { pluginConfig };
 }
 
+async function createGuidedPlan(mutateTool, input = {}) {
+  const planId = input.planId ?? "plan_guided_test";
+  const createResult = await mutateTool.execute(null, {
+    callerRuntimeRef: input.callerRuntimeRef ?? AGENT_RUNTIME_REF,
+    boardId: input.boardId ?? "project",
+    action: "create_plan",
+    input: {
+      planId,
+      title: input.title ?? "Guided Test Plan",
+      authority: "implementation-plan",
+      landingSubpath: input.landingSubpath ?? "agent-comms/parley",
+      filename: input.filename ?? `${planId}.md`,
+      participants: input.participants ?? ["parley-agent", "human:sensei"]
+    }
+  });
+  await mutateTool.execute(null, {
+    callerRuntimeRef: input.callerRuntimeRef ?? AGENT_RUNTIME_REF,
+    boardId: input.boardId ?? "project",
+    action: "write_plan_overview",
+    input: {
+      planId,
+      purpose: input.purpose ?? "Verify guided plan setup.",
+      background: input.background ?? "Plans are assembled through narrow Parley mutations.",
+      scopeSummary: input.scopeSummary ?? "Exercise plan setup.",
+      inScope: input.inScope ?? ["Create a namespaced plan projection"],
+      outOfScope: input.outOfScope ?? ["Execute deferred work"],
+      currentState: input.currentState ?? "No complete plan has been assembled yet.",
+      targetState: input.targetState ?? "A valid generated projection exists.",
+      approach: input.approach ?? "Create shell, write overview, add phase.",
+      acceptanceCriteria: input.acceptanceCriteria ?? ["The file exists", "Validation succeeds"],
+      risksAndConstraints: input.risksAndConstraints ?? ["Keep this non-executing."]
+    }
+  });
+  const phaseResult = await mutateTool.execute(null, {
+    callerRuntimeRef: input.callerRuntimeRef ?? AGENT_RUNTIME_REF,
+    boardId: input.boardId ?? "project",
+    action: "add_plan_phase",
+    input: input.phase ?? {
+      planId,
+      phaseId: "phase_1",
+      title: "Initial Phase",
+      owner: "parley-agent",
+      status: "draft",
+      entryCriteria: ["Plan shell exists."],
+      work: ["Validate generated projection."],
+      exitCriteria: ["Projection validates."],
+      supportingAgents: []
+    }
+  });
+  return { createResult, phaseResult, planId };
+}
+
 test("Parley v2 identity resolves a configured runtime ref to one board agent", async () => {
   await withPluginConfig(async (pluginConfig) => {
     assert.throws(
@@ -791,8 +843,9 @@ test("Parley describe provides fresh-agent discovery and board metadata", async 
 
     const createPlan = await describeTool.execute(null, { topic: "mutate.create_plan" });
     assert.equal(createPlan.details.descriptor.tool, "parley_create_plan");
-    assert.ok(createPlan.details.descriptor.required_fields.includes("scope"));
-    assert.match(createPlan.details.descriptor.plan_namespace_behavior[0], /plan_landing/);
+    assert.deepEqual(createPlan.details.descriptor.required_fields, ["boardId", "title"]);
+    assert.ok(createPlan.details.descriptor.setup_tools.includes("parley_add_plan_phase"));
+    assert.match(createPlan.details.descriptor.design_rule, /guided, narrow/);
 
     const identity = await describeTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, topic: "boards/identity" });
     assert.match(identity.details.descriptor.rules.join("\n"), /default_board is a selection hint/);
@@ -812,43 +865,50 @@ test("Parley describe provides fresh-agent discovery and board metadata", async 
   });
 });
 
+test("Parley guided plan tools generate ids and expose setup status", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const mutateTool = createMutateTool(toolApi(pluginConfig));
+    const queryTool = createQueryTool(toolApi(pluginConfig));
+
+    const createResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "create_plan",
+      input: { title: "Generated Id Guided Plan", landingSubpath: "agent-comms/parley" }
+    });
+    const planId = createResult.details.result.plan.plan_id;
+    assert.match(planId, /^plan_[a-z0-9]+$/);
+    assert.equal(createResult.details.result.setupState.setupComplete, false);
+    assert.deepEqual(createResult.details.result.setupState.missingRequired, ["overview", "phase"]);
+    assert.equal(createResult.details.result.setupState.nextRequiredAction.tool, "parley_write_plan_overview");
+
+    const statusResult = await queryTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "plan_setup_status",
+      input: { planId }
+    });
+    assert.equal(statusResult.details.result.setupState.planId, planId);
+    assert.equal(statusResult.details.result.setupState.validOwners.includes("parley-agent"), true);
+  });
+});
+
 test("Parley query/mutate façade creates and validates parley.plan.v1 documents", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);
     const queryTool = createQueryTool(api);
     const mutateTool = createMutateTool(api);
 
-    const createResult = await mutateTool.execute(null, {
-      callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "create_plan",
-      input: {
-        planId: "plan_facade_create_validate",
-        title: "Facade Create Validate Plan",
-        authority: "implementation-plan",
-        landingSubpath: "agent-comms/parley",
-        filename: "facade-create-validate-plan.md",
-        participants: ["parley-agent", "human:sensei"],
-        scope: {
-          summary: "Exercise plan creation through the Parley façade.",
-          in: ["Create a namespaced plan document"],
-          out: ["Execute deferred work"]
-        },
-        sections: {
-          purpose: "Verify plan tool UX.",
-          background: "The schema exists and needs façade access.",
-          current_state: "No plan document has been created yet.",
-          target_state: "A valid plan document is written and registered.",
-          plan: "Create the plan through parley_mutate.",
-          acceptance_criteria: "- The file exists\n- Validation succeeds",
-          risks_and_constraints: "Keep this non-executing."
-        }
-      }
+    const { createResult } = await createGuidedPlan(mutateTool, {
+      planId: "plan_facade_create_validate",
+      title: "Facade Create Validate Plan",
+      filename: "facade-create-validate-plan.md"
     });
 
     assert.equal(createResult.details.tool, "parley_mutate");
     assert.equal(createResult.details.action, "create_plan");
-    assert.equal(createResult.details.result.plan.validation.ok, true);
+    assert.equal(createResult.details.result.plan.projection_validation.ok, true);
+    assert.equal(createResult.details.result.setupState.setupComplete, false);
     assert.equal(createResult.details.result.artifact.kind, "plan");
     assert.equal(createResult.details.result.artifact.storage_mode, "explicit_landing");
     assert.match(createResult.details.result.artifact.uri, /^repo:\/\/plans\/agent-comms\/parley\//);
@@ -866,10 +926,12 @@ test("Parley query/mutate façade creates and validates parley.plan.v1 documents
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
       action: "validate_plan",
-      input: { resolvedPath: planPath }
+      input: { planId: "plan_facade_create_validate" }
     });
     assert.equal(validateResult.details.action, "validate_plan");
     assert.equal(validateResult.details.result.validation.ok, true);
+    assert.equal(validateResult.details.result.validation.shell_valid, true);
+    assert.equal(validateResult.details.result.validation.setup_complete, true);
   });
 });
 
@@ -879,48 +941,30 @@ test("Parley create_plan creates shepherd obligations for human checkpoints", as
     const queryTool = createQueryTool(api);
     const mutateTool = createMutateTool(api);
 
-    const createResult = await mutateTool.execute(null, {
+    await createGuidedPlan(mutateTool, {
+      planId: "plan_human_checkpoint",
+      title: "Human Checkpoint Plan",
+      filename: "human-checkpoint-plan.md",
+      purpose: "Verify single-agent human checkpoint MVP."
+    });
+    const checkpointResult = await mutateTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
-      action: "create_plan",
+      action: "add_plan_checkpoint",
       input: {
         planId: "plan_human_checkpoint",
-        title: "Human Checkpoint Plan",
-        authority: "implementation-plan",
-        landingSubpath: "agent-comms/parley",
-        filename: "human-checkpoint-plan.md",
-        coordinationMode: "single_agent_with_human_checkpoints",
-        humanCheckpoints: [
-          {
-            checkpoint_id: "checkpoint_initial_review",
-            title: "Initial human review",
-            kind: "review",
-            required_from: "human:sensei",
-            shepherd: "parley-agent",
-            trigger: "plan_created",
-            status: "pending",
-            requested_decision: "approve_or_request_changes"
-          }
-        ],
-        participants: ["parley-agent", "human:sensei"],
-        scope: {
-          summary: "Exercise human checkpoint obligation creation.",
-          in: ["Create shepherd obligation"],
-          out: ["Assign obligation directly to a human"]
-        },
-        sections: {
-          purpose: "Verify single-agent human checkpoint MVP.",
-          background: "Human checkpoints should create shepherd obligations only through Parley tooling.",
-          current_state: "No checkpoint has been requested.",
-          target_state: "The shepherd agent has a notify_human obligation.",
-          plan: "Create a plan with human_checkpoints frontmatter.",
-          acceptance_criteria: "- Checkpoint is visible\n- Shepherd obligation is active",
-          risks_and_constraints: "Do not create direct human obligations."
-        }
+        checkpointId: "checkpoint_initial_review",
+        title: "Initial human review",
+        kind: "review",
+        requiredFrom: "human:sensei",
+        shepherd: "parley-agent",
+        trigger: "manual",
+        status: "pending",
+        requestedDecision: "approve_or_request_changes"
       }
     });
 
-    const created = createResult.details.result.human_checkpoints.created_obligations;
+    const created = checkpointResult.details.result.human_checkpoints.created_obligations;
     assert.equal(created.length, 1);
     assert.equal(created[0].obligation.agent, "parley-agent");
     assert.equal(created[0].obligation.type, "notify_human");
@@ -970,12 +1014,7 @@ test("Parley namespace landing fails closed outside allowed plan subpaths", asyn
           title: "Bad Namespace Subpath",
           artifactNamespace: "project_plans",
           landingSubpath: "not-approved",
-          filename: "bad.md",
-          scope: {
-            summary: "Should fail.",
-            in: ["Attempt bad landing"],
-            out: ["Write outside allowed subpaths"]
-          }
+          filename: "bad.md"
         }
       }),
       /allowed namespace subpath/
@@ -989,7 +1028,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     const queryTool = createQueryTool(api);
     const mutateTool = createMutateTool(api);
 
-    const createResult = await mutateTool.execute(null, {
+    await mutateTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
       action: "create_plan",
@@ -999,49 +1038,44 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
         authority: "implementation-plan",
         landingSubpath: "agent-comms/parley",
         filename: "activation-visibility-plan.md",
-        participants: ["parley-agent", "project-reviewer"],
-        scope: {
-          summary: "Exercise deferred phase visibility.",
-          in: ["Surface deferred phases"],
-          out: ["Activate or execute phases"]
-        },
-        sections: {
-          purpose: "Test activation visibility.",
-          background: "Deferred phases should be visible but non-executing.",
-          current_state: "No candidate has been proposed.",
-          target_state: "Deferred phases are visible and proposals are derived from effects.",
-          plan: "Create a plan with a deferred phase.",
-          phases: [
-            "### Phase 4 — Deferred Gate",
-            "",
-            "Status: deferred",
-            "Owner: parley-agent",
-            "",
-            "Supporting agents:",
-            "- project-reviewer",
-            "",
-            "Entry criteria:",
-            "- Prior relationship is complete.",
-            "",
-            "Work:",
-            "- Review whether this gate should open.",
-            "",
-            "Exit criteria:",
-            "- Review decision is recorded.",
-            "",
-            "Review trigger:",
-            "- Human asks to revisit the deferred gate.",
-            "",
-            "Deferral reason:",
-            "- Outside the current slice.",
-            "",
-            "Non-goals before activation:",
-            "- Do not mutate phase status.",
-            "- Do not create implementation obligations."
-          ].join("\n"),
-          acceptance_criteria: "- Board shows one deferred phase\n- No candidate exists before proposal",
-          risks_and_constraints: "Candidate visibility must remain non-executing."
-        }
+        participants: ["parley-agent", "project-reviewer"]
+      }
+    });
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "write_plan_overview",
+      input: {
+        planId: "plan_activation_visibility",
+        purpose: "Test activation visibility.",
+        background: "Deferred phases should be visible but non-executing.",
+        scopeSummary: "Exercise deferred phase visibility.",
+        inScope: ["Surface deferred phases"],
+        outOfScope: ["Activate or execute phases"],
+        currentState: "No candidate has been proposed.",
+        targetState: "Deferred phases are visible and proposals are derived from effects.",
+        approach: "Create a plan with a deferred phase.",
+        acceptanceCriteria: ["Board shows one deferred phase", "No candidate exists before proposal"],
+        risksAndConstraints: ["Candidate visibility must remain non-executing."]
+      }
+    });
+    const createResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "add_plan_phase",
+      input: {
+        planId: "plan_activation_visibility",
+        phaseId: "phase_4",
+        title: "Deferred Gate",
+        owner: "parley-agent",
+        status: "deferred",
+        supportingAgents: ["project-reviewer"],
+        entryCriteria: ["Prior relationship is complete."],
+        work: ["Review whether this gate should open."],
+        exitCriteria: ["Review decision is recorded."],
+        reviewTrigger: ["Human asks to revisit the deferred gate."],
+        deferralReason: ["Outside the current slice."],
+        nonGoalsBeforeActivation: ["Do not mutate phase status.", "Do not create implementation obligations."]
       }
     });
 
@@ -1640,17 +1674,7 @@ test("Parley validate_state reports fake-board safety diagnostics without Projec
         planId: "plan_fake_board_fixture",
         title: "Fake Board Fixture",
         landingSubpath: "coordination",
-        filename: "fake-board-fixture.md",
-        scope: {
-          summary: "Exercise fake-board validation.",
-          in: ["Create non-default plan"],
-          out: ["Use generic runtime paths"]
-        },
-        sections: {
-          purpose: "Prove fake-board fixtures remain generic.",
-          plan: "Create one valid plan artifact.",
-          acceptance_criteria: "- validate_state is clean"
-        }
+        filename: "fake-board-fixture.md"
       }
     });
 
@@ -1674,26 +1698,13 @@ test("Parley validate_state reports hash mismatches and relationship cycles", as
     const queryTool = createQueryTool(api);
     const mutateTool = createMutateTool(api);
 
-    const createResult = await mutateTool.execute(null, {
-      callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "create_plan",
-      input: {
-        planId: "plan_validation_hash",
-        title: "Validation Hash Plan",
-        landingSubpath: "agent-comms/parley",
-        filename: "validation-hash-plan.md",
-        scope: {
-          summary: "Exercise artifact hash diagnostics.",
-          in: ["Create hashed artifact"],
-          out: ["Infer semantic version changes"]
-        },
-        sections: {
-          purpose: "Test hash mismatch warnings.",
-          plan: "Create then manually edit the plan body.",
-          acceptance_criteria: "- validate_state warns"
-        }
-      }
+    const { createResult } = await createGuidedPlan(mutateTool, {
+      planId: "plan_validation_hash",
+      title: "Validation Hash Plan",
+      filename: "validation-hash-plan.md",
+      purpose: "Test hash mismatch warnings.",
+      approach: "Create then manually edit the plan body.",
+      acceptanceCriteria: ["validate_state warns"]
     });
     await fs.appendFile(createResult.details.result.plan.path, "\nManual edit after registration.\n", "utf8");
 

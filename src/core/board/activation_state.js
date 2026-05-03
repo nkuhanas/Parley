@@ -124,13 +124,31 @@ function countBy(records, fieldName) {
   return counts;
 }
 
-export async function deriveActivationState(board, artifacts, effects) {
+function deferredPhaseRecordFromPlanState(board, plan, artifact, phase) {
+  return deferredPhaseRecord(board, artifact ?? {
+    artifact_id: plan.artifact_id,
+    version: plan.version,
+    uri: plan.landing?.uri,
+    resolved_path: plan.landing?.resolved_path
+  }, plan, phase);
+}
+
+export async function deriveActivationState(board, artifacts, effects, plans = []) {
   const deferredPhases = [];
-  for (const artifact of artifacts) {
-    const plan = await readPlanArtifact(artifact);
-    if (plan == null) continue;
-    for (const phase of collectParleyPlanV1DeferredPhases(plan.markdown)) {
-      deferredPhases.push(deferredPhaseRecord(board, artifact, plan.frontmatter, phase));
+  const artifactById = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
+  if (plans.length > 0) {
+    for (const plan of plans) {
+      for (const phase of (plan.phases ?? []).filter((item) => item.status === "deferred")) {
+        deferredPhases.push(deferredPhaseRecordFromPlanState(board, plan, artifactById.get(plan.artifact_id), phase));
+      }
+    }
+  } else {
+    for (const artifact of artifacts) {
+      const plan = await readPlanArtifact(artifact);
+      if (plan == null) continue;
+      for (const phase of collectParleyPlanV1DeferredPhases(plan.markdown)) {
+        deferredPhases.push(deferredPhaseRecord(board, artifact, plan.frontmatter, phase));
+      }
     }
   }
 

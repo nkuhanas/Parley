@@ -32,6 +32,15 @@ function normalizeCheckpoint(raw, frontmatter, artifact) {
   };
 }
 
+function checkpointsFromPlanState(plan, artifact = null) {
+  return (plan.human_checkpoints ?? []).map((checkpoint) => normalizeCheckpoint(checkpoint, plan, artifact ?? {
+    artifact_id: plan.artifact_id,
+    version: plan.version,
+    uri: plan.landing?.uri,
+    resolved_path: plan.landing?.resolved_path
+  }));
+}
+
 async function readPlanCheckpoints(artifact) {
   if (artifact.kind !== "plan" || artifact.resolved_path == null) return [];
   try {
@@ -65,9 +74,11 @@ function matchingObligation(checkpoint, obligations) {
   )) ?? null;
 }
 
-export async function deriveCheckpointState(_board, artifacts, obligations) {
+export async function deriveCheckpointState(_board, artifacts, obligations, plans = []) {
   const checkpoints = [];
-  for (const artifact of artifacts) checkpoints.push(...await readPlanCheckpoints(artifact));
+  const artifactById = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
+  for (const plan of plans) checkpoints.push(...checkpointsFromPlanState(plan, artifactById.get(plan.artifact_id)));
+  if (plans.length === 0) for (const artifact of artifacts) checkpoints.push(...await readPlanCheckpoints(artifact));
   const enriched = checkpoints.map((checkpoint) => {
     const obligation = matchingObligation(checkpoint, obligations);
     return {

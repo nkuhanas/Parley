@@ -1,4 +1,4 @@
-export const QUERY_ACTIONS = Object.freeze(["where_am_i", "my_boards", "board", "validate_plan", "validate_state", "runtime_obligations", "board_obligations", "search"]);
+export const QUERY_ACTIONS = Object.freeze(["where_am_i", "my_boards", "board", "validate_plan", "plan_setup_status", "validate_state", "runtime_obligations", "board_obligations", "search"]);
 export const MUTATE_ACTIONS = Object.freeze([
   "register_artifact",
   "create_object",
@@ -6,7 +6,10 @@ export const MUTATE_ACTIONS = Object.freeze([
   "create_obligation",
   "record_relationship",
   "remove_relationship",
-  "create_plan"
+  "create_plan",
+  "write_plan_overview",
+  "add_plan_phase",
+  "add_plan_checkpoint"
 ]);
 export const OBLIGATION_FILTERS = Object.freeze(["needs_my_action", "assigned_to_me", "all"]);
 export const RUNTIME_TARGET_KINDS = Object.freeze(["thread", "message", "turn"]);
@@ -41,6 +44,7 @@ export const DESCRIBE_TOPICS = Object.freeze([
   "query.search",
   "mutate",
   "mutate.create_plan",
+  "mutate.plan_setup",
   "boards/identity"
 ]);
 
@@ -64,7 +68,7 @@ export function overviewDescriptor() {
   return {
     topic: "overview",
     purpose: "Discover Parley's agent-facing tool surface, target scopes, first-class operational tools, advanced facade actions, board selection rules, and common examples.",
-    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_query", "parley_mutate"],
+    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_get_plan_setup_status", "parley_query", "parley_mutate"],
     topics: [...DESCRIBE_TOPICS],
     query_actions: [...QUERY_ACTIONS],
     mutate_actions: [...MUTATE_ACTIONS],
@@ -238,14 +242,15 @@ export function mutateDescriptor() {
     topic: "mutate",
     tool: "parley_mutate",
     role: "advanced facade over first-class write tools",
-    first_class_equivalents: ["parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan"],
+    first_class_equivalents: ["parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint"],
     actions: [...MUTATE_ACTIONS],
     required_fields: ["action", "boardId"],
     board_rule: "All parley_mutate actions are board-scoped and require explicit boardId.",
     target_rule: "Mutations that reference targets accept board targets only unless explicitly documented otherwise.",
     usage_guidance: "Prefer the equivalent first-class write tools during normal agent work; use parley_mutate when a caller specifically needs a single facade action surface or compatibility path.",
     examples: [
-      { description: "Create a plan through the compatibility facade.", call: { action: "create_plan", boardId: "project", input: { planId: "plan_example", title: "Example Plan", scope: { summary: "Example scope" }, filename: "example-plan.md" } } }
+      { description: "Create a guided plan shell through the facade.", call: { action: "create_plan", boardId: "project", input: { title: "Example Plan" } } },
+      { description: "Write plan overview through the facade.", call: { action: "write_plan_overview", boardId: "project", input: { planId: "plan_example", purpose: "Coordinate the work." } } }
     ]
   };
 }
@@ -255,29 +260,48 @@ export function createPlanDescriptor() {
     topic: "mutate.create_plan",
     tool: "parley_create_plan",
     facade: { tool: "parley_mutate", action: "create_plan" },
-    required_fields: ["boardId", "planId", "title", "scope", "filename"],
+    required_fields: ["boardId", "title"],
+    design_rule: "Plans are assembled through guided, narrow, schema-backed mutations. create_plan creates a tracked shell; it does not accept a complete plan object.",
     input_schema: {
       boardId: { type: "string", required: true, description: "Explicit board id." },
-      planId: { type: "string", required: true, description: "Board-scoped plan id." },
       title: { type: "string", required: true },
-      scope: { type: "object", required: true, description: "Structured plan scope." },
-      filename: { type: "string", required: true, description: "Markdown filename for the plan." },
+      planId: { type: "string", required: false, description: "Optional explicit id for tests/migrations; omit in normal use." },
       artifactNamespace: { type: "string", required: false, default: "board namespace default_for=plan_landing" },
       landingSubpath: { type: "string", required: false, description: "Safe relative subpath inside the selected namespace." },
+      filename: { type: "string", required: false, description: "Optional generated Markdown projection filename." },
       owner: { type: "string", required: false, default: "resolved board agent" },
-      participants: { type: "array", required: false },
-      sections: { type: "object", required: false },
-      humanCheckpoints: { type: "array", required: false }
+      participants: { type: "array", required: false }
     },
-    plan_namespace_behavior: [
-      "create_plan lands plan bodies in an artifact namespace with role plan_landing.",
-      "If namespaceId is omitted, Parley uses the board namespace whose default_for includes plan_landing.",
-      "subpath and filename must remain safe relative paths under the selected namespace.",
-      "The resulting artifact is registered as a plan artifact and linked to the coordination object."
+    state_guided_tool_responses: [
+      "Parley tools are not passive CRUD endpoints. Tool outputs are part of the coordination protocol.",
+      "Guidance is derived from canonical state, schema, and board identity constraints.",
+      "Every plan setup mutation returns setup completeness, missing required bands, valid owners, valid phase statuses, and the next required/recommended action."
+    ],
+    setup_tools: [
+      "parley_write_plan_overview",
+      "parley_add_plan_phase",
+      "parley_add_plan_checkpoint",
+      "parley_get_plan_setup_status"
     ],
     examples: [
-      { description: "Create a plan in the default plan namespace.", call: { boardId: "project", planId: "plan_alpha", title: "Alpha Plan", scope: { summary: "Ship the minimal path" }, filename: "alpha-plan.md" } }
+      { description: "Create a tracked shell in the default plan namespace.", call: { boardId: "project", title: "Alpha Plan" } },
+      { description: "Recover setup status after losing context.", call: { boardId: "project", planId: "plan_alpha" } }
     ]
+  };
+}
+
+export function planSetupDescriptor() {
+  return {
+    topic: "mutate.plan_setup",
+    tools: ["parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_get_plan_setup_status"],
+    required_sequence: [
+      { tool: "parley_create_plan", purpose: "Create the tracked shell and store returned planId." },
+      { tool: "parley_write_plan_overview", purpose: "Define purpose, scope, current/target state, approach, risks, and open questions." },
+      { tool: "parley_add_plan_phase", purpose: "Add at least one phase through shallow validated fields." },
+      { tool: "parley_add_plan_checkpoint", purpose: "Add human checkpoints when review/approval needs a human gate." },
+      { tool: "parley_get_plan_setup_status", purpose: "Recover current completion state and valid next actions." }
+    ],
+    rule: "Do not author plans as objects. Assemble plans through these narrow tools and follow each latest setupState response."
   };
 }
 
@@ -311,6 +335,7 @@ export function topicDescriptor(topic) {
     case "query.search": return searchDescriptor();
     case "mutate": return mutateDescriptor();
     case "mutate.create_plan": return createPlanDescriptor();
+    case "mutate.plan_setup": return planSetupDescriptor();
     case "boards":
     case "identity":
     case "boards/identity": return boardsIdentityDescriptor();

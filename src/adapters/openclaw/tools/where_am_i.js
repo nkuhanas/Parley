@@ -5,6 +5,7 @@ import {
   listArtifactRecords,
   listEffectRecords,
   listObligationRecords,
+  listPlanSetupRecords,
   loadArtifactRecord,
   loadCoordinationObjectRecord,
   loadEffectRecord
@@ -261,15 +262,16 @@ async function enrichObligation(pluginConfig, board, obligation) {
 }
 
 async function boardWhereAmIProjection(api, identity, params) {
-  const [obligations, artifacts, effects] = await Promise.all([
+  const [obligations, artifacts, effects, plans] = await Promise.all([
     listObligationRecords(api.pluginConfig, identity.board),
     listArtifactRecords(api.pluginConfig, identity.board),
-    listEffectRecords(api.pluginConfig, identity.board)
+    listEffectRecords(api.pluginConfig, identity.board),
+    listPlanSetupRecords(api.pluginConfig, identity.board)
   ]);
   const assigned = obligations.filter((obligation) => obligation.agent === identity.board_agent_id);
   const approvalState = deriveApprovalState(artifacts, effects);
-  const activationState = await deriveActivationState(identity.board, artifacts, effects);
-  const checkpointState = await deriveCheckpointState(identity.board, artifacts, obligations);
+  const activationState = await deriveActivationState(identity.board, artifacts, effects, plans);
+  const checkpointState = await deriveCheckpointState(identity.board, artifacts, obligations, plans);
   const staleApprovals = approvalState.approvals.filter((approval) => approval.approver === identity.board_agent_id && approval.status === "stale");
   const activationCandidates = activationCandidatesForAgent(activationState, identity.board_agent_id);
   const deferredPhases = deferredPhasesForAgent(activationState, identity.board_agent_id);

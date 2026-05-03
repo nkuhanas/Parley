@@ -101,6 +101,9 @@ function summarizePlanValidation(validation) {
     ok: validation.ok,
     errors: validation.errors,
     warnings: validation.warnings,
+    shell_valid: validation.shell_valid,
+    setup_complete: validation.setup_complete,
+    missingRequired: validation.missingRequired,
     frontmatter: frontmatter == null ? null : {
       schema: frontmatter.schema,
       plan_id: frontmatter.plan_id,

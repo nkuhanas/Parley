@@ -1,5 +1,6 @@
 import { createBoardProjectionTool } from "./board_projection.js";
 import { createValidatePlanAction } from "./validate_plan.js";
+import { createGetPlanSetupStatusAction } from "./get_plan_setup_status.js";
 import { createValidateStateAction } from "./validate_state.js";
 import { createWhereAmITool } from "./where_am_i.js";
 import { createMyBoardsTool } from "./my_boards.js";
@@ -53,7 +54,7 @@ export function createQueryTool(api) {
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
         boardId: { type: "string", description: "Required for board-scoped actions. Omit for my_boards, runtime_obligations, and runtime-only where_am_i." },
-        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state, runtime_obligations, board_obligations, search." },
+        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, plan_setup_status, validate_state, runtime_obligations, board_obligations, search." },
         includeTerminal: { type: "boolean", description: "where_am_i board section only: include resolved/cancelled/superseded obligations. Defaults to false." },
         verbosity: { type: "string", description: "where_am_i only: compact or full. Defaults to compact." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },
@@ -82,6 +83,14 @@ export function createQueryTool(api) {
         delegated = await delegatedTool.execute(toolCallId, delegatedParams);
       } else if (params.action === "validate_plan") {
         const delegatedTool = createValidatePlanAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "plan_setup_status") {
+        const delegatedTool = createGetPlanSetupStatusAction(api);
         const delegatedParams = {
           ...shared,
           ...normalizeInput(params?.input)

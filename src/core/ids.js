@@ -31,3 +31,15 @@ export function createObligationId() {
 export function createRelationshipId() {
   return `relationship_${compactUuid()}`;
 }
+
+export function createPlanId() {
+  return `plan_${compactUuid()}`;
+}
+
+export function createPlanPhaseId() {
+  return `phase_${compactUuid()}`;
+}
+
+export function createPlanCheckpointId() {
+  return `checkpoint_${compactUuid()}`;
+}

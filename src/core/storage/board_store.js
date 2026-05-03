@@ -4,6 +4,7 @@ import path from "node:path";
 import { resolveParleyBoardRegistry } from "../config.js";
 import { compareEffectRecords } from "../effect_ordering.js";
 import { createArtifactId, createEffectId, createObjectId, createObligationId, createRelationshipId } from "../ids.js";
+import { assertPlanSetupRecord } from "../plan/plan_state.js";
 import { nowIso } from "../time.js";
 import {
   assertArtifactRecord,
@@ -102,6 +103,7 @@ export async function ensureParleyBoardLayout(pluginConfig = {}, board) {
     ensureDir(path.join(targetBoard.state_root, "effects")),
     ensureDir(path.join(targetBoard.state_root, "obligations")),
     ensureDir(path.join(targetBoard.state_root, "relationships")),
+    ensureDir(path.join(targetBoard.state_root, "plans")),
     ensureDir(path.join(targetBoard.state_root, "checkpoints")),
     ensureDir(path.join(targetBoard.state_root, "index"))
   ]);
@@ -252,6 +254,11 @@ export async function saveProjectionCheckpointRecord(pluginConfig, board, record
   return validated;
 }
 
+export async function savePlanSetupRecord(pluginConfig, board, record) {
+  const validated = assertPlanSetupRecord(record);
+  return saveRecord(pluginConfig, board, "plans", validated.plan_id, validated, assertPlanSetupRecord);
+}
+
 export async function loadArtifactRecord(_pluginConfig, board, artifactId) {
   const raw = await readJsonFile(recordPath(board, "artifacts", artifactId));
   return raw == null ? null : assertArtifactRecord(raw);
@@ -277,6 +284,11 @@ export async function loadProjectionCheckpointRecord(_pluginConfig, board, board
   return raw == null ? null : assertProjectionCheckpointRecord(raw);
 }
 
+export async function loadPlanSetupRecord(_pluginConfig, board, planId) {
+  const raw = await readJsonFile(recordPath(board, "plans", planId));
+  return raw == null ? null : assertPlanSetupRecord(raw);
+}
+
 export async function listArtifactRecords(_pluginConfig, board) {
   return listRecords(board, "artifacts", assertArtifactRecord);
 }
@@ -299,6 +311,10 @@ export async function listRelationshipRecords(_pluginConfig, board) {
 
 export async function listProjectionCheckpointRecords(_pluginConfig, board) {
   return listRecords(board, "checkpoints", assertProjectionCheckpointRecord);
+}
+
+export async function listPlanSetupRecords(_pluginConfig, board) {
+  return listRecords(board, "plans", assertPlanSetupRecord);
 }
 
 export function normalizeArtifactRef(artifact, version = null) {

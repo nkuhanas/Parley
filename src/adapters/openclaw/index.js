@@ -20,6 +20,10 @@ import { createCheckpointProjectionTool } from "./tools/checkpoint_projection.js
 import { createValidatePlanAction } from "./tools/validate_plan.js";
 import { createValidateStateAction } from "./tools/validate_state.js";
 import { createCreatePlanAction } from "./tools/create_plan.js";
+import { createWritePlanOverviewAction } from "./tools/write_plan_overview.js";
+import { createAddPlanPhaseAction } from "./tools/add_plan_phase.js";
+import { createAddPlanCheckpointAction } from "./tools/add_plan_checkpoint.js";
+import { createGetPlanSetupStatusAction } from "./tools/get_plan_setup_status.js";
 import { createRuntimeObligationsQueryAction, createBoardObligationsQueryAction } from "./tools/obligations.js";
 import { createNamespaceSearchAction } from "./tools/namespace_search.js";
 import { createQueryTool } from "./tools/query.js";
@@ -54,6 +58,10 @@ export function registerParleyTools(api) {
   api.registerTool(withRuntimeContext(api, createValidatePlanAction));
   api.registerTool(withRuntimeContext(api, createValidateStateAction));
   api.registerTool(withRuntimeContext(api, createCreatePlanAction));
+  api.registerTool(withRuntimeContext(api, createWritePlanOverviewAction));
+  api.registerTool(withRuntimeContext(api, createAddPlanPhaseAction));
+  api.registerTool(withRuntimeContext(api, createAddPlanCheckpointAction));
+  api.registerTool(withRuntimeContext(api, createGetPlanSetupStatusAction));
   api.registerTool(withRuntimeContext(api, createRuntimeObligationsQueryAction));
   api.registerTool(withRuntimeContext(api, createBoardObligationsQueryAction));
   api.registerTool(withRuntimeContext(api, createNamespaceSearchAction));

@@ -6,7 +6,8 @@ import {
   listCoordinationObjectRecords,
   listEffectRecords,
   listObligationRecords,
-  listRelationshipRecords
+  listRelationshipRecords,
+  listPlanSetupRecords
 } from "../storage/board_store.js";
 import { buildRelationshipGraph } from "./relationship_graph.js";
 
@@ -62,17 +63,18 @@ function summarizeAgents(board) {
 export async function buildBoardProjection(pluginConfig, board, options = {}) {
   const recordLimit = normalizeRecordLimit(options.recordLimit);
   const includeRecords = options.includeRecords === true;
-  const [artifacts, objects, effects, obligations, relationships] = await Promise.all([
+  const [artifacts, objects, effects, obligations, relationships, plans] = await Promise.all([
     listArtifactRecords(pluginConfig, board),
     listCoordinationObjectRecords(pluginConfig, board),
     listEffectRecords(pluginConfig, board),
     listObligationRecords(pluginConfig, board),
-    listRelationshipRecords(pluginConfig, board)
+    listRelationshipRecords(pluginConfig, board),
+    listPlanSetupRecords(pluginConfig, board)
   ]);
   const approval_state = deriveApprovalState(artifacts, effects);
   const relationship_graph = buildRelationshipGraph(relationships, artifacts, objects);
-  const activation_state = await deriveActivationState(board, artifacts, effects);
-  const checkpoint_state = await deriveCheckpointState(board, artifacts, obligations);
+  const activation_state = await deriveActivationState(board, artifacts, effects, plans);
+  const checkpoint_state = await deriveCheckpointState(board, artifacts, obligations, plans);
 
   return {
     board_id: board.board_id,
@@ -88,6 +90,9 @@ export async function buildBoardProjection(pluginConfig, board, options = {}) {
       effects: effects.length,
       obligations: obligations.length,
       relationships: relationships.length,
+      plans: plans.length,
+      plan_setup_complete: plans.filter((plan) => plan.overview != null && plan.phases.length > 0).length,
+      plan_setup_incomplete: plans.filter((plan) => plan.overview == null || plan.phases.length === 0).length,
       relationship_nodes: relationship_graph.counts.nodes,
       relationship_edges: relationship_graph.counts.edges,
       approvals: approval_state.counts.approvals,
@@ -129,13 +134,15 @@ export async function buildBoardProjection(pluginConfig, board, options = {}) {
             objects: objects.length > recordLimit,
             effects: effects.length > recordLimit,
             obligations: obligations.length > recordLimit,
-            relationships: relationships.length > recordLimit
+            relationships: relationships.length > recordLimit,
+            plans: plans.length > recordLimit
           },
           artifacts: limitRecords(artifacts, recordLimit),
           objects: limitRecords(objects, recordLimit),
           effects: limitRecords(effects, recordLimit),
           obligations: limitRecords(obligations, recordLimit),
-          relationships: limitRecords(relationships, recordLimit)
+          relationships: limitRecords(relationships, recordLimit),
+          plans: limitRecords(plans, recordLimit)
         }
       : null
   };
