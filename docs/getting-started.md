@@ -37,11 +37,12 @@ Call:
 parley_describe({ topic: "recovery" })
 const runtime = parley_where_am_i({})
 parley_where_am_i({ boardId: runtime.boards.default_board })
+parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) // optional diagnostic detail
 ```
 
 `parley_describe` should return structured topics, schemas, valid values, and examples for fresh agents. Use `parley_describe({})` for an overview, `parley_describe({ topic: "targets" })` for target scope ontology, `parley_describe({ topic: "query.runtime_obligations" })` for runtime obligations, `parley_describe({ topic: "query.board_obligations" })` for board obligations, `parley_describe({ topic: "query.search" })` for namespace search shape, and `parley_describe({ boardId: runtime.boards.default_board })` for board metadata only.
 
-`where_am_i({})` should return runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`.
+`where_am_i({})` should return compact runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`. Add `verbosity: "full"` only when diagnostic detail is needed.
 
 ## 5. Add coordination records
 

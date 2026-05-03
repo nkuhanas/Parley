@@ -53,6 +53,7 @@ The goal is simple: when Parley is present, coordination feels routine. When it 
 parley_describe({})
 parley_my_boards({})
 parley_where_am_i({ boardId })
+parley_where_am_i({ boardId, verbosity: "full" }) // optional diagnostic detail
 parley_query({
   action: "board_obligations",
   boardId,
@@ -244,6 +245,7 @@ Smoke the identity path:
 parley_describe({ topic: "recovery" })
 const runtime = parley_where_am_i({})
 parley_where_am_i({ boardId: runtime.boards.default_board })
+parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) // optional diagnostic detail
 ```
 
 </details>

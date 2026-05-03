@@ -55,6 +55,7 @@ export function createQueryTool(api) {
         boardId: { type: "string", description: "Required for board-scoped actions. Omit for my_boards, runtime_obligations, and runtime-only where_am_i." },
         action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, validate_state, runtime_obligations, board_obligations, search." },
         includeTerminal: { type: "boolean", description: "where_am_i board section only: include resolved/cancelled/superseded obligations. Defaults to false." },
+        verbosity: { type: "string", description: "where_am_i only: compact or full. Defaults to compact." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },
         recordLimit: { type: "number", description: "board only: maximum records per collection when includeRecords is true. Defaults to 50; 0 returns counts only." },
         input: { type: "object", description: "Action-specific input. Used by validate_plan, runtime_obligations, board_obligations, and search.", additionalProperties: true }
@@ -69,7 +70,8 @@ export function createQueryTool(api) {
         const delegatedTool = createWhereAmITool(api);
         const delegatedParams = {
           ...shared,
-          includeTerminal: params?.includeTerminal
+          includeTerminal: params?.includeTerminal,
+          verbosity: params?.verbosity
         };
         assertDelegatedParams(delegatedTool, delegatedParams);
         delegated = await delegatedTool.execute(toolCallId, delegatedParams);

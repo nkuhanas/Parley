@@ -71,7 +71,7 @@ export function overviewDescriptor() {
     rules: [
       "Targetability is shared; resolution is scope-specific; actionability is derived.",
       "parley_where_am_i({}) returns runtime recovery plus board discovery hints.",
-      "parley_where_am_i({ boardId }) returns separate runtime and board sections.",
+      "parley_where_am_i({ boardId }) returns compact runtime and board sections by default; pass verbosity: \"full\" for diagnostic detail.",
       "parley_my_boards is the boardless board discovery call.",
       "Board-scoped reads and writes require explicit boardId; default_board is a selection hint, not implicit routing.",
       "Use topic=targets to understand runtime targets versus board targets."
@@ -91,7 +91,7 @@ export function recoveryDescriptor() {
     boot_sequence: [
       { step: 1, tool: "parley_describe", call: { topic: "recovery" }, purpose: "Learn the safe recovery sequence and required boardId behavior." },
       { step: 2, tool: "parley_where_am_i", call: {}, purpose: "Recover runtime identity, runtime protocol obligations, and available boards/default_board hints." },
-      { step: 3, tool: "parley_where_am_i", call: { boardId: "<default_board>" }, purpose: "Recover board-local identity, board obligations, deferred work, approvals, and checkpoints while keeping runtime and board sections separate." },
+      { step: 3, tool: "parley_where_am_i", call: { boardId: "<default_board>" }, purpose: "Recover compact board-local identity, obligations, deferred work, approvals, and checkpoints while keeping runtime and board sections separate. Add verbosity: \"full\" for diagnostic detail." },
       { step: 4, tool: "parley_query", call: { action: "runtime_obligations" }, purpose: "Query runtime protocol obligations directly when needed." },
       { step: 5, tool: "parley_query", call: { action: "board_obligations", boardId: "<boardId>", input: { filter: "needs_my_action" } }, purpose: "Query board-scoped obligations directly when needed." },
       { step: 6, tool: "parley_query", call: { action: "search", boardId: "<boardId>", input: { query: "<term>" } }, purpose: "Search board-registered reference namespaces when context or artifacts are needed." }

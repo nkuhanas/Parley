@@ -58,13 +58,14 @@ Recommended recovery sequence:
 
 ```txt
 parley_describe({ topic: "recovery" }) -> parley_where_am_i({}) -> parley_where_am_i({ boardId: default_board }) -> parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action" } }) -> parley_where_am_i({ boardId: each other active board })
+# add verbosity: "full" to where_am_i only when diagnostic detail is needed
 ```
 
 `parley_describe` is metadata/introspection and does not mutate board state. Topic omitted returns an overview. Unknown topics return valid topics plus a describe hint. `parley_describe({ boardId })` returns board metadata only, not board state records.
 
 `parley_where_am_i({})` returns runtime identity, runtime protocol obligations, and available boards/default board metadata. It does not imply there is no board work when runtime obligations are empty.
 
-`parley_where_am_i({ boardId })` returns separate runtime and board sections. The runtime section contains runtime protocol obligations. The board section contains board-local identity, board obligations, deferred work, approvals, checkpoints, and projections.
+`parley_where_am_i({ boardId })` returns compact separate runtime and board sections by default. The runtime section contains runtime protocol obligations. The board section contains action-oriented board-local identity, board obligations, deferred work, approvals, checkpoints, and projection summaries. Use `parley_where_am_i({ boardId, verbosity: "full" })` for full diagnostic detail.
 
 `my_boards` remains a boardless discovery query. All board-scoped queries and mutations require explicit `boardId`; `default_board` is a discovery hint, not implicit routing.
 

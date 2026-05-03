@@ -1277,7 +1277,7 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     const whereResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project" });
     assert.equal(whereResult.details.identity.board_agent_id, "parley-agent");
     assert.equal(whereResult.details.projection.counts.blocking, 1);
-    assert.equal(whereResult.details.projection.blocking_obligations[0].obligation.obligation_id, "obligation_demo");
+    assert.equal(whereResult.details.projection.blocking_obligations[0].obligation_id, "obligation_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].source_refs.source_thread_id, "thread_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].source_refs.source_message_id, "message_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].object.object_id, "object_demo");
@@ -1541,8 +1541,13 @@ test("Parley v2 where_am_i hides terminal obligations by default", async () => {
     assert.equal(defaultResult.details.projection.counts.visible, 0);
 
     const includedResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeTerminal: true });
+    assert.equal(includedResult.details.verbosity, "compact");
     assert.equal(includedResult.details.projection.counts.visible, 1);
-    assert.equal(includedResult.details.projection.other_visible_obligations[0].obligation.obligation_id, "obligation_resolved");
+    assert.equal(includedResult.details.projection.other_visible_obligations[0].obligation_id, "obligation_resolved");
+
+    const fullResult = await whereTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeTerminal: true, verbosity: "full" });
+    assert.equal(fullResult.details.verbosity, "full");
+    assert.equal(fullResult.details.projection.other_visible_obligations[0].obligation.obligation_id, "obligation_resolved");
   });
 });
 
