@@ -1467,6 +1467,15 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
         risksAndConstraints: ["Do not mutate phase status as part of filtering."]
       }
     });
+    const statusWithPhase = await queryTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "plan_setup_status",
+      input: { planId: "plan_activation_visibility" }
+    });
+    assert.equal(statusWithPhase.details.result.plan.phase_count, 1);
+    assert.equal(statusWithPhase.details.result.plan.checkpoint_count, 0);
+
     const archivedCreateResult = await mutateTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
