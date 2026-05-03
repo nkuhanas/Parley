@@ -1,5 +1,6 @@
 import { PLAN_PHASE_STATUSES, createParleyPlanV1Document } from "../schema/index.js";
 import { assertBoardAgentId, assertBoardId, assertNonEmptyString, assertRecordId } from "../board/board_schema.js";
+import { normalizeActivationPolicy, normalizePlanAuthority, normalizePlanManaged } from "./lifecycle.js";
 
 export const PLAN_SETUP_REQUIRED = Object.freeze(["overview", "phase"]);
 export const PLAN_PHASE_KINDS = Object.freeze(["implementation", "review", "approval", "decision_gate", "human_checkpoint", "human_approval_gate"]);
@@ -103,7 +104,7 @@ export function assertPlanSetupRecord(record) {
     plan_id: assertRecordId(raw.plan_id, "plan_id"),
     artifact_id: raw.artifact_id == null ? null : assertRecordId(raw.artifact_id, "artifact_id"),
     title: assertNonEmptyString(raw.title, "title"),
-    authority: optionalString(raw.authority, "implementation-plan"),
+    authority: normalizePlanAuthority(raw.authority, raw.owner, raw.authority?.createdBy?.id ?? raw.created_by ?? raw.owner),
     status: optionalString(raw.status, "draft"),
     version: Number.isInteger(raw.version) && raw.version > 0 ? raw.version : 1,
     owner: assertBoardAgentId(raw.owner, "owner"),
@@ -116,6 +117,8 @@ export function assertPlanSetupRecord(record) {
     parley: raw.parley,
     priority: raw.priority ?? null,
     coordination_mode: raw.coordination_mode ?? raw.coordinationMode ?? null,
+    activation_policy: normalizeActivationPolicy(raw.activation_policy ?? raw.activationPolicy),
+    managed: normalizePlanManaged(raw.managed),
     created_at: raw.created_at,
     updated_at: raw.updated_at
   };

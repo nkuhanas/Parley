@@ -139,6 +139,7 @@ function summarizeObligation(obligation) {
     scope: obligation.scope,
     reason: obligation.reason,
     source_effect_id: obligation.source_effect_id,
+    managedBinding: obligation.managedBinding,
     on_resolve_trigger_ids: obligation.on_resolve_trigger_ids,
     created_at: obligation.created_at,
     updated_at: obligation.updated_at

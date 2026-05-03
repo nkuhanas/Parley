@@ -25,12 +25,16 @@ export const COORDINATION_OBJECT_KINDS = Object.freeze([
 export const COORDINATION_STATUSES = Object.freeze([
   "draft",
   "review",
+  "needs_changes",
+  "ready",
   "ratified",
   "active",
+  "paused",
   "deferred",
   "blocked",
   "complete",
   "superseded",
+  "failed",
   "archived",
   "cancelled"
 ]);
@@ -55,7 +59,8 @@ export const EFFECT_TYPES = Object.freeze([
   "activation_proposed",
   "activation_candidate_dismissed",
   "handoff_created",
-  "effect_corrected"
+  "effect_corrected",
+  "plan_lifecycle_transitioned"
 ]);
 export const OBLIGATION_TYPES = Object.freeze([
   "review",
@@ -209,6 +214,11 @@ function assertNonEmptyObject(value, fieldName) {
 function assertPositiveInteger(value, fieldName, { allowNull = false } = {}) {
   if (value == null && allowNull) return null;
   if (!Number.isInteger(value) || value < 1) throw new Error(`${fieldName} must be a positive integer`);
+  return value;
+}
+
+function assertNonNegativeInteger(value, fieldName) {
+  if (!Number.isInteger(value) || value < 0) throw new Error(`${fieldName} must be a non-negative integer`);
   return value;
 }
 
@@ -422,6 +432,8 @@ export function assertEffectPayload(type, value, fieldName = "payload") {
       return assertKnownPayload(value, fieldName, ["trigger_id", "source_event_type", "source_obligation_id", "action_type", "created_obligation_id", "created_effect_id", "result", "skipped", "reason"]);
     case "phase_deferred":
       return assertKnownPayload(value, fieldName, ["reason", "activation_conditions", "review_trigger", "non_executing"]);
+    case "plan_lifecycle_transitioned":
+      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "phase_id", "obligation_id"]);
     default:
       return assertPlainOptionalObject(value, fieldName);
   }
@@ -628,6 +640,20 @@ export function assertEffectRecord(record) {
   };
 }
 
+function assertManagedBinding(value, fieldName = "managedBinding") {
+  if (value == null) return null;
+  const raw = assertObject(value, fieldName);
+  const system = assertNonEmptyString(raw.system, `${fieldName}.system`);
+  if (system !== "plan_lifecycle") throw new Error(`${fieldName}.system must be plan_lifecycle`);
+  return {
+    system,
+    plan_id: assertRecordId(raw.plan_id ?? raw.planId, `${fieldName}.plan_id`),
+    role: assertNonEmptyString(raw.role, `${fieldName}.role`),
+    revision: raw.revision == null ? null : assertNonNegativeInteger(raw.revision, `${fieldName}.revision`),
+    phase_id: (raw.phase_id ?? raw.phaseId) == null ? null : assertRecordId(raw.phase_id ?? raw.phaseId, `${fieldName}.phase_id`)
+  };
+}
+
 export function assertObligationRecord(record) {
   const raw = assertObject(record, "obligation record");
   const type = assertEnum(raw.type, OBLIGATION_TYPES, "type");
@@ -645,6 +671,7 @@ export function assertObligationRecord(record) {
     scope: assertOptionalString(raw.scope, "scope"),
     reason: assertOptionalString(raw.reason, "reason"),
     source_effect_id: assertOptionalString(raw.source_effect_id, "source_effect_id"),
+    managedBinding: assertManagedBinding(raw.managedBinding ?? raw.managed_binding, "managedBinding"),
     on_resolve_trigger_ids: assertRecordIdArray(raw.on_resolve_trigger_ids, "on_resolve_trigger_ids"),
     created_at: assertIsoTimestamp(raw.created_at, "created_at"),
     updated_at: assertIsoTimestamp(raw.updated_at, "updated_at")

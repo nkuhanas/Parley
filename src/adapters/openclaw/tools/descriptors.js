@@ -11,7 +11,11 @@ export const MUTATE_ACTIONS = Object.freeze([
   "create_plan",
   "write_plan_overview",
   "add_plan_phase",
-  "add_plan_checkpoint"
+  "add_plan_checkpoint",
+  "request_plan_review",
+  "record_review_decision",
+  "activate_plan",
+  "record_phase_outcome"
 ]);
 export const OBLIGATION_FILTERS = Object.freeze(["needs_my_action", "assigned_to_me", "all"]);
 export const RUNTIME_TARGET_KINDS = Object.freeze(["thread", "message", "turn"]);
@@ -70,7 +74,7 @@ export function overviewDescriptor() {
   return {
     topic: "overview",
     purpose: "Discover Parley's agent-facing tool surface, target scopes, first-class operational tools, advanced facade actions, board selection rules, and common examples.",
-    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_create_trigger", "parley_resolve_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_get_plan_setup_status", "parley_query", "parley_mutate"],
+    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_create_trigger", "parley_resolve_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_request_plan_review", "parley_record_review_decision", "parley_activate_plan", "parley_record_phase_outcome", "parley_get_plan_setup_status", "parley_query", "parley_mutate"],
     topics: [...DESCRIBE_TOPICS],
     query_actions: [...QUERY_ACTIONS],
     mutate_actions: [...MUTATE_ACTIONS],
@@ -244,7 +248,7 @@ export function mutateDescriptor() {
     topic: "mutate",
     tool: "parley_mutate",
     role: "advanced facade over first-class write tools",
-    first_class_equivalents: ["parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_create_trigger", "parley_resolve_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint"],
+    first_class_equivalents: ["parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_create_trigger", "parley_resolve_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_request_plan_review", "parley_record_review_decision", "parley_activate_plan", "parley_record_phase_outcome"],
     actions: [...MUTATE_ACTIONS],
     required_fields: ["action", "boardId"],
     board_rule: "All parley_mutate actions are board-scoped and require explicit boardId.",
@@ -283,7 +287,11 @@ export function createPlanDescriptor() {
       "parley_write_plan_overview",
       "parley_add_plan_phase",
       "parley_add_plan_checkpoint",
-      "parley_get_plan_setup_status"
+      "parley_get_plan_setup_status",
+      "parley_request_plan_review",
+      "parley_record_review_decision",
+      "parley_activate_plan",
+      "parley_record_phase_outcome"
     ],
     examples: [
       { description: "Create a tracked shell in the default plan namespace.", call: { boardId: "project", title: "Alpha Plan" } },
@@ -295,13 +303,17 @@ export function createPlanDescriptor() {
 export function planSetupDescriptor() {
   return {
     topic: "mutate.plan_setup",
-    tools: ["parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_get_plan_setup_status"],
+    tools: ["parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_get_plan_setup_status", "parley_request_plan_review", "parley_record_review_decision", "parley_activate_plan", "parley_record_phase_outcome"],
     required_sequence: [
       { tool: "parley_create_plan", purpose: "Create the tracked shell and store returned planId." },
       { tool: "parley_write_plan_overview", purpose: "Define purpose, scope, current/target state, approach, risks, and open questions." },
       { tool: "parley_add_plan_phase", purpose: "Add at least one phase through shallow validated fields. Use kind human_checkpoint or human_approval_gate for human gates; owner is the shepherd." },
       { tool: "parley_add_plan_checkpoint", purpose: "Compatibility helper for adding a human gate phase; prefer parley_add_plan_phase for new plan setup." },
-      { tool: "parley_get_plan_setup_status", purpose: "Recover current completion state and valid next actions." }
+      { tool: "parley_get_plan_setup_status", purpose: "Recover current completion state and valid next actions." },
+      { tool: "parley_request_plan_review", purpose: "Owner-only lifecycle command to route a setup-complete plan to reviewers." },
+      { tool: "parley_record_review_decision", purpose: "Reviewer command for assigned active review_decision obligations; resolves them internally." },
+      { tool: "parley_activate_plan", purpose: "Owner-only lifecycle command to activate a ready plan." },
+      { tool: "parley_record_phase_outcome", purpose: "Owner-only lifecycle command to move the phase cursor after judging evidence." }
     ],
     rule: "Do not author plans as objects. Assemble plans through these narrow tools and follow each latest setupState response."
   };

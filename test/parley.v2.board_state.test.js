@@ -1076,9 +1076,100 @@ test("Parley review lifecycle obligations sanitize board-agent ids for record id
     assert.equal(result.details.plan_lifecycle.obligations.length, 1);
     assert.equal(result.details.plan_lifecycle.obligations[0].agent, "project-reviewer");
     assert.equal(result.details.plan_lifecycle.obligations[0].obligation_id, "obligation_plan_imported_review_lifecycle_review_project_reviewer");
-    assert.equal(result.details.plan_lifecycle.obligations[0].scope, "plan_lifecycle:review");
+    assert.equal(result.details.plan_lifecycle.obligations[0].scope, "plan_lifecycle:review_decision");
+    assert.deepEqual(result.details.plan_lifecycle.obligations[0].managedBinding, {
+      system: "plan_lifecycle",
+      plan_id: "plan_imported_review",
+      role: "review_decision",
+      revision: 0,
+      phase_id: null
+    });
     const saved = await loadObligationRecord(pluginConfig, resolveParleyBoardRegistry(pluginConfig).boards.project, "obligation_plan_imported_review_lifecycle_review_project_reviewer");
     assert.equal(saved.agent, "project-reviewer");
+  });
+});
+
+
+test("Parley managed plan lifecycle tools own review, activation, and phase cursor transitions", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    pluginConfig.parleyDefaultBoards.project.members[1].runtime_refs = [{ scheme: "openclaw", type: "agent", id: "project-reviewer" }];
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const resolveTool = createResolveObligationTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_managed_lifecycle",
+      filename: "managed-lifecycle-plan.md",
+      participants: ["parley-agent", "project-reviewer"]
+    });
+
+    const reviewResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "request_plan_review",
+      input: { planId, requiredReviewers: ["project-reviewer"], reason: "Ready for owner-scoped review." }
+    });
+    assert.equal(reviewResult.details.result.plan.status, "review");
+    const reviewObligation = reviewResult.details.result.plan_lifecycle.obligations[0];
+    assert.equal(reviewObligation.agent, "project-reviewer");
+    assert.equal(reviewObligation.managedBinding.role, "review_decision");
+
+    await assert.rejects(
+      () => resolveTool.execute(null, {
+        callerRuntimeRef: { scheme: "openclaw", type: "agent", id: "project-reviewer" },
+        boardId: "project",
+        obligationId: reviewObligation.obligation_id,
+        resolution: "completed",
+        note: "Attempted through generic resolution."
+      }),
+      /explicit lifecycle command/
+    );
+
+    const decisionResult = await mutateTool.execute(null, {
+      callerRuntimeRef: { scheme: "openclaw", type: "agent", id: "project-reviewer" },
+      boardId: "project",
+      action: "record_review_decision",
+      input: { planId, obligationId: reviewObligation.obligation_id, decision: "approve", note: "Looks ready." }
+    });
+    assert.equal(decisionResult.details.result.plan.status, "ready");
+    const resolvedReview = await loadObligationRecord(pluginConfig, board, reviewObligation.obligation_id);
+    assert.equal(resolvedReview.status, "resolved");
+    assert.equal(resolvedReview.resolution, "completed");
+
+    const activationResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "activate_plan",
+      input: { planId, reason: "Owner accepts review and starts work." }
+    });
+    assert.equal(activationResult.details.result.plan.status, "active");
+    const phaseWork = activationResult.details.result.plan_lifecycle.obligations.find((obligation) => obligation.managedBinding.role === "phase_work");
+    const phaseOutcome = activationResult.details.result.plan_lifecycle.obligations.find((obligation) => obligation.managedBinding.role === "phase_outcome_decision");
+    assert.equal(phaseWork.agent, "parley-agent");
+    assert.equal(phaseOutcome.agent, "parley-agent");
+
+    const workResolution = await resolveTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      obligationId: phaseWork.obligation_id,
+      resolution: "completed",
+      note: "Worker reports phase evidence complete."
+    });
+    assert.equal(workResolution.details.obligation.status, "resolved");
+    const stillActive = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.equal(stillActive.status, "active");
+    assert.equal(stillActive.managed.current_phase_id, "phase_1");
+    assert.deepEqual(stillActive.managed.activeLifecycleObligationIds, [phaseOutcome.obligation_id]);
+
+    const phaseOutcomeResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "record_phase_outcome",
+      input: { planId, phaseId: "phase_1", outcome: "complete", note: "Owner accepts completion evidence." }
+    });
+    assert.equal(phaseOutcomeResult.details.result.plan.status, "complete");
+    const completedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(completedPlan.managed.activeLifecycleObligationIds, []);
   });
 });
 

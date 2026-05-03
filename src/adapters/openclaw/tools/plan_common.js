@@ -8,6 +8,7 @@ import { createPlanCheckpointId, createPlanId, createPlanPhaseId } from "../../.
 import { nowIso } from "../../../core/time.js";
 import { assertBoardAgentForTool } from "./v2_common.js";
 import { boardAgentIds, derivePlanSetupState, isHumanGatePhase, normalizePlanCheckpoint, normalizePlanOverview, normalizePlanPhase, renderPlanSetupMarkdown } from "../../../core/plan/plan_state.js";
+import { activePhase, managedBinding, normalizeActivationPolicy, normalizePlanAuthority, normalizePlanManaged, terminalStatus, withLifecycleIndexes } from "../../../core/plan/lifecycle.js";
 import { parseParleyPlanV1Document, validateParleyPlanV1Document } from "../../../core/schema/index.js";
 
 function camelOrSnake(value, camelKey, snakeKey) {
@@ -58,12 +59,13 @@ function planLifecycleObligationPrefix(plan) {
 }
 
 function terminalPlanStatus(status) {
-  return ["archived", "cancelled", "complete", "completed", "superseded"].includes(status);
+  return terminalStatus(status) || status === "completed";
 }
 
 function boardReviewers(plan, board) {
   const valid = new Set(boardAgentIds(board));
-  return (plan.review?.required_reviewers ?? []).filter((reviewer) => valid.has(reviewer));
+  const approved = new Set(plan.review?.approvals ?? []);
+  return (plan.review?.required_reviewers ?? []).filter((reviewer) => valid.has(reviewer) && !approved.has(reviewer));
 }
 
 function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
@@ -89,8 +91,9 @@ function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
           artifact_version: artifact.version,
           scope: "plan_review"
         },
-        reason: `Review requested for plan ${plan.plan_id}: ${plan.title}`,
-        scope: "plan_lifecycle:review"
+        reason: `Review decision requested for plan ${plan.plan_id}: ${plan.title}`,
+        scope: "plan_lifecycle:review_decision",
+        managedBinding: managedBinding(plan, "review_decision", { revision: plan.managed?.lifecycle_revision ?? 0 })
       }));
     }
     return [{
@@ -99,32 +102,80 @@ function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
       type: "report_status",
       target,
       reason: `Plan ${plan.plan_id} is in review status but has no board-local required reviewers; add reviewers or change status.`,
-      scope: "plan_lifecycle:review_unassigned"
+      scope: "plan_lifecycle:review_unassigned",
+      managedBinding: managedBinding(plan, "setup_decision")
     }];
   }
 
-  if (plan.status === "active") {
+  if (plan.status === "ready") {
     return [{
       obligation_id: `${prefix}_owner`,
       agent: plan.owner,
       type: "report_status",
       target,
-      reason: `Plan ${plan.plan_id} is active; report current implementation or activation status.`,
-      scope: "plan_lifecycle:active"
+      reason: `Plan ${plan.plan_id} is ready; owner must activate, defer, or terminally disposition it.`,
+      scope: "plan_lifecycle:activation_decision",
+      managedBinding: managedBinding(plan, "activation_decision")
     }];
   }
 
-  if (plan.status === "draft") {
+  if (plan.status === "active") {
+    const phase = activePhase(plan);
+    if (phase == null) {
+      return [{
+        obligation_id: `${prefix}_owner`,
+        agent: plan.owner,
+        type: "report_status",
+        target,
+        reason: `Plan ${plan.plan_id} is active but has no current phase; owner must record a phase outcome or terminal disposition.`,
+        scope: "plan_lifecycle:phase_outcome_decision",
+        managedBinding: managedBinding(plan, "phase_outcome_decision")
+      }];
+    }
+    return [{
+      obligation_id: `${prefix}_phase_work_${safeIdPart(phase.phase_id)}_${safeIdPart(phase.owner)}`,
+      agent: phase.owner,
+      type: "implement_phase",
+      target: { plan_id: plan.plan_id, phase_id: phase.phase_id, artifact_id: artifact.artifact_id, artifact_version: artifact.version },
+      reason: `Work requested for active plan phase ${phase.phase_id}: ${phase.title}`,
+      scope: "plan_lifecycle:phase_work",
+      managedBinding: managedBinding(plan, "phase_work", { phaseId: phase.phase_id })
+    }, {
+      obligation_id: `${prefix}_owner`,
+      agent: plan.owner,
+      type: "report_status",
+      target: { ...target, phase_id: phase.phase_id },
+      reason: `Plan ${plan.plan_id} phase ${phase.phase_id} needs owner outcome judgment when evidence is ready.`,
+      scope: "plan_lifecycle:phase_outcome_decision",
+      managedBinding: managedBinding(plan, "phase_outcome_decision", { phaseId: phase.phase_id })
+    }];
+  }
+
+  if (plan.status === "paused" || plan.status === "blocked") {
+    return [{
+      obligation_id: `${prefix}_owner`,
+      agent: plan.owner,
+      type: "report_status",
+      target,
+      reason: `Plan ${plan.plan_id} is ${plan.status}; owner must resolve or terminally disposition it.`,
+      scope: "plan_lifecycle:blocker_resolution",
+      managedBinding: managedBinding(plan, "blocker_resolution")
+    }];
+  }
+
+  if (plan.status === "draft" || plan.status === "needs_changes") {
+    const role = plan.status === "needs_changes" ? "change_response" : "setup_decision";
     const reason = setupState.setupComplete
-      ? `Draft plan ${plan.plan_id} is setup-complete but not routed; move it to review, active, archived, or record why it remains draft.`
-      : `Draft plan ${plan.plan_id} needs setup: ${setupState.nextRequiredAction?.reason ?? "complete required plan fields."}`;
+      ? `${plan.status === "needs_changes" ? "Needs-changes" : "Draft"} plan ${plan.plan_id} is setup-complete but not routed; owner must request review, mark ready, activate, archive, or record why it remains ${plan.status}.`
+      : `${plan.status === "needs_changes" ? "Needs-changes" : "Draft"} plan ${plan.plan_id} needs setup: ${setupState.nextRequiredAction?.reason ?? "complete required plan fields."}`;
     return [{
       obligation_id: `${prefix}_owner`,
       agent: plan.owner,
       type: "report_status",
       target,
       reason,
-      scope: "plan_lifecycle:draft"
+      scope: `plan_lifecycle:${role}`,
+      managedBinding: managedBinding(plan, role)
     }];
   }
 
@@ -134,10 +185,12 @@ function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
 async function reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState) {
   const desired = desiredPlanLifecycleObligations(identity, plan, artifact, setupState);
   const desiredIds = new Set(desired.map((item) => item.obligation_id));
+  const generatedIds = new Set(plan.managed?.generatedObligationIds ?? []);
   const existing = (await listObligationRecords(api.pluginConfig, identity.board))
-    .filter((obligation) => obligation.obligation_id.startsWith(`${planLifecycleObligationPrefix(plan)}_`));
+    .filter((obligation) => obligation.obligation_id.startsWith(`${planLifecycleObligationPrefix(plan)}_`) || generatedIds.has(obligation.obligation_id));
   const now = nowIso();
-  const saved = [];
+  const active = [];
+  const touched = [];
 
   for (const spec of desired) {
     const previous = existing.find((obligation) => obligation.obligation_id === spec.obligation_id);
@@ -151,15 +204,18 @@ async function reconcilePlanLifecycleObligations(api, identity, plan, artifact, 
       scope: spec.scope,
       reason: spec.reason,
       source_effect_id: previous?.source_effect_id ?? null,
+      managedBinding: spec.managedBinding ?? null,
       created_at: previous?.created_at ?? now,
       updated_at: now
     });
-    saved.push(await saveObligationRecord(api.pluginConfig, identity.board, obligation));
+    const saved = await saveObligationRecord(api.pluginConfig, identity.board, obligation);
+    active.push(saved);
+    touched.push(saved);
   }
 
   for (const previous of existing) {
     if (desiredIds.has(previous.obligation_id) || previous.status === "resolved" || previous.status === "cancelled" || previous.status === "superseded") continue;
-    saved.push(await saveObligationRecord(api.pluginConfig, identity.board, {
+    touched.push(await saveObligationRecord(api.pluginConfig, identity.board, {
       ...previous,
       status: terminalPlanStatus(plan.status) ? "cancelled" : "superseded",
       resolution: terminalPlanStatus(plan.status) ? "cancelled" : "superseded",
@@ -169,7 +225,9 @@ async function reconcilePlanLifecycleObligations(api, identity, plan, artifact, 
     }));
   }
 
-  return saved;
+  const indexedPlan = withLifecycleIndexes(plan, active, now);
+  const savedPlan = await savePlanSetupRecord(api.pluginConfig, identity.board, indexedPlan);
+  return { plan: savedPlan, obligations: touched };
 }
 
 function checkpointForObligation(raw, plan, artifact) {
@@ -403,8 +461,8 @@ export async function importPlanArtifactSetup(api, identity, artifact, markdown)
   if (!validation.ok) return { validation, plan: null, setupState: null, lifecycleObligations: [] };
   const plan = await savePlanSetupRecord(api.pluginConfig, identity.board, importedPlanRecordFromDocument(markdown, validation, artifact, identity.board));
   const setupState = derivePlanSetupState(plan, identity.board);
-  const lifecycleObligations = await reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState);
-  return { validation, plan, setupState, lifecycleObligations };
+  const lifecycle = await reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState);
+  return { validation, plan: lifecycle.plan, setupState, lifecycleObligations: lifecycle.obligations };
 }
 
 export async function exportPlanProjection(api, identity, plan, { checkpointForObligation: checkpoint = null } = {}) {
@@ -432,9 +490,9 @@ export async function exportPlanProjection(api, identity, plan, { checkpointForO
   });
   const savedArtifact = await saveArtifactRecord(api.pluginConfig, identity.board, artifact);
   const setupState = derivePlanSetupState(plan, identity.board);
-  const lifecycleObligations = await reconcilePlanLifecycleObligations(api, identity, plan, savedArtifact, setupState);
-  const createdCheckpointObligation = checkpoint == null ? null : await createCheckpointObligation(api, identity, plan, savedArtifact, checkpoint);
-  return { markdown, validation, artifact: savedArtifact, lifecycleObligations, createdCheckpointObligation };
+  const lifecycle = await reconcilePlanLifecycleObligations(api, identity, plan, savedArtifact, setupState);
+  const createdCheckpointObligation = checkpoint == null ? null : await createCheckpointObligation(api, identity, lifecycle.plan, savedArtifact, checkpoint);
+  return { markdown, validation, plan: lifecycle.plan, artifact: savedArtifact, lifecycleObligations: lifecycle.obligations, createdCheckpointObligation };
 }
 
 export async function saveAndExportPlan(api, identity, plan, options = {}) {
@@ -442,8 +500,8 @@ export async function saveAndExportPlan(api, identity, plan, options = {}) {
   const nextPlan = { ...plan, updated_at: timestamp };
   const savedPlan = await savePlanSetupRecord(api.pluginConfig, identity.board, nextPlan);
   const exported = await exportPlanProjection(api, identity, savedPlan, options);
-  const setupState = derivePlanSetupState(savedPlan, identity.board);
-  return { plan: savedPlan, setupState, ...exported };
+  const setupState = derivePlanSetupState(exported.plan ?? savedPlan, identity.board);
+  return { plan: exported.plan ?? savedPlan, setupState, ...exported };
 }
 
 export async function createPlanShell(api, identity, params) {
@@ -458,7 +516,7 @@ export async function createPlanShell(api, identity, params) {
     plan_id: planId,
     artifact_id: artifactId,
     title: params?.title,
-    authority: params?.authority ?? "implementation-plan",
+    authority: normalizePlanAuthority(params?.authority, owner, identity.board_agent_id),
     status: params?.status ?? "draft",
     version: params?.version ?? 1,
     owner,
@@ -478,6 +536,8 @@ export async function createPlanShell(api, identity, params) {
     parley: params?.parley,
     priority: params?.priority ?? null,
     coordination_mode: params?.coordinationMode ?? params?.coordination_mode ?? "single_agent_with_human_gates",
+    activation_policy: normalizeActivationPolicy(params?.activationPolicy ?? params?.activation_policy),
+    managed: normalizePlanManaged({ lifecycle_updated_at: timestamp }),
     created_at: timestamp,
     updated_at: timestamp
   };
@@ -495,7 +555,8 @@ export async function createPlanShell(api, identity, params) {
   });
   const savedObject = await saveCoordinationObjectRecord(api.pluginConfig, identity.board, object);
   const exported = await exportPlanProjection(api, identity, saved);
-  return { plan: saved, object: savedObject, setupState: derivePlanSetupState(saved, identity.board), ...exported };
+  const exportedPlan = exported.plan ?? saved;
+  return { plan: exportedPlan, object: savedObject, setupState: derivePlanSetupState(exportedPlan, identity.board), ...exported };
 }
 
 export function withOverview(plan, input) {

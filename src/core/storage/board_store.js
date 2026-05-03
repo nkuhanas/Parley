@@ -176,6 +176,7 @@ export function createObligationRecord(input) {
     scope: input?.scope ?? null,
     reason: input?.reason ?? null,
     source_effect_id: input?.source_effect_id ?? null,
+    managedBinding: input?.managedBinding ?? input?.managed_binding ?? null,
     on_resolve_trigger_ids: input?.on_resolve_trigger_ids ?? [],
     created_at: timestamp,
     updated_at: input?.updated_at ?? timestamp

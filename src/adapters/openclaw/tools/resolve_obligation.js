@@ -1,5 +1,5 @@
 import { createObligationResolvedEvent, evaluateBoundObligationResolvedTriggers } from "../../../core/board/trigger_engine.js";
-import { createEffectRecord, loadObligationRecord, saveEffectRecord, saveObligationRecord } from "../../../core/storage/board_store.js";
+import { createEffectRecord, loadObligationRecord, loadPlanSetupRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord } from "../../../core/storage/board_store.js";
 import { nowIso } from "../../../core/time.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
@@ -30,6 +30,9 @@ export function createResolveObligationTool(api) {
       const identity = resolveToolCaller(api, params);
       const existing = await loadObligationRecord(api.pluginConfig, identity.board, params?.obligationId);
       if (existing == null) throw new Error(`obligation not found: ${params?.obligationId}`);
+      if (existing.managedBinding?.system === "plan_lifecycle" && existing.managedBinding.role !== "phase_work") {
+        throw new Error(`plan lifecycle ${existing.managedBinding.role} obligations must be resolved through the explicit lifecycle command`);
+      }
       if (existing.status === "resolved") throw new Error(`obligation already resolved: ${existing.obligation_id}`);
 
       const resolvedAt = nowIso();
@@ -42,6 +45,20 @@ export function createResolveObligationTool(api) {
         updated_at: resolvedAt
       };
       const savedObligation = await saveObligationRecord(api.pluginConfig, identity.board, resolved);
+      if (savedObligation.managedBinding?.system === "plan_lifecycle" && savedObligation.managedBinding.role === "phase_work") {
+        const plan = await loadPlanSetupRecord(api.pluginConfig, identity.board, savedObligation.managedBinding.plan_id);
+        if (plan != null && (plan.managed?.activeLifecycleObligationIds ?? []).includes(savedObligation.obligation_id)) {
+          await savePlanSetupRecord(api.pluginConfig, identity.board, {
+            ...plan,
+            managed: {
+              ...plan.managed,
+              activeLifecycleObligationIds: plan.managed.activeLifecycleObligationIds.filter((id) => id !== savedObligation.obligation_id),
+              lifecycle_updated_at: resolvedAt
+            },
+            updated_at: resolvedAt
+          });
+        }
+      }
       const resolvedEffect = createEffectRecord({
         board_id: identity.board_id,
         type: "obligation_resolved",

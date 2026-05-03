@@ -163,6 +163,18 @@ function validateObject(value, fieldName, errors) {
   }
 }
 
+function validateAuthority(value, fieldName, errors) {
+  if (typeof value === "string") return validateRequiredString(value, fieldName, errors);
+  const authority = validateObject(value, fieldName, errors);
+  const owner = validateObject(authority.owner, `${fieldName}.owner`, errors);
+  const createdBy = validateObject(authority.createdBy ?? authority.created_by, `${fieldName}.createdBy`, errors);
+  if (owner.type !== "agent") addError(errors, `${fieldName}.owner.type must be agent`);
+  validateRequiredString(owner.id, `${fieldName}.owner.id`, errors);
+  if (createdBy.type !== "agent") addError(errors, `${fieldName}.createdBy.type must be agent`);
+  validateRequiredString(createdBy.id, `${fieldName}.createdBy.id`, errors);
+  return value;
+}
+
 function validateAllowedObjectKeys(raw, fieldName, allowedKeys, errors) {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return;
   const allowed = new Set(allowedKeys);
@@ -354,7 +366,7 @@ export function validateParleyPlanV1Frontmatter(frontmatter) {
   if (raw.schema !== PARLEY_PLAN_V1_SCHEMA_ID) addError(errors, `schema must be ${PARLEY_PLAN_V1_SCHEMA_ID}`);
   if (raw.artifact_kind !== PARLEY_PLAN_V1_ARTIFACT_KIND) addError(errors, "artifact_kind must be plan");
 
-  validateRequiredString(raw.authority, "authority", errors);
+  validateAuthority(raw.authority, "authority", errors);
   validateRecordId(raw.plan_id, "plan_id", errors);
   validateBoardId(raw.board_id, "board_id", errors);
   validateRequiredString(raw.title, "title", errors);
