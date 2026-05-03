@@ -50,7 +50,7 @@ export async function loadPlanOrThrow(api, identity, planId) {
 
 
 function safeIdPart(value) {
-  return String(value).replace(/[^a-zA-Z0-9_-]+/g, "_");
+  return String(value).toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "reviewer";
 }
 
 function planLifecycleObligationPrefix(plan) {

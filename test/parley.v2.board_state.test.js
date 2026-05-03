@@ -1023,6 +1023,66 @@ test("Parley plan artifact registration imports tracked setup state and lifecycl
   });
 });
 
+test("Parley review lifecycle obligations sanitize board-agent ids for record ids", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const artifactTool = createRegisterArtifactTool(api);
+    const timestamp = "2026-05-03T00:00:00.000Z";
+    const markdown = createParleyPlanV1Document({
+      authority: "implementation-plan",
+      plan_id: "plan_imported_review",
+      board_id: "project",
+      title: "Imported Review Plan",
+      status: "review",
+      version: 1,
+      created_at: timestamp,
+      updated_at: timestamp,
+      owner: "parley-agent",
+      participants: ["parley-agent", "project-reviewer"],
+      scope: { summary: "Import a plan that is ready for reviewer routing.", in: ["Route review"], out: ["Execute work"] },
+      landing: { namespace: "project_plans", subpath: "imports", filename: "imported-review-plan.md" },
+      review: { required_reviewers: ["project-reviewer"], approvals: [], objections: [] },
+      relationships: { supersedes: [], superseded_by: [], extracts_from: [], constrains: [], constrained_by: [], depends_on: [], blocks: [], blocked_by: [], related_to: [] },
+      parley: { object_id: null, artifact_id: "artifact_imported_review", source_thread_id: null, source_message_id: null },
+      sections: {
+        purpose: "Verify review lifecycle obligation ids are valid when reviewer ids contain hyphens.",
+        background: "Board agent ids permit hyphens, but obligation record ids do not.",
+        scope: "Import a review-status plan.",
+        current_state: "A plan projection is ready for review.",
+        target_state: "A board-local reviewer obligation is created with a valid record id.",
+        plan: "Register the artifact and inspect lifecycle obligations.",
+        phases: `### Phase 1 — Review routing smoke phase\n\nKind: implementation\nStatus: draft\nOwner: parley-agent\n\nRequired from:\nN/A\n\nRequested decision:\nN/A\n\nDue at:\nN/A\n\nEntry criteria:\n- Artifact exists.\n\nWork:\n- Import setup state.\n\nExit criteria:\n- Reviewer obligation exists.\n\nSupporting agents:\n- project-reviewer\n\nActivation conditions:\nNone.\n\nReview trigger:\n- Import completes.\n\nDeferral reason:\nNone.\n\nNon-goals before activation:\n- Do not execute implementation.`,
+        acceptance_criteria: "- Reviewer obligation id is valid.",
+        risks_and_constraints: "- Reviewer id contains a hyphen.",
+        open_questions: "None recorded.",
+        review_and_approval: "Review is routed to project-reviewer.",
+        change_log: "- v1: Import review projection."
+      }
+    });
+
+    const result = await artifactTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      artifactId: "artifact_imported_review",
+      kind: "plan",
+      storageMode: "explicit_landing",
+      artifactNamespace: "project_plans",
+      landingSubpath: "imports",
+      filename: "imported-review-plan.md",
+      bodyText: markdown
+    });
+
+    assert.equal(result.details.plan.status, "review");
+    assert.equal(result.details.plan_lifecycle.obligations.length, 1);
+    assert.equal(result.details.plan_lifecycle.obligations[0].agent, "project-reviewer");
+    assert.equal(result.details.plan_lifecycle.obligations[0].obligation_id, "obligation_plan_imported_review_lifecycle_review_project_reviewer");
+    assert.equal(result.details.plan_lifecycle.obligations[0].scope, "plan_lifecycle:review");
+    const saved = await loadObligationRecord(pluginConfig, resolveParleyBoardRegistry(pluginConfig).boards.project, "obligation_plan_imported_review_lifecycle_review_project_reviewer");
+    assert.equal(saved.agent, "project-reviewer");
+  });
+});
+
+
 test("Parley human checkpoint phases create shepherd obligations", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);
