@@ -39,7 +39,8 @@ export function createWritePlanOverviewAction(api) {
         plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
         accepted: { overview: true },
         artifact: result.artifact,
-        setupState: result.setupState
+        setupState: result.setupState,
+        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
       });
     }
   };

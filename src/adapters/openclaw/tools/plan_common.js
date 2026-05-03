@@ -3,12 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { resolveArtifactNamespacePath } from "../../../core/board/board.js";
-import { createArtifactRecord, createCoordinationObjectRecord, createEffectRecord, createObligationRecord, loadPlanSetupRecord, saveArtifactRecord, saveCoordinationObjectRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord } from "../../../core/storage/board_store.js";
+import { createArtifactRecord, createCoordinationObjectRecord, createEffectRecord, createObligationRecord, listObligationRecords, loadPlanSetupRecord, saveArtifactRecord, saveCoordinationObjectRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord } from "../../../core/storage/board_store.js";
 import { createPlanCheckpointId, createPlanId, createPlanPhaseId } from "../../../core/ids.js";
 import { nowIso } from "../../../core/time.js";
 import { assertBoardAgentForTool } from "./v2_common.js";
-import { derivePlanSetupState, isHumanGatePhase, normalizePlanCheckpoint, normalizePlanOverview, normalizePlanPhase, renderPlanSetupMarkdown } from "../../../core/plan/plan_state.js";
-import { validateParleyPlanV1Document } from "../../../core/schema/index.js";
+import { boardAgentIds, derivePlanSetupState, isHumanGatePhase, normalizePlanCheckpoint, normalizePlanOverview, normalizePlanPhase, renderPlanSetupMarkdown } from "../../../core/plan/plan_state.js";
+import { parseParleyPlanV1Document, validateParleyPlanV1Document } from "../../../core/schema/index.js";
 
 function camelOrSnake(value, camelKey, snakeKey) {
   return value?.[camelKey] ?? value?.[snakeKey];
@@ -46,6 +46,130 @@ export async function loadPlanOrThrow(api, identity, planId) {
   const plan = await loadPlanSetupRecord(api.pluginConfig, identity.board, planId);
   if (plan == null) throw new Error(`plan not found: ${planId}`);
   return plan;
+}
+
+
+function safeIdPart(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]+/g, "_");
+}
+
+function planLifecycleObligationPrefix(plan) {
+  return `obligation_${plan.plan_id}_lifecycle`;
+}
+
+function terminalPlanStatus(status) {
+  return ["archived", "cancelled", "complete", "completed", "superseded"].includes(status);
+}
+
+function boardReviewers(plan, board) {
+  const valid = new Set(boardAgentIds(board));
+  return (plan.review?.required_reviewers ?? []).filter((reviewer) => valid.has(reviewer));
+}
+
+function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
+  if (terminalPlanStatus(plan.status)) return [];
+  const prefix = planLifecycleObligationPrefix(plan);
+  const target = {
+    plan_id: plan.plan_id,
+    artifact_id: artifact.artifact_id,
+    artifact_version: artifact.version,
+    status: plan.status
+  };
+
+  if (plan.status === "review") {
+    const reviewers = boardReviewers(plan, identity.board);
+    if (reviewers.length > 0) {
+      return reviewers.map((reviewer) => ({
+        obligation_id: `${prefix}_review_${safeIdPart(reviewer)}`,
+        agent: reviewer,
+        type: "review",
+        target: {
+          plan_id: plan.plan_id,
+          artifact_id: artifact.artifact_id,
+          artifact_version: artifact.version,
+          scope: "plan_review"
+        },
+        reason: `Review requested for plan ${plan.plan_id}: ${plan.title}`,
+        scope: "plan_lifecycle:review"
+      }));
+    }
+    return [{
+      obligation_id: `${prefix}_owner`,
+      agent: plan.owner,
+      type: "report_status",
+      target,
+      reason: `Plan ${plan.plan_id} is in review status but has no board-local required reviewers; add reviewers or change status.`,
+      scope: "plan_lifecycle:review_unassigned"
+    }];
+  }
+
+  if (plan.status === "active") {
+    return [{
+      obligation_id: `${prefix}_owner`,
+      agent: plan.owner,
+      type: "report_status",
+      target,
+      reason: `Plan ${plan.plan_id} is active; report current implementation or activation status.`,
+      scope: "plan_lifecycle:active"
+    }];
+  }
+
+  if (plan.status === "draft") {
+    const reason = setupState.setupComplete
+      ? `Draft plan ${plan.plan_id} is setup-complete but not routed; move it to review, active, archived, or record why it remains draft.`
+      : `Draft plan ${plan.plan_id} needs setup: ${setupState.nextRequiredAction?.reason ?? "complete required plan fields."}`;
+    return [{
+      obligation_id: `${prefix}_owner`,
+      agent: plan.owner,
+      type: "report_status",
+      target,
+      reason,
+      scope: "plan_lifecycle:draft"
+    }];
+  }
+
+  return [];
+}
+
+async function reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState) {
+  const desired = desiredPlanLifecycleObligations(identity, plan, artifact, setupState);
+  const desiredIds = new Set(desired.map((item) => item.obligation_id));
+  const existing = (await listObligationRecords(api.pluginConfig, identity.board))
+    .filter((obligation) => obligation.obligation_id.startsWith(`${planLifecycleObligationPrefix(plan)}_`));
+  const now = nowIso();
+  const saved = [];
+
+  for (const spec of desired) {
+    const previous = existing.find((obligation) => obligation.obligation_id === spec.obligation_id);
+    const obligation = createObligationRecord({
+      board_id: identity.board_id,
+      obligation_id: spec.obligation_id,
+      agent: spec.agent,
+      type: spec.type,
+      status: "active",
+      target: spec.target,
+      scope: spec.scope,
+      reason: spec.reason,
+      source_effect_id: previous?.source_effect_id ?? null,
+      created_at: previous?.created_at ?? now,
+      updated_at: now
+    });
+    saved.push(await saveObligationRecord(api.pluginConfig, identity.board, obligation));
+  }
+
+  for (const previous of existing) {
+    if (desiredIds.has(previous.obligation_id) || previous.status === "resolved" || previous.status === "cancelled" || previous.status === "superseded") continue;
+    saved.push(await saveObligationRecord(api.pluginConfig, identity.board, {
+      ...previous,
+      status: terminalPlanStatus(plan.status) ? "cancelled" : "superseded",
+      resolution: terminalPlanStatus(plan.status) ? "cancelled" : "superseded",
+      resolution_note: `Plan lifecycle obligation superseded by plan status ${plan.status}.`,
+      resolved_at: now,
+      updated_at: now
+    }));
+  }
+
+  return saved;
 }
 
 function checkpointForObligation(raw, plan, artifact) {
@@ -121,6 +245,168 @@ async function createCheckpointObligation(api, identity, plan, artifact, rawChec
   return { checkpoint, effect: savedEffect, obligation: savedObligation };
 }
 
+function normalizeBodyText(value) {
+  return String(value ?? "").replace(/\r\n?/g, "\n").trim();
+}
+
+function bodyLines(value) {
+  return normalizeBodyText(value).split("\n");
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sectionContent(body, heading) {
+  const lines = bodyLines(body);
+  const startPattern = new RegExp(`^##\\s+${escapeRegex(heading)}\\s*$`, "i");
+  const start = lines.findIndex((line) => startPattern.test(line));
+  if (start === -1) return "";
+  const endOffset = lines.slice(start + 1).findIndex((line) => /^##\s+/.test(line));
+  const end = endOffset === -1 ? lines.length : start + 1 + endOffset;
+  return lines.slice(start + 1, end).join("\n").trim();
+}
+
+function subsectionContent(section, heading) {
+  const lines = bodyLines(section);
+  const startPattern = new RegExp(`^###\\s+${escapeRegex(heading)}\\s*$`, "i");
+  const start = lines.findIndex((line) => startPattern.test(line));
+  if (start === -1) return "";
+  const endOffset = lines.slice(start + 1).findIndex((line) => /^###\s+/.test(line));
+  const end = endOffset === -1 ? lines.length : start + 1 + endOffset;
+  return lines.slice(start + 1, end).join("\n").trim();
+}
+
+function sectionBeforeSubheading(section) {
+  const lines = bodyLines(section);
+  const end = lines.findIndex((line) => /^###\s+/.test(line));
+  return lines.slice(0, end === -1 ? lines.length : end).join("\n").trim();
+}
+
+function markdownListItems(markdown) {
+  return bodyLines(markdown)
+    .map((line) => line.match(/^\s*-\s+(.+?)\s*$/)?.[1]?.trim())
+    .filter(Boolean);
+}
+
+function nullIfNA(value) {
+  const normalized = normalizeBodyText(value);
+  if (!normalized || normalized === "N/A" || normalized === "None." || normalized === "None") return null;
+  return normalized;
+}
+
+function valueAfterInlineLabel(block, label) {
+  const pattern = new RegExp(`^${escapeRegex(label)}:\\s*(.*?)\\s*$`, "im");
+  const match = block.match(pattern);
+  return match ? nullIfNA(match[1]) : null;
+}
+
+function blockAfterLabel(block, label, stopLabels) {
+  const lines = bodyLines(block);
+  const labelPattern = new RegExp(`^${escapeRegex(label)}:\\s*$`, "i");
+  const start = lines.findIndex((line) => labelPattern.test(line));
+  if (start === -1) return "";
+  const stopPattern = new RegExp(`^(${stopLabels.map(escapeRegex).join("|")}):`);
+  const endOffset = lines.slice(start + 1).findIndex((line) => stopPattern.test(line));
+  const end = endOffset === -1 ? lines.length : start + 1 + endOffset;
+  return lines.slice(start + 1, end).join("\n").trim();
+}
+
+function parseImportedPhases(body, board) {
+  const section = sectionContent(body, "Phases");
+  if (!section) return [];
+  const lines = bodyLines(section);
+  const headingIndexes = lines
+    .map((line, index) => ({ line, index, match: line.match(/^###\s+Phase\s+\d+\s+[—-]\s+(.+?)\s*$/) }))
+    .filter((entry) => entry.match);
+  const labels = [
+    "Required from", "Requested decision", "Due at", "Entry criteria", "Work", "Exit criteria", "Supporting agents",
+    "Activation conditions", "Review trigger", "Deferral reason", "Non-goals before activation"
+  ];
+  return headingIndexes.map((entry, index) => {
+    const next = headingIndexes[index + 1]?.index ?? lines.length;
+    const block = lines.slice(entry.index + 1, next).join("\n");
+    return normalizePlanPhase({
+      phase_id: createPlanPhaseId(entry.match[1]),
+      title: entry.match[1],
+      kind: valueAfterInlineLabel(block, "Kind") ?? "implementation",
+      status: valueAfterInlineLabel(block, "Status") ?? "draft",
+      owner: valueAfterInlineLabel(block, "Owner"),
+      required_from: nullIfNA(blockAfterLabel(block, "Required from", labels)),
+      requested_decision: nullIfNA(blockAfterLabel(block, "Requested decision", labels)),
+      due_at: nullIfNA(blockAfterLabel(block, "Due at", labels)),
+      entry_criteria: markdownListItems(blockAfterLabel(block, "Entry criteria", labels)),
+      work: markdownListItems(blockAfterLabel(block, "Work", labels)),
+      exit_criteria: markdownListItems(blockAfterLabel(block, "Exit criteria", labels)),
+      supporting_agents: markdownListItems(blockAfterLabel(block, "Supporting agents", labels)),
+      activation_conditions: markdownListItems(blockAfterLabel(block, "Activation conditions", labels)),
+      review_trigger: markdownListItems(blockAfterLabel(block, "Review trigger", labels)),
+      deferral_reason: markdownListItems(blockAfterLabel(block, "Deferral reason", labels)),
+      non_goals_before_activation: markdownListItems(blockAfterLabel(block, "Non-goals before activation", labels))
+    }, board);
+  });
+}
+
+function importedOverview(frontmatter, body) {
+  const scopeSection = sectionContent(body, "Scope");
+  const inScope = markdownListItems(subsectionContent(scopeSection, "In Scope"));
+  const outOfScope = markdownListItems(subsectionContent(scopeSection, "Out of Scope"));
+  return normalizePlanOverview({
+    purpose: sectionContent(body, "Purpose"),
+    background: sectionContent(body, "Background"),
+    scopeSummary: sectionBeforeSubheading(scopeSection) || frontmatter.scope?.summary,
+    inScope: inScope.length ? inScope : frontmatter.scope?.in,
+    outOfScope: outOfScope.length ? outOfScope : frontmatter.scope?.out,
+    currentState: sectionContent(body, "Current State"),
+    targetState: sectionContent(body, "Target State"),
+    approach: sectionContent(body, "Plan"),
+    acceptanceCriteria: markdownListItems(sectionContent(body, "Acceptance Criteria")),
+    risksAndConstraints: markdownListItems(sectionContent(body, "Risks and Constraints")),
+    openQuestions: markdownListItems(sectionContent(body, "Open Questions"))
+  });
+}
+
+function importedPlanRecordFromDocument(markdown, validation, artifact, board) {
+  const parsed = parseParleyPlanV1Document(markdown);
+  const frontmatter = validation.frontmatter ?? parsed.frontmatter;
+  if (frontmatter.board_id !== board.board_id) throw new Error(`plan board_id ${frontmatter.board_id} does not match board ${board.board_id}`);
+  return {
+    board_id: frontmatter.board_id,
+    plan_id: frontmatter.plan_id,
+    artifact_id: artifact.artifact_id,
+    title: frontmatter.title,
+    authority: frontmatter.authority,
+    status: frontmatter.status,
+    version: frontmatter.version,
+    owner: frontmatter.owner,
+    participants: frontmatter.participants,
+    landing: {
+      ...(frontmatter.landing ?? {}),
+      landing_root: artifact.landing_root,
+      resolved_path: artifact.resolved_path,
+      uri: artifact.uri
+    },
+    overview: importedOverview(frontmatter, parsed.body),
+    phases: parseImportedPhases(parsed.body, board),
+    review: frontmatter.review,
+    relationships: frontmatter.relationships,
+    parley: frontmatter.parley,
+    priority: frontmatter.priority ?? null,
+    coordination_mode: frontmatter.coordination_mode ?? null,
+    created_at: frontmatter.created_at,
+    updated_at: frontmatter.updated_at
+  };
+}
+
+export async function importPlanArtifactSetup(api, identity, artifact, markdown) {
+  const validation = validateParleyPlanV1Document(markdown);
+  if (!validation.ok) return { validation, plan: null, setupState: null, lifecycleObligations: [] };
+  const plan = await savePlanSetupRecord(api.pluginConfig, identity.board, importedPlanRecordFromDocument(markdown, validation, artifact, identity.board));
+  const setupState = derivePlanSetupState(plan, identity.board);
+  const lifecycleObligations = await reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState);
+  return { validation, plan, setupState, lifecycleObligations };
+}
+
 export async function exportPlanProjection(api, identity, plan, { checkpointForObligation: checkpoint = null } = {}) {
   const markdown = renderPlanSetupMarkdown(plan);
   const validation = validateParleyPlanV1Document(markdown);
@@ -145,8 +431,10 @@ export async function exportPlanProjection(api, identity, plan, { checkpointForO
     updated_at: plan.updated_at
   });
   const savedArtifact = await saveArtifactRecord(api.pluginConfig, identity.board, artifact);
+  const setupState = derivePlanSetupState(plan, identity.board);
+  const lifecycleObligations = await reconcilePlanLifecycleObligations(api, identity, plan, savedArtifact, setupState);
   const createdCheckpointObligation = checkpoint == null ? null : await createCheckpointObligation(api, identity, plan, savedArtifact, checkpoint);
-  return { markdown, validation, artifact: savedArtifact, createdCheckpointObligation };
+  return { markdown, validation, artifact: savedArtifact, lifecycleObligations, createdCheckpointObligation };
 }
 
 export async function saveAndExportPlan(api, identity, plan, options = {}) {

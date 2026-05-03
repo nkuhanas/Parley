@@ -27,11 +27,14 @@ import {
   saveEffectRecord,
   loadArtifactRecord,
   loadCoordinationObjectRecord,
+  loadPlanSetupRecord,
   loadObligationRecord,
   listEffectRecords,
+  listObligationRecords,
   loadProjectionCheckpointRecord
 } from "../src/core/storage/board_store.js";
 import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
+import { createParleyPlanV1Document } from "../src/core/schema/index.js";
 
 const REPO_ROOT = path.join(os.tmpdir(), "parley-test-repo");
 const AGENT_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "parley-agent" };
@@ -885,6 +888,15 @@ test("Parley guided plan tools generate ids and expose setup status", async () =
     assert.equal(createResult.details.result.setupState.setupComplete, false);
     assert.deepEqual(createResult.details.result.setupState.missingRequired, ["overview", "phase"]);
     assert.equal(createResult.details.result.setupState.nextRequiredAction.tool, "parley_write_plan_overview");
+    assert.equal(createResult.details.result.plan_lifecycle.obligations.length, 1);
+    assert.equal(createResult.details.result.plan_lifecycle.obligations[0].obligation_id, `obligation_${planId}_lifecycle_owner`);
+    assert.equal(createResult.details.result.plan_lifecycle.obligations[0].agent, "parley-agent");
+    assert.equal(createResult.details.result.plan_lifecycle.obligations[0].status, "active");
+    assert.match(createResult.details.result.plan_lifecycle.obligations[0].reason, /needs setup/);
+
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const obligations = await listObligationRecords(pluginConfig, board);
+    assert.equal(obligations.some((obligation) => obligation.obligation_id === `obligation_${planId}_lifecycle_owner`), true);
 
     const statusResult = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -936,6 +948,73 @@ test("Parley query/mutate façade creates and validates parley.plan.v1 documents
     assert.equal(validateResult.details.result.validation.ok, true);
     assert.equal(validateResult.details.result.validation.shell_valid, true);
     assert.equal(validateResult.details.result.validation.setup_complete, true);
+  });
+});
+
+
+
+test("Parley plan artifact registration imports tracked setup state and lifecycle obligations", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const artifactTool = createRegisterArtifactTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const timestamp = "2026-05-03T00:00:00.000Z";
+    const markdown = createParleyPlanV1Document({
+      authority: "implementation-plan",
+      plan_id: "plan_imported_projection",
+      board_id: "project",
+      title: "Imported Projection Plan",
+      status: "draft",
+      version: 1,
+      created_at: timestamp,
+      updated_at: timestamp,
+      owner: "parley-agent",
+      participants: ["parley-agent", "project-reviewer"],
+      scope: { summary: "Import an existing generated plan projection.", in: ["Import state"], out: ["Execute work"] },
+      landing: { namespace: "project_plans", subpath: "imports", filename: "imported-projection-plan.md" },
+      review: { required_reviewers: [], approvals: [], objections: [] },
+      relationships: { supersedes: [], superseded_by: [], extracts_from: [], constrains: [], constrained_by: [], depends_on: [], blocks: [], blocked_by: [], related_to: [] },
+      parley: { object_id: null, artifact_id: "artifact_imported_projection", source_thread_id: null, source_message_id: null },
+      sections: {
+        purpose: "Verify registration imports canonical mutable plan state.",
+        background: "Some generated plan projections may arrive through artifact registration first.",
+        scope: "Import an existing generated plan projection.",
+        current_state: "The board has a plan projection but no setup record.",
+        target_state: "The board has a tracked setup record and lifecycle obligation.",
+        plan: "Register the artifact and import the plan setup state.",
+        phases: `### Phase 1 — Import smoke phase\n\nKind: implementation\nStatus: draft\nOwner: parley-agent\n\nRequired from:\nN/A\n\nRequested decision:\nN/A\n\nDue at:\nN/A\n\nEntry criteria:\n- Artifact exists.\n\nWork:\n- Import setup state.\n\nExit criteria:\n- Plan state exists.\n\nSupporting agents:\n- project-reviewer\n\nActivation conditions:\nNone.\n\nReview trigger:\n- Import completes.\n\nDeferral reason:\nNone.\n\nNon-goals before activation:\n- Do not execute implementation.`,
+        acceptance_criteria: "- Plan setup state is saved.\n- Lifecycle obligation is active.",
+        risks_and_constraints: "- Import must stay non-executing.",
+        open_questions: "None recorded.",
+        review_and_approval: "No review recorded yet.",
+        change_log: "- v1: Import smoke projection."
+      }
+    });
+
+    const result = await artifactTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      artifactId: "artifact_imported_projection",
+      kind: "plan",
+      storageMode: "explicit_landing",
+      artifactNamespace: "project_plans",
+      landingSubpath: "imports",
+      filename: "imported-projection-plan.md",
+      bodyText: markdown
+    });
+
+    assert.equal(result.details.artifact.kind, "plan");
+    assert.equal(result.details.plan.plan_id, "plan_imported_projection");
+    assert.equal(result.details.setupState.setupComplete, true);
+    assert.equal(result.details.plan_lifecycle.obligations.length, 1);
+    assert.equal(result.details.plan_lifecycle.obligations[0].obligation_id, "obligation_plan_imported_projection_lifecycle_owner");
+    assert.match(result.details.plan_lifecycle.obligations[0].reason, /setup-complete but not routed/);
+
+    const savedPlan = await loadPlanSetupRecord(pluginConfig, board, "plan_imported_projection");
+    assert.equal(savedPlan.artifact_id, "artifact_imported_projection");
+    assert.equal(savedPlan.overview.purpose, "Verify registration imports canonical mutable plan state.");
+    assert.equal(savedPlan.phases.length, 1);
+    assert.equal(savedPlan.phases[0].owner, "parley-agent");
   });
 });
 

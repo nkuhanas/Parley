@@ -48,7 +48,8 @@ export function createAddPlanPhaseAction(api) {
         human_checkpoints: {
           created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]
         },
-        setupState: result.setupState
+        setupState: result.setupState,
+        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
       });
     }
   };

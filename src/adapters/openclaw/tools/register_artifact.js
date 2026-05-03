@@ -5,6 +5,7 @@ import { assertPathUnderArtifactNamespaces, resolveArtifactNamespacePath, resolv
 import { createArtifactRecord, saveArtifactRecord } from "../../../core/storage/board_store.js";
 import { assertNonEmptyString } from "../../../core/board/board_schema.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
+import { importPlanArtifactSetup } from "./plan_common.js";
 
 function normalizeStorageMode(value) {
   if (typeof value !== "string" || !value.trim()) return "reference_only";
@@ -115,7 +116,20 @@ export function createRegisterArtifactTool(api) {
         resolved_path: resolvedPath
       });
       const saved = await saveArtifactRecord(api.pluginConfig, identity.board, artifact);
-      return boardResult({ tool: "parley_register_artifact", identity, artifact: saved });
+      let planImport = null;
+      if (saved.kind === "plan" && saved.resolved_path != null) {
+        const markdown = await fs.readFile(saved.resolved_path, "utf8");
+        planImport = await importPlanArtifactSetup(api, identity, saved, markdown);
+      }
+      return boardResult({
+        tool: "parley_register_artifact",
+        identity,
+        artifact: saved,
+        plan: planImport?.plan ?? null,
+        setupState: planImport?.setupState ?? null,
+        plan_validation: planImport?.validation ?? null,
+        plan_lifecycle: { obligations: planImport?.lifecycleObligations ?? [] }
+      });
     }
   };
 }

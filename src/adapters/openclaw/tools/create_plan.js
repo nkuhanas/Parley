@@ -48,7 +48,8 @@ export function createCreatePlanAction(api) {
         },
         object: created.object,
         artifact: created.artifact,
-        setupState: created.setupState
+        setupState: created.setupState,
+        plan_lifecycle: { obligations: created.lifecycleObligations ?? [] }
       });
     }
   };
