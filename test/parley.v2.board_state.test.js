@@ -975,6 +975,73 @@ test("Parley human checkpoint phases create shepherd obligations", async () => {
     assert.equal(created[0].obligation.target.review_required_from, "human:sensei");
     assert.equal(created[0].effect.type, "review_requested");
 
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "create_plan",
+      input: {
+        planId: "plan_human_checkpoint_archived",
+        title: "Archived Human Checkpoint Plan",
+        authority: "implementation-plan",
+        landingSubpath: "agent-comms/parley",
+        filename: "human-checkpoint-archived-plan.md",
+        participants: ["parley-agent", "human:sensei"]
+      }
+    });
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "write_plan_overview",
+      input: {
+        planId: "plan_human_checkpoint_archived",
+        purpose: "Verify archived plans do not leak checkpoint visibility.",
+        background: "Archived sources can retain historical human gates.",
+        scopeSummary: "Exercise inactive-source checkpoint filtering.",
+        inScope: ["Hide archived human checkpoints"],
+        outOfScope: ["Delete historical checkpoint records"],
+        currentState: "An archived source may still have human gate phases.",
+        targetState: "Derived checkpoint state ignores inactive sources.",
+        approach: "Archive the artifact after adding a deferred human gate.",
+        acceptanceCriteria: ["Archived human checkpoints are absent from derived board state"],
+        risksAndConstraints: ["Do not create notify obligations for deferred gates."]
+      }
+    });
+    const archivedCheckpointResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "add_plan_phase",
+      input: {
+        planId: "plan_human_checkpoint_archived",
+        phaseId: "checkpoint_archived_review",
+        title: "Archived human review",
+        kind: "human_checkpoint",
+        owner: "parley-agent",
+        status: "deferred",
+        requiredFrom: "human:sensei",
+        requestedDecision: "review",
+        reviewTrigger: ["Historical review would have been requested before archiving."],
+        deferralReason: ["Archived source is not active coordination work."],
+        nonGoalsBeforeActivation: ["Do not notify the human from an archived plan."]
+      }
+    });
+    const archivedCheckpointArtifact = archivedCheckpointResult.details.result.artifact;
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "register_artifact",
+      input: {
+        artifactId: archivedCheckpointArtifact.artifact_id,
+        kind: "plan",
+        storageMode: "explicit_landing",
+        uri: archivedCheckpointArtifact.uri,
+        version: archivedCheckpointArtifact.version,
+        status: "archived",
+        title: archivedCheckpointArtifact.title,
+        landingRoot: archivedCheckpointArtifact.landing_root,
+        resolvedPath: archivedCheckpointArtifact.resolved_path
+      }
+    });
+
     const boardResultValue = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
@@ -985,6 +1052,7 @@ test("Parley human checkpoint phases create shepherd obligations", async () => {
     assert.equal(boardResultValue.details.result.projection.counts.active_human_checkpoint_obligations, 1);
     assert.equal(checkpointState.human_checkpoints[0].checkpoint_id, "checkpoint_initial_review");
     assert.equal(checkpointState.human_checkpoints[0].phase_id, "checkpoint_initial_review");
+    assert.equal(checkpointState.human_checkpoints[0].plan_id, "plan_human_checkpoint");
     assert.equal(checkpointState.human_checkpoints[0].kind, "human_checkpoint");
     assert.equal(checkpointState.human_checkpoints[0].obligation_id, created[0].obligation.obligation_id);
 
@@ -1284,6 +1352,73 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
       }
     });
 
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "create_plan",
+      input: {
+        planId: "plan_activation_visibility_archived",
+        title: "Archived Activation Visibility Plan",
+        authority: "implementation-plan",
+        landingSubpath: "agent-comms/parley",
+        filename: "activation-visibility-archived-plan.md",
+        participants: ["parley-agent", "project-reviewer"]
+      }
+    });
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "write_plan_overview",
+      input: {
+        planId: "plan_activation_visibility_archived",
+        purpose: "Verify archived plans do not leak derived activation visibility.",
+        background: "Archived sources are historical records, not active coordination work.",
+        scopeSummary: "Exercise inactive-source filtering.",
+        inScope: ["Hide archived deferred phases"],
+        outOfScope: ["Delete historical plan records"],
+        currentState: "An archived source may still have deferred phases on disk.",
+        targetState: "Derived board state ignores inactive sources.",
+        approach: "Archive the artifact after creating a deferred phase.",
+        acceptanceCriteria: ["Archived deferred phases are absent from board activation state"],
+        risksAndConstraints: ["Do not mutate phase status as part of filtering."]
+      }
+    });
+    const archivedCreateResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "add_plan_phase",
+      input: {
+        planId: "plan_activation_visibility_archived",
+        phaseId: "phase_archived",
+        title: "Archived Deferred Gate",
+        owner: "parley-agent",
+        status: "deferred",
+        entryCriteria: ["Historical record exists."],
+        work: ["Do not surface as current work."],
+        exitCriteria: ["Projection filtering hides this phase."],
+        reviewTrigger: ["Historical review would have been requested before archiving."],
+        deferralReason: ["Archived source is not active coordination work."],
+        nonGoalsBeforeActivation: ["Do not create activation candidates from an archived plan."]
+      }
+    });
+    const archivedArtifact = archivedCreateResult.details.result.artifact;
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "register_artifact",
+      input: {
+        artifactId: archivedArtifact.artifact_id,
+        kind: "plan",
+        storageMode: "explicit_landing",
+        uri: archivedArtifact.uri,
+        version: archivedArtifact.version,
+        status: "archived",
+        title: archivedArtifact.title,
+        landingRoot: archivedArtifact.landing_root,
+        resolvedPath: archivedArtifact.resolved_path
+      }
+    });
+
     const boardBefore = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
@@ -1292,6 +1427,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
     assert.equal(boardBefore.details.result.projection.counts.deferred_phases, 1);
     assert.equal(boardBefore.details.result.projection.counts.activation_candidates, 0);
     assert.equal(boardBefore.details.result.projection.activation_state.deferred_phases[0].status, "deferred_visible");
+    assert.equal(boardBefore.details.result.projection.activation_state.deferred_phases[0].plan_id, "plan_activation_visibility");
 
     const whereBefore = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,

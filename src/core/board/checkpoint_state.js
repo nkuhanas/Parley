@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 
 import { collectParleyPlanV1Phases, parseParleyPlanV1Document } from "../schema/index.js";
 import { isHumanGatePhase } from "../plan/plan_state.js";
+import { artifactVisibleForDerivedBoardState, planVisibleForDerivedBoardState } from "./source_visibility.js";
 
 function normalizeCheckpoint(raw, frontmatter, artifact) {
   const phaseId = raw.phase_id ?? raw.checkpoint_id;
@@ -43,7 +44,7 @@ function checkpointsFromPlanState(plan, artifact = null) {
 }
 
 async function readPlanCheckpoints(artifact) {
-  if (artifact.kind !== "plan" || artifact.resolved_path == null) return [];
+  if (artifact.kind !== "plan" || artifact.resolved_path == null || !artifactVisibleForDerivedBoardState(artifact)) return [];
   try {
     const markdown = await fs.readFile(artifact.resolved_path, "utf8");
     const parsed = parseParleyPlanV1Document(markdown);
@@ -80,7 +81,11 @@ function matchingObligation(checkpoint, obligations) {
 export async function deriveCheckpointState(_board, artifacts, obligations, plans = []) {
   const checkpoints = [];
   const artifactById = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
-  for (const plan of plans) checkpoints.push(...checkpointsFromPlanState(plan, artifactById.get(plan.artifact_id)));
+  for (const plan of plans) {
+    const artifact = artifactById.get(plan.artifact_id);
+    if (!planVisibleForDerivedBoardState(plan, artifact)) continue;
+    checkpoints.push(...checkpointsFromPlanState(plan, artifact));
+  }
   if (plans.length === 0) for (const artifact of artifacts) checkpoints.push(...await readPlanCheckpoints(artifact));
   const enriched = checkpoints.map((checkpoint) => {
     const obligation = matchingObligation(checkpoint, obligations);

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 
 import { compareEffectRecords } from "../effect_ordering.js";
 import { collectParleyPlanV1DeferredPhases, parseParleyPlanV1Document } from "../schema/index.js";
+import { artifactVisibleForDerivedBoardState, planVisibleForDerivedBoardState } from "./source_visibility.js";
 
 const ACTIVATION_EFFECT_TYPES = new Set(["activation_proposed", "activation_candidate_dismissed"]);
 const ACTIVE_CANDIDATE_STATUSES = new Set(["candidate", "proposed"]);
@@ -138,14 +139,17 @@ export async function deriveActivationState(board, artifacts, effects, plans = [
   const artifactById = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
   if (plans.length > 0) {
     for (const plan of plans) {
+      const artifact = artifactById.get(plan.artifact_id);
+      if (!planVisibleForDerivedBoardState(plan, artifact)) continue;
       for (const phase of (plan.phases ?? []).filter((item) => item.status === "deferred")) {
-        deferredPhases.push(deferredPhaseRecordFromPlanState(board, plan, artifactById.get(plan.artifact_id), phase));
+        deferredPhases.push(deferredPhaseRecordFromPlanState(board, plan, artifact, phase));
       }
     }
   } else {
     for (const artifact of artifacts) {
+      if (!artifactVisibleForDerivedBoardState(artifact)) continue;
       const plan = await readPlanArtifact(artifact);
-      if (plan == null) continue;
+      if (plan == null || !planVisibleForDerivedBoardState(plan.frontmatter, artifact)) continue;
       for (const phase of collectParleyPlanV1DeferredPhases(plan.markdown)) {
         deferredPhases.push(deferredPhaseRecord(board, artifact, plan.frontmatter, phase));
       }
