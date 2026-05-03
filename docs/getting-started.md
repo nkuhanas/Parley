@@ -46,33 +46,36 @@ parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) 
 
 ## 5. Add coordination records
 
-After identity works, register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the board obligation appears in the board section.
+After identity works, use first-class tools to register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the board obligation appears in the board section.
 
 For runtime obligation recovery, use:
 
 ```js
-parley_query({
-  action: "runtime_obligations",
-  input: { filter: "needs_my_action" }
+parley_query_runtime_obligations({
+  filter: "needs_my_action"
 })
 ```
 
 For board obligation recovery, use:
 
 ```js
-parley_query({
-  action: "board_obligations",
+parley_query_board_obligations({
   boardId: runtime.boards.default_board,
-  input: { filter: "needs_my_action", targetKinds: ["plans"] }
+  filter: "needs_my_action",
+  targetKinds: ["plans"]
 })
 ```
 
 For board namespace discovery, use:
 
 ```js
-parley_query({
-  action: "search",
+parley_query_search({
   boardId: runtime.boards.default_board,
-  input: { query: "checkpoint", namespaces: ["project_docs", "project_plans"] }
+  query: "checkpoint",
+  namespaces: ["project_docs", "project_plans"]
 })
 ```
+
+`parley_query` and `parley_mutate` remain available as advanced facades for compatibility or single-dispatch callers, but the preferred agent-facing path is the first-class tool whose name matches the operation.
+
+Tool responses include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Guidance text lives in the OpenClaw adapter guidance catalog so operational wording can change without searching through every tool implementation.

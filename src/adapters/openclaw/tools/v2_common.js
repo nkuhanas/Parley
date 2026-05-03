@@ -1,5 +1,6 @@
 import { resolveCallerIdentity } from "../../../core/board/board.js";
 import { requireBoardAgent } from "../../../core/board/board.js";
+import { enrichToolDetails } from "../guidance/envelope.js";
 
 function summarizeIdentity(identity) {
   if (identity == null || typeof identity !== "object" || Array.isArray(identity)) return identity;
@@ -132,14 +133,15 @@ function summarizeValue(value, key = null) {
 
 export function boardResult(details, options = {}) {
   const summarizedDetails = options?.summarize === false ? details : summarizeValue(details);
+  const enrichedDetails = enrichToolDetails(summarizedDetails);
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(summarizedDetails, null, 2)
+        text: JSON.stringify(enrichedDetails, null, 2)
       }
     ],
-    details: summarizedDetails
+    details: enrichedDetails
   };
 }
 

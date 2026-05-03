@@ -57,7 +57,7 @@ Scope is not durability: runtime targets may be persisted, and board targets may
 Recommended recovery sequence:
 
 ```txt
-parley_describe({ topic: "recovery" }) -> parley_where_am_i({}) -> parley_where_am_i({ boardId: default_board }) -> parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action" } }) -> parley_where_am_i({ boardId: each other active board })
+parley_describe({ topic: "recovery" }) -> parley_where_am_i({}) -> parley_where_am_i({ boardId: default_board }) -> parley_query_board_obligations({ boardId, filter: "needs_my_action" }) -> parley_where_am_i({ boardId: each other active board })
 # add verbosity: "full" to where_am_i only when diagnostic detail is needed
 ```
 
@@ -69,10 +69,18 @@ parley_describe({ topic: "recovery" }) -> parley_where_am_i({}) -> parley_where_
 
 `my_boards` remains a boardless discovery query. All board-scoped queries and mutations require explicit `boardId`; `default_board` is a discovery hint, not implicit routing.
 
-Use `parley_query({ action: "runtime_obligations" })` when a caller needs runtime protocol obligations such as pending thread turns.
+Use `parley_query_runtime_obligations({ filter: "needs_my_action" })` when a caller needs runtime protocol obligations such as pending thread turns.
 
-Use `parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["plans"] } })` when a caller needs board-scoped obligations. `targetKinds` filters board target kinds only; it does not accept runtime targets such as threads.
+Use `parley_query_board_obligations({ boardId, filter: "needs_my_action", targetKinds: ["plans"] })` when a caller needs board-scoped obligations. `targetKinds` filters board target kinds only; it does not accept runtime targets such as threads.
 
-Use `parley_query({ action: "search", boardId, input: { query, namespaces } })` to search board-registered reference namespaces. Search is artifact/reference/content-oriented and does not return runtime threads or messages. Future runtime thread discovery should use an explicit runtime query action.
+Use `parley_query_search({ boardId, query, namespaces })` to search board-registered reference namespaces. Search is artifact/reference/content-oriented and does not return runtime threads or messages. Future runtime thread discovery should use an explicit runtime query action.
+
+`parley_query` and `parley_mutate` are advanced compatibility facades over first-class read/write tools. Prefer first-class tools in agent-facing workflows because the tool name should match the caller's operational intent.
+
+## Agent-facing output protocol
+
+Parley tool responses are coordination-service responses, not raw developer API returns. A successful response includes compact state plus `ok`, `summary`, optional `guidance.next`, optional `guidance.avoid`, and safe `diagnostics` such as tool/action/board/agent context. Operational guidance text is centralized under `src/adapters/openclaw/guidance/` rather than embedded throughout tool implementations.
+
+Guidance is advisory. A suggested next call helps the agent inspect or continue safely; it does not grant authority to activate, promote, mutate, or act for another participant. Diagnostic identity/runtime provenance remains available only through explicit diagnostic/full-verbosity paths.
 
 Stay quiet when there is no actionable state. Surface blockers, stale approvals, active runtime obligations, active board obligations, thread reply obligations, or validation errors.

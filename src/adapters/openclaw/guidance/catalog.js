@@ -1,0 +1,60 @@
+export const GUIDANCE_TEXT = Object.freeze({
+  summaries: Object.freeze({
+    default: "Parley call completed.",
+    "parley_describe": "Returned Parley tool and workflow guidance.",
+    "parley_my_boards": "Returned accessible Parley boards.",
+    "parley_where_am_i.runtime": "Recovered runtime identity and board discovery hints.",
+    "parley_where_am_i.runtime_and_board": "Recovered runtime and board-local Parley state.",
+    "parley_query": "Completed Parley query facade action.",
+    "parley_mutate": "Completed Parley mutation facade action.",
+    "parley_register_artifact": "Registered a board artifact.",
+    "parley_create_object": "Created a board coordination object.",
+    "parley_record_effect": "Recorded an append-only board effect.",
+    "parley_create_obligation": "Created a board obligation.",
+    "parley_record_relationship": "Recorded a board relationship.",
+    "parley_remove_relationship": "Marked a board relationship inactive in projections.",
+    "parley_create_plan": "Created a Parley plan and linked board records.",
+    "parley_validate_plan": "Validated a Parley plan document.",
+    "parley_validate_state": "Validated Parley board state.",
+    "parley_board_projection": "Returned a board projection.",
+    "parley_checkpoint_projection": "Compared or advanced a board projection checkpoint.",
+    "parley_query_runtime_obligations": "Returned runtime protocol obligations.",
+    "parley_query_board_obligations": "Returned board obligations.",
+    "parley_query_search": "Searched board-registered reference namespaces.",
+    "parley_open_thread": "Opened a Parley thread and created the opening message.",
+    "parley_reply_thread": "Recorded a substantive Parley thread reply.",
+    "parley_claim_turn": "Claimed the current Parley turn.",
+    "parley_settle_turn": "Settled the current Parley turn.",
+    "parley_conclude_thread": "Concluded the Parley thread.",
+    "parley_probe_thread": "Recorded a Parley thread probe.",
+    "parley_dispatch_transport_request": "Handled Parley transport dispatch for a pending message.",
+    "parley_record_human_summary_anchor": "Recorded the human-summary anchor for a Parley thread.",
+    "parley_record_transport_result": "Recorded Parley transport delivery status."
+  }),
+  meanings: Object.freeze({
+    runtime_recovery: "Use board discovery hints to choose an explicit boardId before board-scoped work.",
+    board_recovery: "This is the current board-local recovery view for the resolved agent identity.",
+    mutation_recorded: "The board now has durable coordination state that projections and obligations can derive from.",
+    validation: "Validation results are evidence only; they do not grant activation or mutation authority.",
+    projection: "Projection output is a derived view of board state, not a mutation.",
+    thread: "Thread state tracks protocol ownership and next-action routing between participants.",
+    search: "Search results are references for inspection; open or read the specific artifact before relying on details.",
+    facade: "This facade delegated to the corresponding first-class Parley tool. Prefer first-class tools when available."
+  }),
+  nextReasons: Object.freeze({
+    recover_default_board: "Recover board-local role, permissions, obligations, and checkpoints for the default board.",
+    inspect_runtime_obligations: "Inspect runtime protocol obligations that may need a reply, dispatch, or settlement.",
+    inspect_board_obligations: "Inspect board obligations that may need your action.",
+    recover_board_after_mutation: "Confirm the resulting board-local state and any remaining obligations.",
+    inspect_board_projection: "Inspect the board projection after a state change.",
+    dispatch_transport: "Dispatch the pending message through the configured OpenClaw session transport.",
+    record_human_anchor: "After sending the human-visible anchor, record its message id so Parley can later reply/update correctly.",
+    settle_turn: "When your substantive turn is complete, settle the turn and assign the next action owner.",
+    validate_plan_state: "Inspect related board obligations or approvals before treating validation as actionable."
+  }),
+  avoid: Object.freeze({
+    implicit_board: "Do not assume default_board was applied; pass boardId explicitly for board-scoped calls.",
+    activation_without_authority: "Do not activate, promote, or mutate follow-on workflow solely because this call succeeded.",
+    acting_for_other_owner: "Do not act on a thread turn when another participant is the next_action_owner."
+  })
+});

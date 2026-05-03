@@ -17,7 +17,11 @@ import { createBoardProjectionTool } from "./tools/board_projection.js";
 import { createRecordRelationshipTool } from "./tools/record_relationship.js";
 import { createRemoveRelationshipTool } from "./tools/remove_relationship.js";
 import { createCheckpointProjectionTool } from "./tools/checkpoint_projection.js";
+import { createValidatePlanAction } from "./tools/validate_plan.js";
 import { createValidateStateAction } from "./tools/validate_state.js";
+import { createCreatePlanAction } from "./tools/create_plan.js";
+import { createRuntimeObligationsQueryAction, createBoardObligationsQueryAction } from "./tools/obligations.js";
+import { createNamespaceSearchAction } from "./tools/namespace_search.js";
 import { createQueryTool } from "./tools/query.js";
 import { createMutateTool } from "./tools/mutate.js";
 import { createDescribeTool } from "./tools/describe.js";
@@ -47,7 +51,12 @@ export function registerParleyTools(api) {
   api.registerTool(withRuntimeContext(api, createRecordRelationshipTool));
   api.registerTool(withRuntimeContext(api, createRemoveRelationshipTool));
   api.registerTool(withRuntimeContext(api, createCheckpointProjectionTool));
+  api.registerTool(withRuntimeContext(api, createValidatePlanAction));
   api.registerTool(withRuntimeContext(api, createValidateStateAction));
+  api.registerTool(withRuntimeContext(api, createCreatePlanAction));
+  api.registerTool(withRuntimeContext(api, createRuntimeObligationsQueryAction));
+  api.registerTool(withRuntimeContext(api, createBoardObligationsQueryAction));
+  api.registerTool(withRuntimeContext(api, createNamespaceSearchAction));
   api.registerTool(withRuntimeContext(api, createQueryTool));
   api.registerTool(withRuntimeContext(api, createMutateTool));
 }

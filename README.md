@@ -54,13 +54,16 @@ parley_describe({})
 parley_my_boards({})
 parley_where_am_i({ boardId })
 parley_where_am_i({ boardId, verbosity: "full" }) // optional diagnostic detail
-parley_query({
-  action: "board_obligations",
+parley_query_board_obligations({
   boardId,
-  input: {
-    filter: "needs_my_action",
-    targetKinds: ["plans"]
-  }
+  filter: "needs_my_action",
+  targetKinds: ["plans"]
+})
+parley_record_effect({
+  boardId,
+  type: "review_completed",
+  target: { artifact_id: "artifact_plan" },
+  payload: { summary: "Review completed." }
 })
 ```
 
@@ -123,13 +126,10 @@ const status = parley_where_am_i({
   boardId: boards.default_board
 })
 
-const work = parley_query({
-  action: "board_obligations",
+const work = parley_query_board_obligations({
   boardId: boards.default_board,
-  input: {
-    filter: "needs_my_action",
-    targetKinds: ["plans"]
-  }
+  filter: "needs_my_action",
+  targetKinds: ["plans"]
 })
 ```
 
@@ -172,9 +172,11 @@ OpenClaw provides the agent runtime and tools. Parley provides the shared projec
 
 `parley_describe` is the self-describing metadata tool for fresh agents. Omit `topic` for the overview; use topics such as `recovery`, `targets`, `query`, `query.runtime_obligations`, `query.board_obligations`, `query.search`, `mutate`, `mutate.create_plan`, and `boards/identity` for structured schemas, valid values, aliases, and examples.
 
-`where_am_i({})` is boardless runtime recovery plus board discovery hints. All board-scoped queries and mutations require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
+`where_am_i({})` is boardless runtime recovery plus board discovery hints. All board-scoped reads and writes require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
 
-Runtime recovery can use `parley_query({ action: "runtime_obligations" })`. Board-scoped recovery can use `parley_query({ action: "board_obligations", boardId, input: { filter: "needs_my_action", targetKinds: ["plans"] } })`. Board-scoped discovery can use `parley_query({ action: "search", boardId, input: { query, namespaces } })` against registered reference namespaces. Search is artifact/reference/content-oriented and does not return runtime threads.
+Prefer first-class tools for normal agent work: `parley_query_runtime_obligations`, `parley_query_board_obligations`, `parley_query_search`, `parley_board_projection`, `parley_validate_plan`, `parley_validate_state`, `parley_register_artifact`, `parley_create_object`, `parley_record_effect`, `parley_create_obligation`, `parley_record_relationship`, `parley_remove_relationship`, and `parley_create_plan`. `parley_query` and `parley_mutate` remain advanced compatibility facades over those operations.
+
+Parley tool outputs are agent-facing coordination responses: they include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
 
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 

@@ -63,8 +63,8 @@ export function createValidationError(message, options = {}) {
 export function overviewDescriptor() {
   return {
     topic: "overview",
-    purpose: "Discover Parley's agent-facing tool surface, target scopes, valid facade actions, board selection rules, and common examples.",
-    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_mutate"],
+    purpose: "Discover Parley's agent-facing tool surface, target scopes, first-class operational tools, advanced facade actions, board selection rules, and common examples.",
+    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_query", "parley_mutate"],
     topics: [...DESCRIBE_TOPICS],
     query_actions: [...QUERY_ACTIONS],
     mutate_actions: [...MUTATE_ACTIONS],
@@ -74,7 +74,7 @@ export function overviewDescriptor() {
       "parley_where_am_i({ boardId }) returns compact runtime and board sections by default; pass verbosity: \"full\" for diagnostic detail.",
       "parley_my_boards is the boardless board discovery call.",
       "Board-scoped reads and writes require explicit boardId; default_board is a selection hint, not implicit routing.",
-      "Prefer first-class board write tools during agent work; parley_mutate remains a stable facade for callers that need one action-dispatch surface.",
+      "Prefer first-class operational tools during agent work; parley_query and parley_mutate remain stable advanced facades for callers that need one action-dispatch surface.",
       "Use topic=targets to understand runtime targets versus board targets."
     ],
     examples: [
@@ -93,9 +93,9 @@ export function recoveryDescriptor() {
       { step: 1, tool: "parley_describe", call: { topic: "recovery" }, purpose: "Learn the safe recovery sequence and required boardId behavior." },
       { step: 2, tool: "parley_where_am_i", call: {}, purpose: "Recover runtime identity, runtime protocol obligations, and available boards/default_board hints." },
       { step: 3, tool: "parley_where_am_i", call: { boardId: "<default_board>" }, purpose: "Recover compact board-local identity, obligations, deferred work, approvals, and checkpoints while keeping runtime and board sections separate. Add verbosity: \"full\" for diagnostic detail." },
-      { step: 4, tool: "parley_query", call: { action: "runtime_obligations" }, purpose: "Query runtime protocol obligations directly when needed." },
-      { step: 5, tool: "parley_query", call: { action: "board_obligations", boardId: "<boardId>", input: { filter: "needs_my_action" } }, purpose: "Query board-scoped obligations directly when needed." },
-      { step: 6, tool: "parley_query", call: { action: "search", boardId: "<boardId>", input: { query: "<term>" } }, purpose: "Search board-registered reference namespaces when context or artifacts are needed." }
+      { step: 4, tool: "parley_query_runtime_obligations", call: { filter: "needs_my_action" }, purpose: "Query runtime protocol obligations directly when needed." },
+      { step: 5, tool: "parley_query_board_obligations", call: { boardId: "<boardId>", filter: "needs_my_action" }, purpose: "Query board-scoped obligations directly when needed." },
+      { step: 6, tool: "parley_query_search", call: { boardId: "<boardId>", query: "<term>" }, purpose: "Search board-registered reference namespaces when context or artifacts are needed." }
     ],
     quiet_rule: "If recovery finds no active runtime obligations, board obligations, blockers, stale approvals, pending turns, or validation risks, stay quiet.",
     explicit_board_rule: "Use parley_my_boards.default_board or where_am_i boards.default_board as a caller selection hint; still pass boardId on board-scoped calls."
@@ -145,6 +145,8 @@ export function queryDescriptor() {
   return {
     topic: "query",
     tool: "parley_query",
+    role: "advanced facade over first-class read tools",
+    first_class_equivalents: ["parley_where_am_i", "parley_my_boards", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search"],
     actions: [...QUERY_ACTIONS],
     required_fields: ["action"],
     board_scoped_actions: ["board", "validate_plan", "validate_state", "board_obligations", "search"],
@@ -164,8 +166,8 @@ export function queryDescriptor() {
 export function runtimeObligationsDescriptor() {
   return {
     topic: "query.runtime_obligations",
-    tool: "parley_query",
-    action: "runtime_obligations",
+    tool: "parley_query_runtime_obligations",
+    facade: { tool: "parley_query", action: "runtime_obligations" },
     required_fields: ["action"],
     rejected_fields: ["boardId"],
     input_schema: {
@@ -175,7 +177,7 @@ export function runtimeObligationsDescriptor() {
     target_scope: "runtime",
     target_kinds: [...RUNTIME_TARGET_KINDS],
     examples: [
-      { description: "Find runtime obligations needing my action.", call: { action: "runtime_obligations", input: { filter: "needs_my_action" } } }
+      { description: "Find runtime obligations needing my action.", call: { filter: "needs_my_action" } }
     ]
   };
 }
@@ -183,8 +185,8 @@ export function runtimeObligationsDescriptor() {
 export function boardObligationsDescriptor() {
   return {
     topic: "query.board_obligations",
-    tool: "parley_query",
-    action: "board_obligations",
+    tool: "parley_query_board_obligations",
+    facade: { tool: "parley_query", action: "board_obligations" },
     required_fields: ["action", "boardId"],
     input_schema: {
       filter: { type: "string", enum: [...OBLIGATION_FILTERS], default: "needs_my_action" },
@@ -200,8 +202,8 @@ export function boardObligationsDescriptor() {
     target_scope: "board",
     targetKinds: [...BOARD_OBLIGATION_TARGET_KINDS],
     examples: [
-      { description: "Find plan obligations needing my action.", call: { action: "board_obligations", boardId: "project", input: { filter: "needs_my_action", targetKinds: ["plans"] } } },
-      { description: "Find all board obligations assigned to me.", call: { action: "board_obligations", boardId: "project", input: { filter: "assigned_to_me" } } }
+      { description: "Find plan obligations needing my action.", call: { boardId: "project", filter: "needs_my_action", targetKinds: ["plans"] } },
+      { description: "Find all board obligations assigned to me.", call: { boardId: "project", filter: "assigned_to_me" } }
     ]
   };
 }
@@ -209,8 +211,8 @@ export function boardObligationsDescriptor() {
 export function searchDescriptor() {
   return {
     topic: "query.search",
-    tool: "parley_query",
-    action: "search",
+    tool: "parley_query_search",
+    facade: { tool: "parley_query", action: "search" },
     required_fields: ["action", "boardId", "input.query"],
     input_schema: {
       query: { type: "string", required: true },
@@ -223,8 +225,8 @@ export function searchDescriptor() {
       namespaces: "Restrict search to specific board artifact namespace ids. Omit to use allowed_reference_namespaces."
     },
     examples: [
-      { description: "Search all allowed reference namespaces.", call: { action: "search", boardId: "project", input: { query: "checkpoint" } } },
-      { description: "Search selected namespaces.", call: { action: "search", boardId: "project", input: { query: "recovery", namespaces: ["project_docs", "project_plans"], limit: 10 } } }
+      { description: "Search all allowed reference namespaces.", call: { boardId: "project", query: "checkpoint" } },
+      { description: "Search selected namespaces.", call: { boardId: "project", query: "recovery", namespaces: ["project_docs", "project_plans"], limit: 10 } }
     ]
   };
 }
@@ -233,13 +235,15 @@ export function mutateDescriptor() {
   return {
     topic: "mutate",
     tool: "parley_mutate",
+    role: "advanced facade over first-class write tools",
+    first_class_equivalents: ["parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan"],
     actions: [...MUTATE_ACTIONS],
     required_fields: ["action", "boardId"],
     board_rule: "All parley_mutate actions are board-scoped and require explicit boardId.",
     target_rule: "Mutations that reference targets accept board targets only unless explicitly documented otherwise.",
-    usage_guidance: "Prefer the equivalent first-class write tools during normal agent work; use parley_mutate when a caller specifically needs a single facade action surface.",
+    usage_guidance: "Prefer the equivalent first-class write tools during normal agent work; use parley_mutate when a caller specifically needs a single facade action surface or compatibility path.",
     examples: [
-      { description: "Create a plan from a parley.plan.v1 package.", call: { action: "create_plan", boardId: "project", input: { planId: "plan_example", title: "Example Plan", shepherd: "parley-agent", namespaceId: "project_plans", subpath: "agent-comms", phases: [] } } }
+      { description: "Create a plan through the compatibility facade.", call: { action: "create_plan", boardId: "project", input: { planId: "plan_example", title: "Example Plan", scope: { summary: "Example scope" }, filename: "example-plan.md" } } }
     ]
   };
 }
@@ -247,20 +251,21 @@ export function mutateDescriptor() {
 export function createPlanDescriptor() {
   return {
     topic: "mutate.create_plan",
-    tool: "parley_mutate",
-    action: "create_plan",
-    required_fields: ["action", "boardId", "input.planId", "input.title", "input.shepherd", "input.phases"],
+    tool: "parley_create_plan",
+    facade: { tool: "parley_mutate", action: "create_plan" },
+    required_fields: ["boardId", "planId", "title", "scope", "filename"],
     input_schema: {
+      boardId: { type: "string", required: true, description: "Explicit board id." },
       planId: { type: "string", required: true, description: "Board-scoped plan id." },
       title: { type: "string", required: true },
-      shepherd: { type: "string", required: true, description: "Board-local agent responsible for plan shepherding." },
-      namespaceId: { type: "string", required: false, default: "board namespace default_for=plan_landing" },
-      subpath: { type: "string", required: false, description: "Safe relative subpath inside the selected plan namespace." },
-      filename: { type: "string", required: false, default: "derived from planId and board plan_extension" },
-      phases: { type: "array", required: true },
-      human_checkpoints: { type: "array", required: false },
-      success_criteria: { type: "array", required: false },
-      non_goals: { type: "array", required: false }
+      scope: { type: "object", required: true, description: "Structured plan scope." },
+      filename: { type: "string", required: true, description: "Markdown filename for the plan." },
+      artifactNamespace: { type: "string", required: false, default: "board namespace default_for=plan_landing" },
+      landingSubpath: { type: "string", required: false, description: "Safe relative subpath inside the selected namespace." },
+      owner: { type: "string", required: false, default: "resolved board agent" },
+      participants: { type: "array", required: false },
+      sections: { type: "object", required: false },
+      humanCheckpoints: { type: "array", required: false }
     },
     plan_namespace_behavior: [
       "create_plan lands plan bodies in an artifact namespace with role plan_landing.",
@@ -269,7 +274,7 @@ export function createPlanDescriptor() {
       "The resulting artifact is registered as a plan artifact and linked to the coordination object."
     ],
     examples: [
-      { description: "Create a plan in the default plan namespace.", call: { action: "create_plan", boardId: "project", input: { planId: "plan_alpha", title: "Alpha Plan", shepherd: "parley-agent", phases: [{ phase_id: "phase_1", title: "Implement", status: "active", owner: "parley-agent", objectives: ["Ship the minimal path"], tasks: [], acceptance: ["Tests pass"] }] } } }
+      { description: "Create a plan in the default plan namespace.", call: { boardId: "project", planId: "plan_alpha", title: "Alpha Plan", scope: { summary: "Ship the minimal path" }, filename: "alpha-plan.md" } }
     ]
   };
 }
@@ -277,12 +282,12 @@ export function createPlanDescriptor() {
 export function boardsIdentityDescriptor() {
   return {
     topic: "boards/identity",
-    tools: ["parley_my_boards", "parley_where_am_i", "parley_query", "first-class board write tools", "parley_mutate", "parley_describe"],
+    tools: ["parley_my_boards", "parley_where_am_i", "first-class read tools", "first-class board write tools", "parley_query", "parley_mutate", "parley_describe"],
     rules: [
       "parley_my_boards is boardless and returns accessible boards plus default_board.",
       "parley_where_am_i({}) is boardless runtime recovery plus board discovery hints.",
       "default_board is a selection hint. It is not silently applied to board-scoped calls.",
-      "Board-scoped parley_query actions, first-class board write tools, and all parley_mutate actions require explicit boardId.",
+      "Board-scoped first-class read tools, board write tools, parley_query actions, and all parley_mutate actions require explicit boardId.",
       "parley_describe({ boardId }) returns board metadata only: namespace/capability/identity metadata, not board state records."
     ],
     examples: [

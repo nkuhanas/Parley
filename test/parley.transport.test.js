@@ -119,12 +119,15 @@ test("parley_open_thread defaults the bounded normal path cleanly", async () => 
       initiatorSessionKey: INITIATOR_SESSION_KEY
     });
 
+    assert.equal(openResult.details.ok, true);
+    assert.equal(openResult.details.summary, "Opened a Parley thread and created the opening message.");
     assert.equal(openResult.details.thread.kind, "coordination");
     assert.equal(openResult.details.thread.control_mode, "peer");
     assert.equal(openResult.details.thread.next_action_owner, "parley-test-target");
     assert.equal(openResult.details.status.thread.state, "awaiting_next_action");
     assert.equal(openResult.details.status.workflow.phase, "ready_for_dispatch");
     assert.deepEqual(openResult.details.status.workflow.next_steps, ["dispatch_transport_request"]);
+    assert.equal(openResult.details.guidance.next[0].tool, "parley_dispatch_transport_request");
   });
 });
 

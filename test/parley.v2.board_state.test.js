@@ -533,9 +533,13 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
         title: "Facade Plan"
       }
     });
+    assert.equal(artifactResult.details.ok, true);
+    assert.match(artifactResult.details.summary, /mutation facade action/);
     assert.equal(artifactResult.details.tool, "parley_mutate");
     assert.equal(artifactResult.details.action, "register_artifact");
     assert.equal(artifactResult.details.result.artifact.artifact_id, "artifact_facade");
+    assert.equal(artifactResult.details.guidance.meaning, "This facade delegated to the corresponding first-class Parley tool. Prefer first-class tools when available.");
+    assert.equal(artifactResult.details.guidance.next[0].tool, "parley_where_am_i");
 
     const boardResultValue = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -551,6 +555,8 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
     assert.equal(runtimeWhere.details.action, "where_am_i");
     assert.equal(runtimeWhere.details.result.scope, "runtime");
     assert.equal(runtimeWhere.details.result.boards.default_board, "project");
+    assert.equal(runtimeWhere.details.guidance.next[0].tool, "parley_where_am_i");
+    assert.deepEqual(runtimeWhere.details.guidance.next[0].args, { boardId: "project" });
     await assert.rejects(
       () => mutateTool.execute(null, {
         callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -606,6 +612,8 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
       action: "where_am_i"
     });
     assert.equal(whereResult.details.result.projection.board_agent_id, "parley-agent");
+    assert.equal(whereResult.details.guidance.next[0].tool, "parley_query_board_obligations");
+    assert.deepEqual(whereResult.details.guidance.next[0].args, { boardId: "project", filter: "needs_my_action" });
 
     const myBoardsResult = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -749,9 +757,13 @@ test("Parley describe provides fresh-agent discovery and board metadata", async 
     const query = await describeTool.execute(null, { topic: "query" });
     assert.deepEqual(query.details.descriptor.boardless_actions, ["my_boards", "runtime_obligations"]);
     assert.ok(query.details.descriptor.actions.includes("search"));
+    assert.equal(query.details.descriptor.role, "advanced facade over first-class read tools");
+    assert.ok(query.details.descriptor.first_class_equivalents.includes("parley_query_board_obligations"));
 
     const mutate = await describeTool.execute(null, { topic: "mutate" });
     assert.ok(mutate.details.descriptor.actions.includes("create_plan"));
+    assert.equal(mutate.details.descriptor.role, "advanced facade over first-class write tools");
+    assert.ok(mutate.details.descriptor.first_class_equivalents.includes("parley_record_effect"));
 
     const targets = await describeTool.execute(null, { topic: "targets" });
     assert.deepEqual(targets.details.descriptor.runtime_targets.kinds, ["thread", "message", "turn"]);
@@ -771,7 +783,8 @@ test("Parley describe provides fresh-agent discovery and board metadata", async 
     assert.equal(search.details.descriptor.input_schema.namespaces.default, "board.allowed_reference_namespaces");
 
     const createPlan = await describeTool.execute(null, { topic: "mutate.create_plan" });
-    assert.ok(createPlan.details.descriptor.required_fields.includes("input.phases"));
+    assert.equal(createPlan.details.descriptor.tool, "parley_create_plan");
+    assert.ok(createPlan.details.descriptor.required_fields.includes("scope"));
     assert.match(createPlan.details.descriptor.plan_namespace_behavior[0], /plan_landing/);
 
     const identity = await describeTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, topic: "boards/identity" });
@@ -1248,7 +1261,10 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
       sourceThreadId: "thread_demo",
       sourceMessageId: "message_demo"
     });
+    assert.equal(effectResult.details.ok, true);
+    assert.equal(effectResult.details.summary, "Recorded an append-only board effect.");
     assert.equal(effectResult.details.effect.effect_id, "effect_demo");
+    assert.equal(effectResult.details.guidance.next[0].tool, "parley_where_am_i");
 
     const obligationResult = await obligationTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,

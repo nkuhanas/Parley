@@ -2,6 +2,7 @@ import { dispatchTransportRequest } from "../../../core/protocol/dispatch.js";
 import { buildPendingTransportMetadata, buildTransportRequest } from "../../../core/protocol/transport.js";
 import { buildHumanSummaryUpdateText } from "../../../core/protocol/render.js";
 import { createMessageRecord, loadThreadRecord, saveMessageRecord, saveThreadRecord } from "../../../core/storage/store.js";
+import { enrichToolDetails } from "../guidance/envelope.js";
 
 function buildTransportStatus(details) {
   const message = details?.message ?? null;
@@ -329,15 +330,16 @@ function compactParleyResult(details) {
 
 export function formatParleyResult(details) {
   const compactDetails = compactParleyResult(details);
+  const enrichedDetails = enrichToolDetails(compactDetails);
 
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify(compactDetails, null, 2)
+        text: JSON.stringify(enrichedDetails, null, 2)
       }
     ],
-    details: compactDetails
+    details: enrichedDetails
   };
 }
 

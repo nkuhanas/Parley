@@ -14,11 +14,11 @@ Add the board to the global agent's `memberships`, and ensure the board has a ma
 
 ## Board-scoped operation requires boardId
 
-Call `parley_describe({ topic: "recovery" })`, then `parley_where_am_i({})`, `parley_my_boards({})`, or `parley_query({ action: "my_boards" })`, choose a board from the response, and pass it as `boardId`. `default_board` is a selection hint; Parley does not silently apply it to board-scoped projections, validation, mutations, or board obligations.
+Call `parley_describe({ topic: "recovery" })`, then `parley_where_am_i({})` or `parley_my_boards({})`, choose a board from the response, and pass it as `boardId`. `default_board` is a selection hint; Parley does not silently apply it to board-scoped projections, validation, mutations, or board obligations. `parley_query({ action: "my_boards" })` remains available as an advanced facade path.
 
 `parley_where_am_i({})` is valid and returns runtime obligations plus board discovery hints. `parley_where_am_i({ boardId })` returns compact separate runtime and board sections. Add `verbosity: "full"` only when full diagnostic detail is needed.
 
-For invalid facade actions, filters, or targetKinds, validation errors include `validValues` plus a hint to call `parley_describe` with the relevant topic.
+For invalid facade actions, filters, or targetKinds, validation errors include `validValues` plus a hint to call `parley_describe` with the relevant topic. Prefer first-class tools for normal agent work; use `parley_query` or `parley_mutate` only when a single-dispatch compatibility surface is needed.
 
 ## Artifact path rejected
 
