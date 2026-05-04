@@ -31,7 +31,8 @@ import {
   loadObligationRecord,
   listEffectRecords,
   listObligationRecords,
-  loadProjectionCheckpointRecord
+  loadProjectionCheckpointRecord,
+  savePlanSetupRecord
 } from "../src/core/storage/board_store.js";
 import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
 import { createParleyPlanV1Document } from "../src/core/schema/index.js";
@@ -1174,6 +1175,85 @@ test("Parley managed plan lifecycle tools own review, activation, and phase curs
 });
 
 
+
+test("Parley migration-safe lifecycle commands cover no-review ready, pause/resume, and terminal disposition", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_migration_safe_lifecycle",
+      filename: "migration-safe-lifecycle-plan.md"
+    });
+
+    const readyResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "mark_plan_ready",
+      input: { planId, noReviewReason: "Migration owner accepts this plan without separate review." }
+    });
+    assert.equal(readyResult.details.result.plan.status, "ready");
+    assert.equal(readyResult.details.result.effect.payload.action, "mark_ready_no_review");
+    assert.equal(readyResult.details.result.plan_lifecycle.obligations[0].managedBinding.role, "activation_decision");
+
+    const activationResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "activate_plan",
+      input: { planId, reason: "Start migration-safe smoke phase." }
+    });
+    assert.equal(activationResult.details.result.plan.status, "active");
+    const phaseWork = activationResult.details.result.plan_lifecycle.obligations.find((obligation) => obligation.managedBinding.role === "phase_work");
+    assert.ok(phaseWork);
+
+    await assert.rejects(
+      () => mutateTool.execute(null, {
+        callerRuntimeRef: AGENT_RUNTIME_REF,
+        boardId: "project",
+        action: "record_plan_disposition",
+        input: { planId, disposition: "archived", reason: "Attempt direct active archive." }
+      }),
+      /active plans cannot be archived directly/
+    );
+
+    const pauseResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "pause_plan",
+      input: { planId, reason: "Wait for external migration prerequisite." }
+    });
+    assert.equal(pauseResult.details.result.plan.status, "paused");
+    assert.equal(pauseResult.details.result.resume_point.phase_id, "phase_1");
+    assert.equal(pauseResult.details.result.plan_lifecycle.obligations[0].managedBinding.role, "blocker_resolution");
+    const pausedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.equal(pausedPlan.managed.resumePoint.phase_id, "phase_1");
+    const pausedWork = await loadObligationRecord(pluginConfig, board, phaseWork.obligation_id);
+    assert.equal(pausedWork.status, "superseded");
+
+    const resumeResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "resume_plan",
+      input: { planId, reason: "Prerequisite cleared." }
+    });
+    assert.equal(resumeResult.details.result.plan.status, "active");
+    const resumedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.equal(resumedPlan.managed.resumePoint, null);
+    assert.ok(resumeResult.details.result.plan_lifecycle.obligations.some((obligation) => obligation.managedBinding.role === "phase_work"));
+
+    const dispositionResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "record_plan_disposition",
+      input: { planId, disposition: "cancelled", reason: "Migration-safe cancellation path validated." }
+    });
+    assert.equal(dispositionResult.details.result.plan.status, "cancelled");
+    const cancelledPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(cancelledPlan.managed.activeLifecycleObligationIds, []);
+    assert.equal(dispositionResult.details.result.effect.payload.disposition, "cancelled");
+  });
+});
+
 test("Parley human checkpoint phases create shepherd obligations", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);
@@ -2278,6 +2358,58 @@ test("Parley validate_state reports fake-board safety diagnostics without Projec
     assert.equal(validationResult.details.result.validation.counts.artifacts, 1);
     assert.equal(validationResult.details.result.validation.errors.length, 0);
     assert.ok(validationResult.details.result.validation.info.some((item) => item.code === "permission_model_advisory"));
+  });
+});
+
+
+test("Parley validate_state reports plan lifecycle migration diagnostics", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const validateTool = createValidateStateAction(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+
+    const { planId: terminalPlanId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_lifecycle_validation_terminal",
+      filename: "lifecycle-validation-terminal.md"
+    });
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "mark_plan_ready",
+      input: { planId: terminalPlanId, noReviewReason: "Validation fixture can bypass review." }
+    });
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "activate_plan",
+      input: { planId: terminalPlanId, reason: "Create active lifecycle obligations." }
+    });
+    const activePlan = await loadPlanSetupRecord(pluginConfig, board, terminalPlanId);
+    await savePlanSetupRecord(pluginConfig, board, { ...activePlan, status: "archived" });
+
+    const { planId: activePlanId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_lifecycle_validation_active",
+      filename: "lifecycle-validation-active.md"
+    });
+    const badActive = await loadPlanSetupRecord(pluginConfig, board, activePlanId);
+    await savePlanSetupRecord(pluginConfig, board, {
+      ...badActive,
+      status: "active",
+      managed: {
+        ...badActive.managed,
+        current_phase_id: null,
+        activeLifecycleObligationIds: ["obligation_missing_lifecycle"]
+      }
+    });
+
+    const validationResult = await validateTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project" });
+    const codes = validationResult.details.validation.errors.map((error) => error.code);
+    assert.equal(validationResult.details.validation.ok, false);
+    assert.ok(codes.includes("plan_lifecycle_terminal_cursor_present"));
+    assert.ok(codes.includes("plan_lifecycle_terminal_active_obligations"));
+    assert.ok(codes.includes("plan_lifecycle_active_phase_missing"));
+    assert.ok(codes.includes("plan_lifecycle_active_obligation_missing"));
   });
 });
 

@@ -10,6 +10,8 @@ import {
   assertProjectionCheckpointRecord,
   assertRelationshipRecord
 } from "./board_schema.js";
+import { assertPlanSetupRecord } from "../plan/plan_state.js";
+import { PLAN_LIFECYCLE_SYSTEM, PLAN_LIFECYCLE_TERMINAL_STATUSES } from "../plan/lifecycle.js";
 
 const COLLECTIONS = Object.freeze([
   { name: "artifacts", idField: "artifact_id", validator: assertArtifactRecord },
@@ -17,6 +19,7 @@ const COLLECTIONS = Object.freeze([
   { name: "effects", idField: "effect_id", validator: assertEffectRecord },
   { name: "obligations", idField: "obligation_id", validator: assertObligationRecord },
   { name: "relationships", idField: "relationship_id", validator: assertRelationshipRecord },
+  { name: "plans", idField: "plan_id", validator: assertPlanSetupRecord },
   { name: "checkpoints", idField: null, validator: assertProjectionCheckpointRecord }
 ]);
 
@@ -286,6 +289,123 @@ function validateReferences(result, recordsByCollection) {
   }
 }
 
+
+function obligationBinding(obligation) {
+  return obligation.managedBinding ?? obligation.managed_binding ?? null;
+}
+
+function validatePlanLifecycleState(result, recordsByCollection) {
+  const obligations = recordsByCollection.obligations;
+  const obligationsById = new Map(obligations.map((obligation) => [obligation.obligation_id, obligation]));
+  const lifecycleObligationsByPlan = new Map();
+  for (const obligation of obligations) {
+    const binding = obligationBinding(obligation);
+    if (binding?.system !== PLAN_LIFECYCLE_SYSTEM || binding.plan_id == null) continue;
+    const list = lifecycleObligationsByPlan.get(binding.plan_id) ?? [];
+    list.push(obligation);
+    lifecycleObligationsByPlan.set(binding.plan_id, list);
+  }
+
+  for (const plan of recordsByCollection.plans) {
+    const terminal = PLAN_LIFECYCLE_TERMINAL_STATUSES.includes(plan.status);
+    const currentPhaseId = plan.managed?.current_phase_id ?? null;
+    const phaseIds = new Set((plan.phases ?? []).map((phase) => phase.phase_id));
+    if (currentPhaseId != null && !phaseIds.has(currentPhaseId)) {
+      pushError(result, "plan_lifecycle_current_phase_missing", `plan ${plan.plan_id} current phase is missing: ${currentPhaseId}`, {
+        plan_id: plan.plan_id,
+        current_phase_id: currentPhaseId
+      });
+    }
+    if (plan.status === "active" && currentPhaseId == null) {
+      pushError(result, "plan_lifecycle_active_phase_missing", `active plan ${plan.plan_id} has no current phase`, { plan_id: plan.plan_id });
+    }
+    if (terminal && currentPhaseId != null) {
+      pushError(result, "plan_lifecycle_terminal_cursor_present", `terminal plan ${plan.plan_id} still has a current phase cursor`, {
+        plan_id: plan.plan_id,
+        status: plan.status,
+        current_phase_id: currentPhaseId
+      });
+    }
+    if (["paused", "blocked"].includes(plan.status)) {
+      const resumePoint = plan.managed?.resumePoint ?? null;
+      if (resumePoint?.phase_id == null) {
+        pushError(result, "plan_lifecycle_resume_point_missing", `${plan.status} plan ${plan.plan_id} has no resume point`, {
+          plan_id: plan.plan_id,
+          status: plan.status
+        });
+      } else if (!phaseIds.has(resumePoint.phase_id)) {
+        pushError(result, "plan_lifecycle_resume_phase_missing", `${plan.status} plan ${plan.plan_id} resume phase is missing`, {
+          plan_id: plan.plan_id,
+          status: plan.status,
+          phase_id: resumePoint.phase_id
+        });
+      }
+    }
+
+    for (const obligationId of plan.managed?.generatedObligationIds ?? []) {
+      if (!obligationsById.has(obligationId)) {
+        pushWarning(result, "plan_lifecycle_generated_obligation_missing", `plan ${plan.plan_id} references missing generated lifecycle obligation ${obligationId}`, {
+          plan_id: plan.plan_id,
+          obligation_id: obligationId
+        });
+      }
+    }
+
+    const activeIds = plan.managed?.activeLifecycleObligationIds ?? [];
+    const seenActiveBindings = new Set();
+    for (const obligationId of activeIds) {
+      const obligation = obligationsById.get(obligationId);
+      if (obligation == null) {
+        pushError(result, "plan_lifecycle_active_obligation_missing", `plan ${plan.plan_id} references missing active lifecycle obligation ${obligationId}`, {
+          plan_id: plan.plan_id,
+          obligation_id: obligationId
+        });
+        continue;
+      }
+      const binding = obligationBinding(obligation);
+      if (obligation.status !== "active") {
+        pushError(result, "plan_lifecycle_active_obligation_not_active", `plan ${plan.plan_id} active lifecycle obligation ${obligationId} is ${obligation.status}`, {
+          plan_id: plan.plan_id,
+          obligation_id: obligationId,
+          status: obligation.status
+        });
+      }
+      if (binding?.system !== PLAN_LIFECYCLE_SYSTEM || binding.plan_id !== plan.plan_id) {
+        pushError(result, "plan_lifecycle_obligation_binding_mismatch", `plan ${plan.plan_id} active lifecycle obligation ${obligationId} has mismatched binding`, {
+          plan_id: plan.plan_id,
+          obligation_id: obligationId,
+          binding
+        });
+      }
+      if (binding?.revision != null && binding.revision !== plan.managed?.lifecycle_revision) {
+        pushError(result, "plan_lifecycle_obligation_revision_mismatch", `plan ${plan.plan_id} active lifecycle obligation ${obligationId} has stale lifecycle revision`, {
+          plan_id: plan.plan_id,
+          obligation_id: obligationId,
+          obligation_revision: binding.revision,
+          plan_revision: plan.managed?.lifecycle_revision
+        });
+      }
+      const bindingKey = `${binding?.role ?? "unknown"}:${binding?.phase_id ?? ""}`;
+      if (seenActiveBindings.has(bindingKey)) {
+        pushError(result, "plan_lifecycle_duplicate_active_role", `plan ${plan.plan_id} has duplicate active lifecycle role ${bindingKey}`, {
+          plan_id: plan.plan_id,
+          binding_key: bindingKey
+        });
+      }
+      seenActiveBindings.add(bindingKey);
+    }
+
+    const activeLifecycleRecords = (lifecycleObligationsByPlan.get(plan.plan_id) ?? []).filter((obligation) => obligation.status === "active");
+    if (terminal && activeLifecycleRecords.length > 0) {
+      pushError(result, "plan_lifecycle_terminal_active_obligations", `terminal plan ${plan.plan_id} has active lifecycle obligations`, {
+        plan_id: plan.plan_id,
+        status: plan.status,
+        obligation_ids: activeLifecycleRecords.map((obligation) => obligation.obligation_id)
+      });
+    }
+  }
+}
+
 export async function validateParleyBoardState(_pluginConfig, board, _options = {}) {
   const result = {
     board_id: board.board_id,
@@ -368,6 +488,7 @@ export async function validateParleyBoardState(_pluginConfig, board, _options = 
   }
 
   validateReferences(result, recordsByCollection);
+  validatePlanLifecycleState(result, recordsByCollection);
   validateRelationshipCycles(result, recordsByCollection.relationships);
   for (const artifact of recordsByCollection.artifacts) {
     await validateArtifactHash(result, artifact);

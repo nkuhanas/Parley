@@ -433,7 +433,7 @@ export function assertEffectPayload(type, value, fieldName = "payload") {
     case "phase_deferred":
       return assertKnownPayload(value, fieldName, ["reason", "activation_conditions", "review_trigger", "non_executing"]);
     case "plan_lifecycle_transitioned":
-      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "phase_id", "obligation_id"]);
+      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "disposition", "phase_id", "obligation_id"]);
     default:
       return assertPlainOptionalObject(value, fieldName);
   }

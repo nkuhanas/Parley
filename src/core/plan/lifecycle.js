@@ -25,7 +25,8 @@ export const PLAN_LIFECYCLE_OBLIGATION_ROLES = Object.freeze([
   "phase_work",
   "phase_outcome_decision",
   "blocker_resolution",
-  "change_response"
+  "change_response",
+  "terminal_disposition"
 ]);
 
 function optionalString(value, fallback = null) {
@@ -81,6 +82,20 @@ export function normalizeActivationPolicy(rawPolicy = {}) {
   return { ...rawPolicy, mode };
 }
 
+function normalizeResumePoint(rawResumePoint) {
+  if (rawResumePoint == null) return null;
+  if (typeof rawResumePoint !== "object" || Array.isArray(rawResumePoint)) return null;
+  const phaseId = optionalString(rawResumePoint.phase_id ?? rawResumePoint.phaseId);
+  if (phaseId == null) return null;
+  return {
+    phase_id: assertRecordId(phaseId, "managed.resumePoint.phase_id"),
+    checkpoint_id: optionalString(rawResumePoint.checkpoint_id ?? rawResumePoint.checkpointId),
+    activeObligationIds: unique(stringArray(rawResumePoint.activeObligationIds ?? rawResumePoint.active_obligation_ids)),
+    suspended_at: optionalString(rawResumePoint.suspended_at ?? rawResumePoint.suspendedAt),
+    reason: optionalString(rawResumePoint.reason, "No reason recorded.")
+  };
+}
+
 export function normalizePlanManaged(rawManaged = {}) {
   const revision = Number.isInteger(rawManaged?.lifecycle_revision) && rawManaged.lifecycle_revision >= 0 ? rawManaged.lifecycle_revision : 0;
   return {
@@ -89,6 +104,7 @@ export function normalizePlanManaged(rawManaged = {}) {
     generatedObligationIds: unique(stringArray(rawManaged?.generatedObligationIds ?? rawManaged?.generated_obligation_ids)),
     activeLifecycleObligationIds: unique(stringArray(rawManaged?.activeLifecycleObligationIds ?? rawManaged?.active_lifecycle_obligation_ids)),
     current_phase_id: optionalString(rawManaged?.current_phase_id ?? rawManaged?.currentPhaseId),
+    resumePoint: normalizeResumePoint(rawManaged?.resumePoint ?? rawManaged?.resume_point),
     lifecycle_updated_at: rawManaged?.lifecycle_updated_at ?? null
   };
 }
@@ -162,7 +178,7 @@ export function withLifecycleIndexes(plan, obligations, timestamp) {
   };
 }
 
-export function withLifecycleTransition(plan, { status = plan.status, currentPhaseId = plan.managed?.current_phase_id ?? null, timestamp }) {
+export function withLifecycleTransition(plan, { status = plan.status, currentPhaseId = plan.managed?.current_phase_id ?? null, resumePoint = plan.managed?.resumePoint ?? null, timestamp }) {
   const nextRevision = nextLifecycleRevision(plan);
   return {
     ...plan,
@@ -172,8 +188,20 @@ export function withLifecycleTransition(plan, { status = plan.status, currentPha
       lifecycle_revision: nextRevision,
       activeLifecycleObligationIds: [],
       current_phase_id: currentPhaseId,
+      resumePoint,
       lifecycle_updated_at: timestamp
     }
+  };
+}
+
+export function makeResumePoint(plan, { phaseId = plan.managed?.current_phase_id ?? activePhase(plan)?.phase_id, timestamp, reason }) {
+  if (phaseId == null) throw new Error("resume point requires a current phase");
+  return {
+    phase_id: assertRecordId(phaseId, "resumePoint.phase_id"),
+    checkpoint_id: null,
+    activeObligationIds: unique(plan.managed?.activeLifecycleObligationIds ?? []),
+    suspended_at: timestamp,
+    reason: optionalString(reason, "No reason recorded.")
   };
 }
 

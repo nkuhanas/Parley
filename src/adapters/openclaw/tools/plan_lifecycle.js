@@ -1,6 +1,7 @@
 import { createEffectRecord, loadObligationRecord, saveEffectRecord, saveObligationRecord } from "../../../core/storage/board_store.js";
 import { nowIso } from "../../../core/time.js";
-import { assertPlanOwner, isCurrentLifecycleObligation, nextIncompletePhase, withLifecycleTransition } from "../../../core/plan/lifecycle.js";
+import { activePhase, assertPlanOwner, isCurrentLifecycleObligation, makeResumePoint, nextIncompletePhase, withLifecycleTransition } from "../../../core/plan/lifecycle.js";
+import { derivePlanSetupState } from "../../../core/plan/plan_state.js";
 import { loadPlanOrThrow, saveAndExportPlan } from "./plan_common.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
@@ -157,6 +158,177 @@ export function createRecordReviewDecisionAction(api) {
   };
 }
 
+
+function requireReason(value, fieldName = "reason") {
+  const reason = String(value ?? "").trim();
+  if (!reason) throw new Error(`${fieldName} is required`);
+  return reason;
+}
+
+function assertSetupComplete(plan, board) {
+  const setupState = derivePlanSetupState(plan, board);
+  if (!setupState.setupComplete) {
+    throw new Error(`plan setup is incomplete: ${setupState.missingRequired.join(", ")}`);
+  }
+  return setupState;
+}
+
+export function createMarkPlanReadyAction(api) {
+  return {
+    name: "parley_mark_plan_ready",
+    label: "Parley Mark Plan Ready",
+    description: "Owner-only lifecycle command: mark a setup-complete plan ready without review, with an explicit no-review reason.",
+    parameters: lifecycleToolParams({
+      noReviewReason: { type: "string" },
+      reason: { type: "string" }
+    }),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      const plan = await loadPlanOrThrow(api, identity, params.planId);
+      assertPlanOwner(plan, identity.actor);
+      if (!["draft", "needs_changes"].includes(plan.status)) throw new Error(`only draft or needs_changes plans can be marked ready without review; current status is ${plan.status}`);
+      assertSetupComplete(plan, identity.board);
+      const reason = requireReason(params.noReviewReason ?? params.reason, "noReviewReason");
+      const timestamp = nowIso();
+      const transitioned = withLifecycleTransition(plan, { status: "ready", currentPhaseId: null, resumePoint: null, timestamp });
+      const effect = await recordLifecycleEffect(api, identity, transitioned, {
+        action: "mark_ready_no_review",
+        from_status: plan.status,
+        to_status: "ready",
+        reason
+      });
+      const result = await saveAndExportPlan(api, identity, transitioned);
+      return boardResult({
+        tool: "parley_mark_plan_ready",
+        identity,
+        plan: result.plan,
+        effect,
+        artifact: result.artifact,
+        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      });
+    }
+  };
+}
+
+export function createRecordPlanDispositionAction(api) {
+  return {
+    name: "parley_record_plan_disposition",
+    label: "Parley Record Plan Disposition",
+    description: "Owner-only lifecycle command: terminally disposition a plan or archive an already non-active plan, with a reason.",
+    parameters: lifecycleToolParams({
+      disposition: { type: "string", description: "complete, cancelled, superseded, failed, or archived." },
+      reason: { type: "string" }
+    }, ["boardId", "planId", "disposition", "reason"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      const plan = await loadPlanOrThrow(api, identity, params.planId);
+      assertPlanOwner(plan, identity.actor);
+      const disposition = String(params.disposition ?? "").trim();
+      if (!["complete", "cancelled", "superseded", "failed", "archived"].includes(disposition)) {
+        throw new Error("disposition must be complete, cancelled, superseded, failed, or archived");
+      }
+      if (plan.status === "active" && disposition === "archived") throw new Error("active plans cannot be archived directly; record a terminal disposition first");
+      const reason = requireReason(params.reason);
+      const timestamp = nowIso();
+      const transitioned = withLifecycleTransition(plan, { status: disposition, currentPhaseId: null, resumePoint: null, timestamp });
+      const effect = await recordLifecycleEffect(api, identity, transitioned, {
+        action: "record_plan_disposition",
+        from_status: plan.status,
+        to_status: disposition,
+        disposition,
+        reason
+      });
+      const result = await saveAndExportPlan(api, identity, transitioned);
+      return boardResult({
+        tool: "parley_record_plan_disposition",
+        identity,
+        disposition,
+        plan: result.plan,
+        effect,
+        artifact: result.artifact,
+        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      });
+    }
+  };
+}
+
+export function createPausePlanAction(api) {
+  return {
+    name: "parley_pause_plan",
+    label: "Parley Pause Plan",
+    description: "Owner-only lifecycle command: pause an active plan, suspend current lifecycle obligations, and store a resume point.",
+    parameters: lifecycleToolParams({ reason: { type: "string" } }, ["boardId", "planId", "reason"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      const plan = await loadPlanOrThrow(api, identity, params.planId);
+      assertPlanOwner(plan, identity.actor);
+      if (plan.status !== "active") throw new Error(`only active plans can be paused; current status is ${plan.status}`);
+      const phase = activePhase(plan);
+      if (phase == null) throw new Error("cannot pause an active plan without a current phase");
+      const reason = requireReason(params.reason);
+      const timestamp = nowIso();
+      const resumePoint = makeResumePoint(plan, { phaseId: phase.phase_id, timestamp, reason });
+      const transitioned = withLifecycleTransition(plan, { status: "paused", currentPhaseId: phase.phase_id, resumePoint, timestamp });
+      const effect = await recordLifecycleEffect(api, identity, transitioned, {
+        action: "pause_plan",
+        from_status: plan.status,
+        to_status: "paused",
+        phase_id: phase.phase_id,
+        reason
+      });
+      const result = await saveAndExportPlan(api, identity, transitioned);
+      return boardResult({
+        tool: "parley_pause_plan",
+        identity,
+        plan: result.plan,
+        effect,
+        artifact: result.artifact,
+        resume_point: result.plan.managed?.resumePoint ?? null,
+        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      });
+    }
+  };
+}
+
+export function createResumePlanAction(api) {
+  return {
+    name: "parley_resume_plan",
+    label: "Parley Resume Plan",
+    description: "Owner-only lifecycle command: resume a paused or blocked plan from its stored resume point.",
+    parameters: lifecycleToolParams({ reason: { type: "string" } }, ["boardId", "planId", "reason"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      const plan = await loadPlanOrThrow(api, identity, params.planId);
+      assertPlanOwner(plan, identity.actor);
+      if (!["paused", "blocked"].includes(plan.status)) throw new Error(`only paused or blocked plans can be resumed; current status is ${plan.status}`);
+      const resumePoint = plan.managed?.resumePoint;
+      const phaseId = resumePoint?.phase_id ?? plan.managed?.current_phase_id;
+      if (phaseId == null) throw new Error("cannot resume plan without a resume point phase");
+      if (!plan.phases.some((phase) => phase.phase_id === phaseId)) throw new Error(`resume point phase is missing: ${phaseId}`);
+      const reason = requireReason(params.reason);
+      const timestamp = nowIso();
+      const phases = plan.phases.map((phase) => phase.phase_id === phaseId ? { ...phase, status: "active" } : phase);
+      const transitioned = withLifecycleTransition({ ...plan, phases }, { status: "active", currentPhaseId: phaseId, resumePoint: null, timestamp });
+      const effect = await recordLifecycleEffect(api, identity, transitioned, {
+        action: "resume_plan",
+        from_status: plan.status,
+        to_status: "active",
+        phase_id: phaseId,
+        reason
+      });
+      const result = await saveAndExportPlan(api, identity, transitioned);
+      return boardResult({
+        tool: "parley_resume_plan",
+        identity,
+        plan: result.plan,
+        effect,
+        artifact: result.artifact,
+        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      });
+    }
+  };
+}
+
 export function createActivatePlanAction(api) {
   return {
     name: "parley_activate_plan",
@@ -221,9 +393,11 @@ export function createRecordPhaseOutcomeAction(api) {
         if (nextPhase != null && phase.phase_id === nextPhase.phase_id) return { ...phase, status: "active" };
         return phase;
       });
+      const resumePoint = ["blocked", "failed"].includes(toStatus) ? makeResumePoint(plan, { phaseId: params.phaseId, timestamp, reason: params.note }) : null;
       const transitioned = withLifecycleTransition({ ...plan, phases }, {
         status: toStatus,
-        currentPhaseId: nextPhase?.phase_id ?? null,
+        currentPhaseId: nextPhase?.phase_id ?? (["blocked", "failed"].includes(toStatus) ? params.phaseId : null),
+        resumePoint,
         timestamp
       });
       const effect = await recordLifecycleEffect(api, identity, transitioned, {
