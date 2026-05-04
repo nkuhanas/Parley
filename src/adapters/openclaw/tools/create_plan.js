@@ -25,6 +25,7 @@ export function createCreatePlanAction(api) {
         landingSubpath: { type: "string", description: "Safe relative subpath under artifactNamespace." },
         filename: { type: "string", description: "Optional Markdown projection filename. Defaults from title." },
         coordinationMode: { type: "string" },
+        activationPolicy: { type: "object", additionalProperties: true, description: "Optional plan activation policy. Supported mode values include manual, owner_decision, human_gate, and auto." },
         artifactId: { type: "string", description: "Optional artifact id. Defaults to artifact_<planId without plan_>." },
         objectId: { type: "string", description: "Optional coordination object id. Defaults to object_<planId without plan_>." }
       }

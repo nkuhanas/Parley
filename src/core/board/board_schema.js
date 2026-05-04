@@ -90,6 +90,12 @@ export const OBLIGATION_RESOLUTIONS = Object.freeze([
   "superseded",
   "cancelled"
 ]);
+export const OBLIGATION_EXECUTION_AUTONOMY = Object.freeze([
+  "inform",
+  "recommend",
+  "act_if_low_risk",
+  "requires_human"
+]);
 export const TRIGGER_STATUSES = Object.freeze(["active", "disabled", "retired"]);
 export const TRIGGER_FIRE_POLICIES = Object.freeze(["once", "once_per_source_obligation", "many"]);
 export const TRIGGER_EVENT_TYPES = Object.freeze(["obligation.resolved"]);
@@ -568,6 +574,26 @@ function assertOptionalStringArray(value, fieldName) {
   return assertStringArray(value, fieldName);
 }
 
+function assertOptionalBoolean(value, fieldName, fallback = false) {
+  if (value == null) return fallback;
+  if (typeof value !== "boolean") throw new Error(`${fieldName} must be a boolean`);
+  return value;
+}
+
+function assertObligationExecutionPolicy(value, fieldName = "executionPolicy") {
+  if (value == null) return null;
+  const raw = assertObject(value, fieldName);
+  return {
+    autonomy: assertEnum(raw.autonomy ?? "inform", OBLIGATION_EXECUTION_AUTONOMY, `${fieldName}.autonomy`),
+    allowedActions: assertOptionalStringArray(raw.allowedActions ?? raw.allowed_actions, `${fieldName}.allowedActions`),
+    allowedLifecycleCommands: assertOptionalStringArray(raw.allowedLifecycleCommands ?? raw.allowed_lifecycle_commands, `${fieldName}.allowedLifecycleCommands`),
+    defaultAction: assertOptionalString(raw.defaultAction ?? raw.default_action, `${fieldName}.defaultAction`),
+    requiresReason: assertOptionalBoolean(raw.requiresReason ?? raw.requires_reason, `${fieldName}.requiresReason`, false),
+    activationPolicyMode: assertOptionalString(raw.activationPolicyMode ?? raw.activation_policy_mode, `${fieldName}.activationPolicyMode`),
+    guidance: assertOptionalString(raw.guidance, `${fieldName}.guidance`)
+  };
+}
+
 export function assertBoardAgentRecord(record, fieldName = "agent") {
   const raw = assertObject(record, fieldName);
   return {
@@ -672,6 +698,7 @@ export function assertObligationRecord(record) {
     reason: assertOptionalString(raw.reason, "reason"),
     source_effect_id: assertOptionalString(raw.source_effect_id, "source_effect_id"),
     managedBinding: assertManagedBinding(raw.managedBinding ?? raw.managed_binding, "managedBinding"),
+    executionPolicy: assertObligationExecutionPolicy(raw.executionPolicy ?? raw.execution_policy, "executionPolicy"),
     on_resolve_trigger_ids: assertRecordIdArray(raw.on_resolve_trigger_ids, "on_resolve_trigger_ids"),
     created_at: assertIsoTimestamp(raw.created_at, "created_at"),
     updated_at: assertIsoTimestamp(raw.updated_at, "updated_at")

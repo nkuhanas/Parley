@@ -22,6 +22,7 @@ export function createCreateObligationTool(api) {
         scope: { type: "string", description: "Optional authority/review scope." },
         reason: { type: "string", description: "Optional reason for the obligation." },
         sourceEffectId: { type: "string", description: "Optional source effect id." },
+        executionPolicy: { type: "object", additionalProperties: true, description: "Optional agent autonomy/action policy for handling this obligation." },
         onResolveTriggerIds: { type: "array", items: { type: "string" }, description: "Trigger ids evaluated by parley_resolve_obligation when this obligation is resolved." }
       }
     },
@@ -39,6 +40,7 @@ export function createCreateObligationTool(api) {
         scope: params?.scope,
         reason: params?.reason,
         source_effect_id: params?.sourceEffectId,
+        executionPolicy: params?.executionPolicy,
         on_resolve_trigger_ids: params?.onResolveTriggerIds
       });
       const saved = await saveObligationRecord(api.pluginConfig, identity.board, obligation);

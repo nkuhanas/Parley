@@ -140,7 +140,8 @@ async function createGuidedPlan(mutateTool, input = {}) {
       authority: "implementation-plan",
       landingSubpath: input.landingSubpath ?? "agent-comms/parley",
       filename: input.filename ?? `${planId}.md`,
-      participants: input.participants ?? ["parley-agent", "human:sensei"]
+      participants: input.participants ?? ["parley-agent", "human:sensei"],
+      activationPolicy: input.activationPolicy
     }
   });
   await mutateTool.execute(null, {
@@ -1272,7 +1273,18 @@ test("Parley migration-safe lifecycle commands cover no-review ready, pause/resu
     });
     assert.equal(readyResult.details.result.plan.status, "ready");
     assert.equal(readyResult.details.result.effect.payload.action, "mark_ready_no_review");
-    assert.equal(readyResult.details.result.plan_lifecycle.obligations[0].managedBinding.role, "activation_decision");
+    const activationDecision = readyResult.details.result.plan_lifecycle.obligations[0];
+    assert.equal(activationDecision.managedBinding.role, "activation_decision");
+    assert.deepEqual(activationDecision.executionPolicy, {
+      autonomy: "recommend",
+      allowedActions: ["activate", "defer", "terminal_disposition"],
+      allowedLifecycleCommands: ["parley_activate_plan", "parley_record_plan_disposition"],
+      defaultAction: null,
+      requiresReason: true,
+      activationPolicyMode: "owner_decision",
+      guidance: "Plan is ready. Choose or recommend the next lifecycle disposition. Do not activate unless activation policy permits autonomous execution."
+    });
+    assert.match(activationDecision.reason, /choose or recommend the next lifecycle disposition/);
 
     const activationResult = await mutateTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -1329,6 +1341,30 @@ test("Parley migration-safe lifecycle commands cover no-review ready, pause/resu
     const cancelledPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
     assert.deepEqual(cancelledPlan.managed.activeLifecycleObligationIds, []);
     assert.equal(dispositionResult.details.result.effect.payload.disposition, "cancelled");
+  });
+});
+
+test("Parley ready activation obligations expose auto activation policy for future heartbeat handling", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_auto_activation_policy",
+      filename: "auto-activation-policy-plan.md",
+      activationPolicy: { mode: "auto" }
+    });
+
+    const readyResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "mark_plan_ready",
+      input: { planId, noReviewReason: "Auto policy smoke accepts this plan without separate review." }
+    });
+    const activationDecision = readyResult.details.result.plan_lifecycle.obligations[0];
+    assert.equal(activationDecision.managedBinding.role, "activation_decision");
+    assert.equal(activationDecision.executionPolicy.autonomy, "act_if_low_risk");
+    assert.equal(activationDecision.executionPolicy.defaultAction, "activate");
+    assert.equal(activationDecision.executionPolicy.activationPolicyMode, "auto");
   });
 });
 

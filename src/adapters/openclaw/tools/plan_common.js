@@ -72,6 +72,28 @@ function boardReviewers(plan, board) {
   return (plan.review?.required_reviewers ?? []).filter((reviewer) => valid.has(reviewer) && !approved.has(reviewer));
 }
 
+function activationDecisionExecutionPolicy(plan) {
+  const activationPolicyMode = plan.activation_policy?.mode ?? "owner_decision";
+  const autonomyByMode = {
+    manual: "requires_human",
+    owner_decision: "recommend",
+    human_gate: "requires_human",
+    auto: "act_if_low_risk"
+  };
+  const autonomy = autonomyByMode[activationPolicyMode] ?? "recommend";
+  return {
+    autonomy,
+    allowedActions: ["activate", "defer", "terminal_disposition"],
+    allowedLifecycleCommands: ["parley_activate_plan", "parley_record_plan_disposition"],
+    defaultAction: activationPolicyMode === "auto" ? "activate" : null,
+    requiresReason: true,
+    activationPolicyMode,
+    guidance: autonomy === "act_if_low_risk"
+      ? "Plan is ready. Autonomous activation is allowed only when preconditions are clean and the action is low risk; otherwise recommend or wait."
+      : "Plan is ready. Choose or recommend the next lifecycle disposition. Do not activate unless activation policy permits autonomous execution."
+  };
+}
+
 function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
   if (terminalPlanStatus(plan.status)) return [];
   const prefix = planLifecycleObligationPrefix(plan);
@@ -117,9 +139,10 @@ function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
       agent: plan.owner,
       type: "report_status",
       target,
-      reason: `Plan ${plan.plan_id} is ready; owner must activate, defer, or terminally disposition it.`,
+      reason: `Plan ${plan.plan_id} is ready; choose or recommend the next lifecycle disposition. Do not activate unless activation policy permits autonomous execution.`,
       scope: "plan_lifecycle:activation_decision",
-      managedBinding: managedBinding(plan, "activation_decision")
+      managedBinding: managedBinding(plan, "activation_decision"),
+      executionPolicy: activationDecisionExecutionPolicy(plan)
     }];
   }
 
@@ -209,6 +232,7 @@ async function reconcilePlanLifecycleObligations(api, identity, plan, artifact, 
       reason: spec.reason,
       source_effect_id: previous?.source_effect_id ?? null,
       managedBinding: spec.managedBinding ?? null,
+      executionPolicy: spec.executionPolicy ?? null,
       created_at: previous?.created_at ?? now,
       updated_at: now
     });
