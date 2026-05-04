@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { withFileLock } from "./file_locks.js";
 import { resolveParleyBoardRegistry } from "../config.js";
 import { compareEffectRecords } from "../effect_ordering.js";
 import { createArtifactId, createEffectId, createObjectId, createObligationId, createRelationshipId, createTriggerId } from "../ids.js";
@@ -31,14 +32,18 @@ function serializeJson(value) {
   return `${JSON.stringify(value, null, JSON_INDENT)}\n`;
 }
 
-async function writeJsonAtomic(filePath, value) {
+async function writeJsonAtomicUnlocked(filePath, value) {
   await ensureDir(path.dirname(filePath));
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${process.hrtime.bigint()}.tmp`;
   await fs.writeFile(tempPath, serializeJson(value), "utf8");
   await fs.rename(tempPath, filePath);
 }
 
-async function readJsonFile(filePath, defaultValue = null) {
+async function writeJsonAtomic(filePath, value) {
+  return withFileLock(filePath, () => writeJsonAtomicUnlocked(filePath, value));
+}
+
+async function readJsonFileUnlocked(filePath, defaultValue = null) {
   try {
     const content = await fs.readFile(filePath, "utf8");
     return JSON.parse(content);
@@ -48,8 +53,24 @@ async function readJsonFile(filePath, defaultValue = null) {
   }
 }
 
-function recordPath(board, collectionName, recordId) {
+async function readJsonFile(filePath, defaultValue = null) {
+  return withFileLock(filePath, () => readJsonFileUnlocked(filePath, defaultValue));
+}
+
+export function boardRecordPath(board, collectionName, recordId) {
   return path.join(board.state_root, collectionName, `${assertRecordId(recordId, "record_id")}.json`);
+}
+
+function recordPath(board, collectionName, recordId) {
+  return boardRecordPath(board, collectionName, recordId);
+}
+
+export function planSetupRecordPath(board, planId) {
+  return recordPath(board, "plans", planId);
+}
+
+export async function withPlanSetupRecordLock(board, planId, operation) {
+  return withFileLock(planSetupRecordPath(board, planId), operation);
 }
 
 function checkpointPath(board, boardAgentId, projectionType) {
@@ -239,8 +260,12 @@ async function saveRecord(pluginConfig, board, collectionName, recordId, record,
   const validated = validator(record);
   const filePath = recordPath(targetBoard, collectionName, recordId);
   if (options.appendOnly === true) {
-    const existing = await readJsonFile(filePath);
-    if (existing != null) throw new Error(`${collectionName} record already exists: ${recordId}`);
+    return withFileLock(filePath, async () => {
+      const existing = await readJsonFileUnlocked(filePath);
+      if (existing != null) throw new Error(`${collectionName} record already exists: ${recordId}`);
+      await writeJsonAtomicUnlocked(filePath, validated);
+      return validated;
+    });
   }
   await writeJsonAtomic(filePath, validated);
   return validated;

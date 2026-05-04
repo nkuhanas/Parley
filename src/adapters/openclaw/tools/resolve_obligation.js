@@ -1,5 +1,5 @@
 import { createObligationResolvedEvent, evaluateBoundObligationResolvedTriggers } from "../../../core/board/trigger_engine.js";
-import { createEffectRecord, loadObligationRecord, loadPlanSetupRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord } from "../../../core/storage/board_store.js";
+import { createEffectRecord, loadObligationRecord, loadPlanSetupRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord, withPlanSetupRecordLock } from "../../../core/storage/board_store.js";
 import { nowIso } from "../../../core/time.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
@@ -46,18 +46,20 @@ export function createResolveObligationTool(api) {
       };
       const savedObligation = await saveObligationRecord(api.pluginConfig, identity.board, resolved);
       if (savedObligation.managedBinding?.system === "plan_lifecycle" && savedObligation.managedBinding.role === "phase_work") {
-        const plan = await loadPlanSetupRecord(api.pluginConfig, identity.board, savedObligation.managedBinding.plan_id);
-        if (plan != null && (plan.managed?.activeLifecycleObligationIds ?? []).includes(savedObligation.obligation_id)) {
-          await savePlanSetupRecord(api.pluginConfig, identity.board, {
-            ...plan,
-            managed: {
-              ...plan.managed,
-              activeLifecycleObligationIds: plan.managed.activeLifecycleObligationIds.filter((id) => id !== savedObligation.obligation_id),
-              lifecycle_updated_at: resolvedAt
-            },
-            updated_at: resolvedAt
-          });
-        }
+        await withPlanSetupRecordLock(identity.board, savedObligation.managedBinding.plan_id, async () => {
+          const plan = await loadPlanSetupRecord(api.pluginConfig, identity.board, savedObligation.managedBinding.plan_id);
+          if (plan != null && (plan.managed?.activeLifecycleObligationIds ?? []).includes(savedObligation.obligation_id)) {
+            await savePlanSetupRecord(api.pluginConfig, identity.board, {
+              ...plan,
+              managed: {
+                ...plan.managed,
+                activeLifecycleObligationIds: plan.managed.activeLifecycleObligationIds.filter((id) => id !== savedObligation.obligation_id),
+                lifecycle_updated_at: resolvedAt
+              },
+              updated_at: resolvedAt
+            });
+          }
+        });
       }
       const resolvedEffect = createEffectRecord({
         board_id: identity.board_id,

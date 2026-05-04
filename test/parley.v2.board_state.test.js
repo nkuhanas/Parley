@@ -910,6 +910,84 @@ test("Parley guided plan tools generate ids and expose setup status", async () =
   });
 });
 
+test("Parley plan mutation tools preserve concurrent phase additions", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const mutateTool = createMutateTool(toolApi(pluginConfig));
+    const planId = "plan_concurrent_phase_add";
+
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "create_plan",
+      input: {
+        planId,
+        title: "Concurrent Phase Add Plan",
+        authority: "implementation-plan",
+        landingSubpath: "agent-comms/parley",
+        filename: "concurrent-phase-add-plan.md",
+        participants: ["parley-agent"]
+      }
+    });
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "write_plan_overview",
+      input: {
+        planId,
+        purpose: "Verify concurrent plan mutations do not overwrite each other.",
+        background: "Multiple tools can target the same plan in adjacent turns.",
+        scopeSummary: "Exercise plan-level mutation serialization.",
+        inScope: ["Add phases concurrently"],
+        outOfScope: ["Execute phases"],
+        currentState: "The plan has no phases.",
+        targetState: "Both submitted phases are retained.",
+        approach: "Run concurrent add_plan_phase mutations.",
+        acceptanceCriteria: ["Both phase ids are present"],
+        risksAndConstraints: ["Keep the test local"]
+      }
+    });
+
+    await Promise.all([
+      mutateTool.execute(null, {
+        callerRuntimeRef: AGENT_RUNTIME_REF,
+        boardId: "project",
+        action: "add_plan_phase",
+        input: {
+          planId,
+          phaseId: "phase_concurrent_a",
+          title: "Concurrent Phase A",
+          owner: "parley-agent",
+          status: "draft",
+          entryCriteria: ["Overview exists."],
+          work: ["Retain phase A."],
+          exitCriteria: ["Phase A is present."],
+          supportingAgents: []
+        }
+      }),
+      mutateTool.execute(null, {
+        callerRuntimeRef: AGENT_RUNTIME_REF,
+        boardId: "project",
+        action: "add_plan_phase",
+        input: {
+          planId,
+          phaseId: "phase_concurrent_b",
+          title: "Concurrent Phase B",
+          owner: "parley-agent",
+          status: "draft",
+          entryCriteria: ["Overview exists."],
+          work: ["Retain phase B."],
+          exitCriteria: ["Phase B is present."],
+          supportingAgents: []
+        }
+      })
+    ]);
+
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const plan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(plan.phases.map((phase) => phase.phase_id).sort(), ["phase_concurrent_a", "phase_concurrent_b"]);
+  });
+});
+
 test("Parley query/mutate façade creates and validates parley.plan.v1 documents", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);

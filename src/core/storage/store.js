@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { withFileLock } from "./file_locks.js";
 import { resolveParleyPaths } from "../config.js";
 import { createMessageId, createThreadId } from "../ids.js";
 import { assertMessageRecord, assertThreadRecord } from "../protocol/schema.js";
@@ -24,14 +25,18 @@ async function ensureDir(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
 }
 
-async function writeJsonAtomic(filePath, value) {
+async function writeJsonAtomicUnlocked(filePath, value) {
   await ensureDir(path.dirname(filePath));
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${process.hrtime.bigint()}.tmp`;
   await fs.writeFile(tempPath, serializeJson(value), "utf8");
   await fs.rename(tempPath, filePath);
 }
 
-async function readJsonFile(filePath, defaultValue = null) {
+async function writeJsonAtomic(filePath, value) {
+  return withFileLock(filePath, () => writeJsonAtomicUnlocked(filePath, value));
+}
+
+async function readJsonFileUnlocked(filePath, defaultValue = null) {
   try {
     const content = await fs.readFile(filePath, "utf8");
     return JSON.parse(content);
@@ -39,6 +44,10 @@ async function readJsonFile(filePath, defaultValue = null) {
     if (error?.code === "ENOENT") return defaultValue;
     throw error;
   }
+}
+
+async function readJsonFile(filePath, defaultValue = null) {
+  return withFileLock(filePath, () => readJsonFileUnlocked(filePath, defaultValue));
 }
 
 function getThreadPath(pluginConfig, threadId) {

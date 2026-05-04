@@ -1,4 +1,4 @@
-import { loadPlanOrThrow, saveAndExportPlan, withOverview } from "./plan_common.js";
+import { loadPlanOrThrow, saveAndExportPlan, withOverview, withPlanMutationLock } from "./plan_common.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 export function createWritePlanOverviewAction(api) {
@@ -31,16 +31,19 @@ export function createWritePlanOverviewAction(api) {
     },
     async execute(_toolCallId, params) {
       const identity = resolveToolCaller(api, params);
-      const plan = await loadPlanOrThrow(api, identity, params.planId ?? params.plan_id);
-      const result = await saveAndExportPlan(api, identity, withOverview(plan, params));
-      return boardResult({
-        tool: "parley_write_plan_overview",
-        identity,
-        plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
-        accepted: { overview: true },
-        artifact: result.artifact,
-        setupState: result.setupState,
-        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      const planId = params.planId ?? params.plan_id;
+      return await withPlanMutationLock(api, identity, planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, planId);
+        const result = await saveAndExportPlan(api, identity, withOverview(plan, params));
+        return boardResult({
+          tool: "parley_write_plan_overview",
+          identity,
+          plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
+          accepted: { overview: true },
+          artifact: result.artifact,
+          setupState: result.setupState,
+          plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+        });
       });
     }
   };

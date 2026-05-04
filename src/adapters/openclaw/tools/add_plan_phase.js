@@ -1,4 +1,4 @@
-import { loadPlanOrThrow, maybeGateForObligation, saveAndExportPlan, withAddedPhase } from "./plan_common.js";
+import { loadPlanOrThrow, maybeGateForObligation, saveAndExportPlan, withAddedPhase, withPlanMutationLock } from "./plan_common.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 export function createAddPlanPhaseAction(api) {
@@ -35,21 +35,24 @@ export function createAddPlanPhaseAction(api) {
     },
     async execute(_toolCallId, params) {
       const identity = resolveToolCaller(api, params);
-      const plan = await loadPlanOrThrow(api, identity, params.planId ?? params.plan_id);
-      const nextPlan = withAddedPhase(plan, params, identity.board);
-      const addedPhase = nextPlan.phases[nextPlan.phases.length - 1];
-      const result = await saveAndExportPlan(api, identity, nextPlan, { checkpointForObligation: maybeGateForObligation(addedPhase) });
-      return boardResult({
-        tool: "parley_add_plan_phase",
-        identity,
-        plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
-        accepted: { phase: addedPhase },
-        artifact: result.artifact,
-        human_checkpoints: {
-          created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]
-        },
-        setupState: result.setupState,
-        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      const planId = params.planId ?? params.plan_id;
+      return await withPlanMutationLock(api, identity, planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, planId);
+        const nextPlan = withAddedPhase(plan, params, identity.board);
+        const addedPhase = nextPlan.phases[nextPlan.phases.length - 1];
+        const result = await saveAndExportPlan(api, identity, nextPlan, { checkpointForObligation: maybeGateForObligation(addedPhase) });
+        return boardResult({
+          tool: "parley_add_plan_phase",
+          identity,
+          plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
+          accepted: { phase: addedPhase },
+          artifact: result.artifact,
+          human_checkpoints: {
+            created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]
+          },
+          setupState: result.setupState,
+          plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+        });
       });
     }
   };

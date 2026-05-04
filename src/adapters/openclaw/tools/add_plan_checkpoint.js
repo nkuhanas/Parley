@@ -1,4 +1,4 @@
-import { loadPlanOrThrow, saveAndExportPlan, withAddedCheckpoint } from "./plan_common.js";
+import { loadPlanOrThrow, saveAndExportPlan, withAddedCheckpoint, withPlanMutationLock } from "./plan_common.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 export function createAddPlanCheckpointAction(api) {
@@ -28,20 +28,23 @@ export function createAddPlanCheckpointAction(api) {
     },
     async execute(_toolCallId, params) {
       const identity = resolveToolCaller(api, params);
-      const plan = await loadPlanOrThrow(api, identity, params.planId ?? params.plan_id);
-      const { plan: nextPlan, checkpoint } = withAddedCheckpoint(plan, params, identity.board);
-      const result = await saveAndExportPlan(api, identity, nextPlan, { checkpointForObligation: checkpoint });
-      return boardResult({
-        tool: "parley_add_plan_checkpoint",
-        identity,
-        plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
-        accepted: { phase: checkpoint, checkpoint },
-        artifact: result.artifact,
-        human_checkpoints: {
-          created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]
-        },
-        setupState: result.setupState,
-        plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+      const planId = params.planId ?? params.plan_id;
+      return await withPlanMutationLock(api, identity, planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, planId);
+        const { plan: nextPlan, checkpoint } = withAddedCheckpoint(plan, params, identity.board);
+        const result = await saveAndExportPlan(api, identity, nextPlan, { checkpointForObligation: checkpoint });
+        return boardResult({
+          tool: "parley_add_plan_checkpoint",
+          identity,
+          plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
+          accepted: { phase: checkpoint, checkpoint },
+          artifact: result.artifact,
+          human_checkpoints: {
+            created_obligations: result.createdCheckpointObligation == null ? [] : [result.createdCheckpointObligation]
+          },
+          setupState: result.setupState,
+          plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+        });
       });
     }
   };

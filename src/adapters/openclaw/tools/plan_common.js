@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { resolveArtifactNamespacePath } from "../../../core/board/board.js";
-import { createArtifactRecord, createCoordinationObjectRecord, createEffectRecord, createObligationRecord, listObligationRecords, loadPlanSetupRecord, saveArtifactRecord, saveCoordinationObjectRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord } from "../../../core/storage/board_store.js";
+import { createArtifactRecord, createCoordinationObjectRecord, createEffectRecord, createObligationRecord, listObligationRecords, loadPlanSetupRecord, saveArtifactRecord, saveCoordinationObjectRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord, withPlanSetupRecordLock } from "../../../core/storage/board_store.js";
 import { createPlanCheckpointId, createPlanId, createPlanPhaseId } from "../../../core/ids.js";
 import { nowIso } from "../../../core/time.js";
 import { assertBoardAgentForTool } from "./v2_common.js";
@@ -47,6 +47,10 @@ export async function loadPlanOrThrow(api, identity, planId) {
   const plan = await loadPlanSetupRecord(api.pluginConfig, identity.board, planId);
   if (plan == null) throw new Error(`plan not found: ${planId}`);
   return plan;
+}
+
+export async function withPlanMutationLock(api, identity, planId, operation) {
+  return withPlanSetupRecordLock(identity.board, planId, operation);
 }
 
 
@@ -459,10 +463,13 @@ function importedPlanRecordFromDocument(markdown, validation, artifact, board) {
 export async function importPlanArtifactSetup(api, identity, artifact, markdown) {
   const validation = validateParleyPlanV1Document(markdown);
   if (!validation.ok) return { validation, plan: null, setupState: null, lifecycleObligations: [] };
-  const plan = await savePlanSetupRecord(api.pluginConfig, identity.board, importedPlanRecordFromDocument(markdown, validation, artifact, identity.board));
-  const setupState = derivePlanSetupState(plan, identity.board);
-  const lifecycle = await reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState);
-  return { validation, plan: lifecycle.plan, setupState, lifecycleObligations: lifecycle.obligations };
+  const importedPlan = importedPlanRecordFromDocument(markdown, validation, artifact, identity.board);
+  return await withPlanSetupRecordLock(identity.board, importedPlan.plan_id, async () => {
+    const plan = await savePlanSetupRecord(api.pluginConfig, identity.board, importedPlan);
+    const setupState = derivePlanSetupState(plan, identity.board);
+    const lifecycle = await reconcilePlanLifecycleObligations(api, identity, plan, artifact, setupState);
+    return { validation, plan: lifecycle.plan, setupState, lifecycleObligations: lifecycle.obligations };
+  });
 }
 
 export async function exportPlanProjection(api, identity, plan, { checkpointForObligation: checkpoint = null } = {}) {
@@ -541,22 +548,24 @@ export async function createPlanShell(api, identity, params) {
     created_at: timestamp,
     updated_at: timestamp
   };
-  const saved = await savePlanSetupRecord(api.pluginConfig, identity.board, plan);
-  const object = createCoordinationObjectRecord({
-    board_id: identity.board_id,
-    object_id: params?.objectId ?? params?.object_id ?? `object_${String(planId).replace(/^plan_/, "")}`,
-    kind: "plan",
-    title: saved.title,
-    status: saved.status,
-    artifact_ref: { artifact_id: artifactId, version: saved.version },
-    participants: saved.participants,
-    created_at: timestamp,
-    updated_at: timestamp
+  return await withPlanSetupRecordLock(identity.board, planId, async () => {
+    const saved = await savePlanSetupRecord(api.pluginConfig, identity.board, plan);
+    const object = createCoordinationObjectRecord({
+      board_id: identity.board_id,
+      object_id: params?.objectId ?? params?.object_id ?? `object_${String(planId).replace(/^plan_/, "")}`,
+      kind: "plan",
+      title: saved.title,
+      status: saved.status,
+      artifact_ref: { artifact_id: artifactId, version: saved.version },
+      participants: saved.participants,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+    const savedObject = await saveCoordinationObjectRecord(api.pluginConfig, identity.board, object);
+    const exported = await exportPlanProjection(api, identity, saved);
+    const exportedPlan = exported.plan ?? saved;
+    return { plan: exportedPlan, object: savedObject, setupState: derivePlanSetupState(exportedPlan, identity.board), ...exported };
   });
-  const savedObject = await saveCoordinationObjectRecord(api.pluginConfig, identity.board, object);
-  const exported = await exportPlanProjection(api, identity, saved);
-  const exportedPlan = exported.plan ?? saved;
-  return { plan: exportedPlan, object: savedObject, setupState: derivePlanSetupState(exportedPlan, identity.board), ...exported };
 }
 
 export function withOverview(plan, input) {
