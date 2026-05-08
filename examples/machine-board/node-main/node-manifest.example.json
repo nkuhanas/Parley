@@ -1,0 +1,79 @@
+{
+  "schema": "parley.node-manifest.v0",
+  "node": {
+    "name": "node-main",
+    "board_id": "node-main",
+    "phase": "pre_node_schema",
+    "updated_at": "2026-05-08T22:00:00.000Z"
+  },
+  "hardware": {
+    "profile": "proxmox-host-placeholder",
+    "inventory_status": "pending-real-node"
+  },
+  "storage": {
+    "profile": "zfs-placeholder",
+    "inventory_status": "pending-real-node"
+  },
+  "partitions": {
+    "host": {
+      "kind": "host",
+      "role": "proxmox-host",
+      "protected": {
+        "enabled": true,
+        "reason": "host"
+      },
+      "object_kind": "proxmox.node",
+      "desired_state": "active",
+      "observed_state": "unknown",
+      "power_state": "unknown"
+    },
+    "admin_vm": {
+      "kind": "vm",
+      "role": "admin-vm",
+      "protected": {
+        "enabled": true,
+        "reason": "control_plane"
+      },
+      "vmid": 100,
+      "ip": "10.0.0.10",
+      "desired_state": "active",
+      "observed_state": "unknown",
+      "power_state": "unknown"
+    },
+    "parley_runtime": {
+      "kind": "lxc",
+      "role": "parley-runtime",
+      "protected": {
+        "enabled": true,
+        "reason": "control_plane"
+      },
+      "ctid": 200,
+      "ip": "10.0.0.20",
+      "desired_state": "active",
+      "observed_state": "unknown",
+      "power_state": "unknown"
+    }
+  },
+  "credentials": {
+    "proxmox_api_token_identity": {
+      "identity_only": true,
+      "secret_stored": false,
+      "intended_holder": "future read-only inventory adapter",
+      "owner": "human:sensei",
+      "scope_description": "Identity record only. Token creation and secret storage are outside this slice.",
+      "default_state": "absent_or_revoked"
+    }
+  },
+  "recovery": {
+    "break_glass_doc": "docs/recovery/node-main-break-glass.md",
+    "token_revocation_doc": "docs/recovery/node-main-token-revocation.md",
+    "parley_restore_doc": "docs/recovery/node-main-parley-restore.md",
+    "backup_restore_doc": "docs/recovery/node-main-backup-restore.md",
+    "node_manifest_path": "examples/machine-board/node-main/node-manifest.example.json"
+  },
+  "exports": {
+    "last_board_export": null,
+    "last_manifest_export": "examples/machine-board/node-main/node-manifest.example.json",
+    "off_node_target": "pending-off-node-backup-target"
+  }
+}

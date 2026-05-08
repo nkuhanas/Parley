@@ -1,0 +1,29 @@
+{
+  "source": "proxmox_inventory",
+  "observed_at": "2026-05-08T22:30:00.000Z",
+  "export_ref": "examples/machine-board/node-main/proxmox-inventory.example.json",
+  "resources": [
+    {
+      "type": "node",
+      "node": "node-main",
+      "name": "node-main",
+      "status": "running"
+    },
+    {
+      "type": "qemu",
+      "node": "node-main",
+      "vmid": 100,
+      "name": "admin-vm",
+      "status": "running",
+      "ip": "10.0.0.10"
+    },
+    {
+      "type": "lxc",
+      "node": "node-main",
+      "vmid": 200,
+      "name": "parley-runtime",
+      "status": "stopped",
+      "ip": "10.0.0.20"
+    }
+  ]
+}
