@@ -11,32 +11,31 @@ authority:
 plan_id: plan_parley_service_boundary_v1
 board_id: parley
 title: Decouple Parley into a dedicated service with OpenClaw facade clients
-status: draft
-version: 2
+status: active
+version: 3
 created_at: "2026-05-08T23:25:20.000Z"
-updated_at: "2026-05-08T23:33:00.000Z"
+updated_at: "2026-05-08T23:45:47.760Z"
 owner: kairos-operator
 participants:
   - kairos-operator
 scope:
-  summary: Draft the service boundary for Parley as a dedicated app/service while keeping OpenClaw tools as facade clients and preserving a future dashboard path.
+  summary: This plan is a design/specification slice only. It should produce a concrete implementation roadmap for a service boundary without prematurely rewriting Parley internals or dashboarding.
   in:
-    - Define Parley service ownership boundary
-    - Disambiguate application service, service process, deployment, transport, and client/facade terminology
-    - Define OpenClaw facade/client responsibilities
-    - Define dashboard-ready API and projection expectations
-    - Define plan tool output slimming requirements
-    - Define normalized caller context and compact response envelope requirements
-    - Define explicit artifact-read behavior
-    - Preserve explicit plan-phase addition flows
-    - Identify migration slices from embedded runtime usage to service-backed usage
+    - Specify Parley's service boundary and ownership model.
+    - Specify how OpenClaw tools become facade/client adapters.
+    - Specify dashboard-ready read APIs, projections, and event/update surfaces.
+    - Specify compact tool response contracts for plan-related actions.
+    - Preserve and clarify explicit plan phase addition flows.
+    - Identify staged migration slices that keep existing tests and tool behavior stable.
   out:
-    - Implementing the service in this draft slice
-    - Building HTTP/RPC transport, parleyd, or dashboard UI
-    - Replacing existing OpenClaw tools immediately
-    - Changing board-state semantics without explicit follow-up approval
-    - Adding authentication or multi-tenant policy beyond boundary placeholders
-    - Adding database migration, telemetry stack, Proxmox integration, machine-board execution flows, token management, or OpenClaw tool removal
+    - Building the service implementation in this draft slice.
+    - Building HTTP/RPC transport, `parleyd`, or dashboard UI.
+    - Introducing Proxmox/node work or machine-board execution flows.
+    - Creating or storing tokens/secrets.
+    - Creating a telemetry stack.
+    - Creating a new database requirement before storage migration is designed.
+    - Removing existing OpenClaw tools before service-backed replacements exist.
+    - Redesigning Parley board/object/effect/obligation/relationship/plan/trigger semantics without explicit approval.
 landing:
   namespace: parley_plans
   subpath: parley-service
@@ -168,6 +167,14 @@ type CallerContext = {
 
 This is not a full authentication or multi-tenant policy. It is the minimal request envelope needed to keep service calls accountable and transport-safe.
 
+Board target precedence should be specified in Phase 1:
+
+- If a command/query input includes `board_id`, it is the explicit operation target.
+- `CallerContext.board_id` may provide default board context for reads only.
+- Mutations requiring board affinity must receive explicit `board_id` in the command input unless a specific command contract says otherwise.
+
+`request_id` should be treated as trace metadata in Phase 1, not a general idempotency guarantee. Idempotency semantics may be defined per command later; mutating commands can add a separate `command_id` or `idempotency_key` when that discipline is needed.
+
 Response envelope policy:
 
 - Mutations return handles, deltas, summaries, and next actions.
@@ -179,6 +186,8 @@ Response envelope policy:
 ```ts
 type MutationResponse = {
   status: "ok" | "blocked" | "needs_review" | "error";
+  code?: string;
+  message?: string;
   ids?: Record<string, string>;
   artifact_ref?: string;
   artifact_path?: string;
@@ -191,6 +200,8 @@ type MutationResponse = {
   warnings?: Array<string>;
 };
 ```
+
+`code` and `message` should carry machine-readable and human-readable recovery context for blocked/error states so clients do not parse `summary` or `warnings`. Top-level artifact fields are the primary artifact fields for MVP ergonomics. If a command later touches multiple artifacts, add a plural `artifacts` array rather than overloading the primary fields.
 
 Artifact-read policy:
 
@@ -240,7 +251,7 @@ OpenClaw adapter does not own:
 ### Phase 1 — Service boundary and API contract spec
 
 Kind: implementation
-Status: proposed
+Status: active
 Owner: kairos-operator
 
 Required from:
@@ -257,8 +268,9 @@ Entry criteria:
 
 Work:
 - Inventory current OpenClaw tool actions and map them to service commands/queries.
-- Define command/query envelope conventions, including normalized `CallerContext`.
-- Define compact mutation response envelopes as a hard API rule.
+- Define command/query envelope conventions, including normalized `CallerContext`, `board_id` precedence, and Phase 1 `request_id` trace semantics.
+- Define compact mutation response envelopes as a hard API rule, including `code`/`message` recovery fields for blocked/error outcomes.
+- Define top-level artifact response fields as primary artifact fields for MVP responses.
 - Define explicit artifact-read queries and `include_body` behavior.
 - Define compact response shape for plan tools.
 - Define dashboard-oriented read models and pagination/cursor expectations.
@@ -428,9 +440,12 @@ Non-goals before activation:
 - A reviewed service-boundary spec exists before implementation migration.
 - “Service” terminology is disambiguated into application service, service process, deployment, transport, and client/facade.
 - A normalized caller context shape is specified.
+- `board_id` precedence is specified: explicit command/query input wins, read defaulting may use caller context, and mutation defaulting is disallowed unless a command contract explicitly permits it.
+- `request_id` is specified as Phase 1 trace metadata, not a blanket idempotency guarantee.
 - OpenClaw is described as a facade/client, not Parley's runtime owner.
 - Future dashboard access is supported by service projections and artifact refs.
-- Mutation response envelopes are compact by default.
+- Mutation response envelopes are compact by default and include `code`/`message` fields for tool-guided recovery.
+- Top-level mutation artifact fields are defined as primary artifact fields.
 - Plan mutation outputs are specified as compact by default.
 - Plan artifact path/ref is present in relevant outputs.
 - Full artifact body return requires explicit artifact-read or `include_body: true`.
@@ -458,13 +473,16 @@ Non-goals before activation:
 - Should artifact reads be a generic service endpoint or separate filesystem-backed client concern?
 - What dashboard auth model is expected eventually: local-only trusted UI, token-authenticated API, or delegated host auth?
 - Should service command responses include effect cursors now, or defer until dashboard/live update work begins?
+- When should multi-artifact mutation responses graduate from primary artifact fields to a plural `artifacts` array?
 - Should telemetry be represented first as a signal-writing client in the API contract, or deferred entirely until dashboard/read-model work begins?
 
 ## Review and Approval
 
-This draft should be reviewed by Sensei before implementation. The recommended next implementation slice, if approved, is Phase 1 only: write the service API contract and response envelope spec. Implementation of the application service, service process, transport, dashboard, auth, database migration, telemetry stack, Proxmox integration, and OpenClaw tool migration should wait until that contract is reviewed.
+Sensei approved activation on 2026-05-08 after final GPT review notes were folded into version 3. The plan was imported into Parley board state, marked ready without additional review, and activated for Phase 1.
 
 ## Change Log
 
 - 2026-05-08: Initial draft created from Sensei direction to decouple Parley from OpenClaw, preserve plan-phase flows, support future dashboard access, and slim plan tool outputs.
 - 2026-05-08: Folded review feedback into the plan: clarified service terminology, caller context, compact mutation envelopes, artifact reads, projection/read-model policy, deferred transport, OpenClaw facade responsibilities, and stronger non-goals.
+- 2026-05-08: Folded final GPT review notes: mutation `code`/`message`, primary artifact response fields, `board_id` precedence, and Phase 1 `request_id` trace semantics.
+- 2026-05-08: Imported plan into Parley state, marked ready with Sensei approval, and activated Phase 1.

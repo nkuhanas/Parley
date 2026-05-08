@@ -1,0 +1,171 @@
+# Service API Contract
+
+Status: draft Phase 1 contract  
+Related plan: `plans/parley-service/service-boundary-plan.md`
+
+## Purpose
+
+This document maps the current Parley OpenClaw tool surface into application service commands and queries. It is a contract draft for the service boundary, not an implementation migration.
+
+## Request Envelope
+
+Every application service call receives normalized caller context plus command/query input.
+
+```ts
+type ServiceRequest<TInput = Record<string, unknown>> = {
+  caller: CallerContext;
+  input: TInput;
+};
+
+type CallerContext = {
+  actor_id: string;
+  actor_type: "agent" | "human" | "service";
+  runtime?: "openclaw" | "cli" | "dashboard" | "telemetry" | "bootstrap" | string;
+  board_id?: string;
+  request_id?: string;
+  capabilities?: string[];
+};
+```
+
+`request_id` is trace metadata in Phase 1. It is not a general idempotency key.
+
+## Board Target Rules
+
+- Board-scoped mutations require explicit `input.board_id` unless a command contract explicitly says otherwise.
+- Board-scoped queries should accept explicit `input.board_id`; read-only defaulting from `caller.board_id` may be allowed by specific query contracts.
+- If both `input.board_id` and `caller.board_id` are present, `input.board_id` wins.
+- Runtime protocol queries/commands are not board-affined unless a command documents `board_id` as a filter.
+
+## Commands
+
+Command names below are service-level names. Existing OpenClaw tools should become facades that map tool input into these commands.
+
+### Runtime protocol commands
+
+| Service command | Current tool | Notes |
+| --- | --- | --- |
+| `openThread` | `parley_open_thread` | Create runtime thread/message records and pending dispatch metadata. |
+| `replyThread` | `parley_reply_thread` | Append a substantive runtime protocol message. |
+| `claimTurn` | `parley_claim_turn` | Record a control claim without settling the turn. |
+| `probeThread` | `parley_probe_thread` | Record first stalled-thread probe. |
+| `settleTurn` | `parley_settle_turn` | Set current turn control marker and next action owner. |
+| `concludeThread` | `parley_conclude_thread` | Conclude a live thread by initiator. |
+| `dispatchTransportRequest` | `parley_dispatch_transport_request` | Fallback/debug dispatch helper. Transport remains adapter-owned. |
+| `recordTransportResult` | `parley_record_transport_result` | Persist accepted/failed dispatch outcome. |
+| `recordHumanSummaryAnchor` | `parley_record_human_summary_anchor` | Persist delivered human-summary anchor. |
+
+### Board artifact/object/effect commands
+
+| Service command | Current tool | Notes |
+| --- | --- | --- |
+| `registerArtifact` | `parley_register_artifact` | Registers artifact references and may import plan artifacts. |
+| `createObject` | `parley_create_object` | Creates board-scoped coordination object. |
+| `recordEffect` | `parley_record_effect` | Appends immutable board effect. |
+| `recordRelationship` | `parley_record_relationship` | Adds relationship plus effect. |
+| `removeRelationship` | `parley_remove_relationship` | Logical relationship removal through effect. |
+
+### Board obligation and trigger commands
+
+| Service command | Current tool | Notes |
+| --- | --- | --- |
+| `createObligation` | `parley_create_obligation` | Creates active board-scoped obligation. |
+| `resolveObligation` | `parley_resolve_obligation` | Resolves obligation and evaluates obligation-bound triggers. |
+| `createTrigger` | `parley_create_trigger` | Creates trigger record. |
+
+### Plan setup and lifecycle commands
+
+| Service command | Current tool | Notes |
+| --- | --- | --- |
+| `createPlan` | `parley_create_plan` | Creates tracked plan setup shell only. |
+| `writePlanOverview` | `parley_write_plan_overview` | Writes/replaces overview band. |
+| `addPlanPhase` | `parley_add_plan_phase` | Adds one explicit phase. |
+| `addPlanCheckpoint` | `parley_add_plan_checkpoint` | Adds human checkpoint/gate phase. |
+| `requestPlanReview` | `parley_request_plan_review` | Moves setup-complete plan into review and creates reviewer obligations. |
+| `recordReviewDecision` | `parley_record_review_decision` | Reviewer decision for active review obligation. |
+| `markPlanReady` | `parley_mark_plan_ready` | Owner marks setup-complete plan ready without review. |
+| `activatePlan` | `parley_activate_plan` | Owner activates ready plan and creates lifecycle obligations. |
+| `pausePlan` | `parley_pause_plan` | Owner pauses active plan. |
+| `resumePlan` | `parley_resume_plan` | Owner resumes paused/blocked plan. |
+| `recordPhaseOutcome` | `parley_record_phase_outcome` | Owner records current phase outcome and advances cursor. |
+| `recordPlanDisposition` | `parley_record_plan_disposition` | Owner terminally dispositions or archives plan. |
+
+Plan setup remains guided and explicit. The service should not accept arbitrary complete plan replacement as the normal setup path.
+
+## Queries
+
+### Discovery and recovery queries
+
+| Service query | Current tool | Notes |
+| --- | --- | --- |
+| `describe` | `parley_describe` | Tool/workflow metadata and board metadata. |
+| `myBoards` | `parley_my_boards` | Boardless discovery and identity resolution. |
+| `whereAmI` | `parley_where_am_i` | Runtime recovery, board-local recovery when `board_id` is explicit. |
+
+### Board/projection queries
+
+| Service query | Current tool | Notes |
+| --- | --- | --- |
+| `getBoardProjection` | `parley_board_projection` | Minimal board-scoped projection. |
+| `checkpointProjection` | `parley_checkpoint_projection` | Inspect/advance projection checkpoint. |
+| `listRuntimeObligations` | `parley_query_runtime_obligations` | Runtime obligations; no board id. |
+| `listBoardObligations` | `parley_query_board_obligations` | Board-local obligations with target-kind filters. |
+| `searchReferences` | `parley_query_search` | Board namespace search. |
+| `validatePlan` | `parley_validate_plan` | Validate plan Markdown/path and optional setup state. |
+| `validateState` | `parley_validate_state` | Validate board records/references/derived state. |
+| `getPlanSetupStatus` | `parley_get_plan_setup_status` | Plan setup/lifecycle status. |
+
+### Artifact read queries
+
+These are explicit service queries even if current clients can read local paths directly:
+
+| Service query | Initial input | Notes |
+| --- | --- | --- |
+| `readArtifact` | `{ board_id, artifact_id, include_body? }` | Reads artifact handle/body by id. |
+| `readArtifactByRef` | `{ board_id, artifact_ref, include_body? }` | Reads artifact handle/body by ref/URI. |
+| `readPlanArtifact` | `{ board_id, plan_id, include_body? }` | Reads primary artifact for a plan. |
+| `getPlanStatus` | `{ board_id, plan_id }` | Compact plan status/read model. May share implementation with setup status. |
+
+`include_body` defaults to `false` where the body may be large.
+
+## Compatibility Facades
+
+`parley_query` and `parley_mutate` are compatibility facades over first-class service queries/commands. They may remain for advanced callers, but the application service should expose first-class command/query functions internally.
+
+Facade action mapping should be mechanical:
+
+- validate action name
+- normalize caller context
+- validate `input`
+- call the corresponding service command/query
+- return compact response envelope with facade diagnostics
+
+Unsupported actions must fail closed with `UNSUPPORTED_ACTION`.
+
+## Response Contract
+
+Commands return compact mutation envelopes. Queries return bounded query envelopes. See `docs/specs/response-envelopes.md`.
+
+Key rules:
+
+- mutation responses include `code` and `message` when blocked or errored
+- plan mutations do not return full Markdown by default
+- artifact body access requires explicit artifact-read query or `include_body: true`
+- top-level artifact fields are primary artifact fields
+- multi-artifact responses may add a plural `artifacts` array later when a concrete command needs it
+
+## Initial Migration Slices
+
+1. Keep current behavior unchanged and add service-contract tests/fixtures around commands and query response shapes.
+2. Add an embedded application service module that delegates to current core functions.
+3. Move first-class OpenClaw tools onto service commands/queries while preserving tool names.
+4. Keep `parley_query`/`parley_mutate` as advanced facades over the same service calls.
+5. Defer transport, dashboard, auth, and database decisions until after the embedded service contract is stable.
+
+## Acceptance Criteria for Phase 1
+
+- Current OpenClaw tool actions are mapped to service commands/queries.
+- `CallerContext` and board target precedence are defined.
+- Compact mutation/query response contracts are defined.
+- Explicit artifact-read behavior exists in the contract.
+- Dashboard-oriented read models are represented as service queries/projections.
+- Transport remains deferred.

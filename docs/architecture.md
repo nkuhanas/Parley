@@ -34,6 +34,16 @@ The `guidance/` package centralizes agent-facing response text and next-call gui
 - `src/index.js` exports public JavaScript APIs.
 - `plugin.js` is the native OpenClaw plugin entrypoint.
 
+## Service boundary specs
+
+Phase 1 service-boundary contracts live under `docs/specs/`:
+
+- `docs/specs/service-boundary.md`
+- `docs/specs/service-api-contract.md`
+- `docs/specs/response-envelopes.md`
+
+These specs define Parley's application-service boundary while keeping OpenClaw tools as client/facade adapters.
+
 ## Design constraints
 
 - Identity ambiguity fails closed.
