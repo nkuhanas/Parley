@@ -103,12 +103,14 @@ Plan setup remains guided and explicit. The service should not accept arbitrary 
 
 ### Board/projection queries
 
+Phase 2 should implement current-tool-aligned service query names first. Dashboard-friendly names such as `getBoardOverview` or combined `listObligations` can be added later as aliases or thin wrappers when tests or consumers require them.
+
 | Service query | Current tool | Notes |
 | --- | --- | --- |
-| `getBoardProjection` | `parley_board_projection` | Minimal board-scoped projection. |
-| `checkpointProjection` | `parley_checkpoint_projection` | Inspect/advance projection checkpoint. |
-| `listRuntimeObligations` | `parley_query_runtime_obligations` | Runtime obligations; no board id. |
-| `listBoardObligations` | `parley_query_board_obligations` | Board-local obligations with target-kind filters. |
+| `getBoardProjection` | `parley_board_projection` | Minimal board-scoped projection. Implement now. |
+| `checkpointProjection` | `parley_checkpoint_projection` | Inspect/advance projection checkpoint. Implement now. |
+| `listRuntimeObligations` | `parley_query_runtime_obligations` | Runtime obligations; no board id. Implement now. |
+| `listBoardObligations` | `parley_query_board_obligations` | Board-local obligations with target-kind filters. Implement now. |
 | `searchReferences` | `parley_query_search` | Board namespace search. |
 | `validatePlan` | `parley_validate_plan` | Validate plan Markdown/path and optional setup state. |
 | `validateState` | `parley_validate_state` | Validate board records/references/derived state. |
@@ -156,10 +158,13 @@ Key rules:
 ## Initial Migration Slices
 
 1. Keep current behavior unchanged and add service-contract tests/fixtures around commands and query response shapes.
-2. Add an embedded application service module that delegates to current core functions.
-3. Move first-class OpenClaw tools onto service commands/queries while preserving tool names.
-4. Keep `parley_query`/`parley_mutate` as advanced facades over the same service calls.
-5. Defer transport, dashboard, auth, and database decisions until after the embedded service contract is stable.
+2. Add an embedded application service shell plus response/context utilities.
+3. Implement current-tool-aligned read/query service functions first: `describe`, `myBoards`, `whereAmI`, `getBoardProjection`, `listRuntimeObligations`, `listBoardObligations`, and `getPlanSetupStatus`.
+4. Add explicit artifact/plan reads: `readArtifact`, `readArtifactByRef`, `readPlanArtifact`, and `getPlanStatus`.
+5. Migrate plan mutations, then general board mutations, then runtime protocol commands.
+6. Move first-class OpenClaw tools onto service commands/queries while preserving tool names.
+7. Keep `parley_query`/`parley_mutate` as advanced facades over the same service calls.
+8. Defer transport, dashboard, auth, and database decisions until after the embedded service contract is stable.
 
 ## Acceptance Criteria for Phase 1
 

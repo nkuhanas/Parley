@@ -120,8 +120,8 @@ Initial command families:
 Initial query families:
 
 - discovery and recovery: describe, my boards, where am I
-- board projections: board overview, checkpoint projection
-- obligations: runtime obligations, board obligations
+- current-tool-aligned board projections: board projection, checkpoint projection
+- current-tool-aligned obligations: runtime obligations, board obligations
 - validation: plan validation, board state validation
 - reference search: board-registered namespace search
 - artifact reads: explicit artifact and plan artifact reads
@@ -130,7 +130,9 @@ Initial query families:
 
 Dashboard support is a read/projection contract, not a Phase 1 UI or transport implementation.
 
-Dashboard and agent clients should consume service projections/read models rather than scraping OpenClaw runtime state or private storage. Initial read models should include:
+Dashboard and agent clients should consume service projections/read models rather than scraping OpenClaw runtime state or private storage. Phase 2 should implement current-tool-aligned service query names first, such as `getBoardProjection`, `listBoardObligations`, and `listRuntimeObligations`, so the service extraction does not invent new projection semantics.
+
+Dashboard-friendly read model names can be added later as aliases or thin wrappers when dashboard tests or consumers need them:
 
 - `getBoardOverview`
 - `listPlans`

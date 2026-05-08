@@ -216,7 +216,8 @@ Projection/read-model policy:
 - Consumer-facing state should be exposed through service projections/read models.
 - Dashboard, OpenClaw, CLI, and telemetry clients should prefer projections unless they need raw artifacts.
 - Dashboard should consume board projections and artifact refs through the service, not by reading private OpenClaw session state.
-- Initial read models should include `getBoardOverview()`, `listPlans()`, `getPlanStatus()`, `listObligations()`, `listRecentEffects()`, `listObjects()`, `listRelationships()`, and `readArtifact()`.
+- Phase 2 should implement current-tool-aligned service query names first, including `getBoardProjection()`, `checkpointProjection()`, `listRuntimeObligations()`, and `listBoardObligations()`.
+- Dashboard-friendly read model names such as `getBoardOverview()`, `listPlans()`, `getPlanStatus()`, `listObligations()`, `listRecentEffects()`, `listObjects()`, `listRelationships()`, and `readArtifact()` may be added later as aliases or wrappers when tests or consumers need them.
 - Live updates can be deferred, but effect cursors/checkpoints should be shaped so polling or later SSE/WebSocket support is straightforward.
 
 Transport policy:
@@ -486,3 +487,4 @@ Sensei approved activation on 2026-05-08 after final GPT review notes were folde
 - 2026-05-08: Folded review feedback into the plan: clarified service terminology, caller context, compact mutation envelopes, artifact reads, projection/read-model policy, deferred transport, OpenClaw facade responsibilities, and stronger non-goals.
 - 2026-05-08: Folded final GPT review notes: mutation `code`/`message`, primary artifact response fields, `board_id` precedence, and Phase 1 `request_id` trace semantics.
 - 2026-05-08: Imported plan into Parley state, marked ready with Sensei approval, and activated Phase 1.
+- 2026-05-08: Folded Phase 1 review caveat: Phase 2 should implement current-tool-aligned query names first and defer dashboard-friendly aliases/wrappers until needed.
