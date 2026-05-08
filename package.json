@@ -9,6 +9,8 @@
     "./plugin": "./plugin.js",
     "./openclaw": "./src/adapters/openclaw/index.js",
     "./core/*": "./src/core/*",
+    "./schemas": "./src/schemas/index.js",
+    "./schemas/*": "./src/schemas/*",
     "./adapters/openclaw/*": "./src/adapters/openclaw/*",
     "./src/*": "./src/*"
   },
