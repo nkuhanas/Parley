@@ -7,6 +7,8 @@ import { assertNodeManifest } from "./node_manifest_v0.js";
 
 const PROXMOX_RESOURCE_TYPES = Object.freeze(["node", "qemu", "lxc"]);
 const PROXMOX_STATUS_TO_POWER_STATE = Object.freeze({
+  online: "running",
+  offline: "stopped",
   running: "running",
   stopped: "stopped",
   paused: "paused"

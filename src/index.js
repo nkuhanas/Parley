@@ -36,4 +36,5 @@ export { createCheckpointProjectionTool } from "./adapters/openclaw/tools/checkp
 export { createValidateStateAction } from "./adapters/openclaw/tools/validate_state.js";
 export { createQueryTool } from "./adapters/openclaw/tools/query.js";
 export { createMutateTool } from "./adapters/openclaw/tools/mutate.js";
+export * from "./adapters/proxmox/index.js";
 export * from "./schemas/index.js";

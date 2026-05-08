@@ -6,6 +6,6 @@ This directory contains non-mutating examples for the `parley.machine-board.v0` 
 
 `node-main/node-manifest.example.json` is a secret-free node manifest fixture.
 
-`node-main/proxmox-inventory.example.json` is a Proxmox-shaped inventory snapshot fixture. It is static test data only; it does not call Proxmox and does not require a token.
+`node-main/proxmox-inventory.example.json` is a normalized Proxmox-shaped inventory snapshot fixture. `node-main/proxmox-cluster-resources.example.json` mirrors the read-only `/cluster/resources` response shape accepted by the Proxmox adapter boundary. Both are static test data only; they do not call Proxmox and do not require a token.
 
-The inventory importer maps Proxmox resources into generic machine-board object kinds and preserves Proxmox details only in provider metadata. It normalizes this snapshot into `inventory_observed` machine-board effect intents with deterministic ids. The importer is observe-only and must not be treated as infrastructure mutation authority.
+The inventory importer maps Proxmox resources into generic machine-board object kinds and preserves Proxmox details only in provider metadata. The read-only adapter boundary accepts an injected request function, issues only a `GET /cluster/resources` request descriptor, and normalizes the response into `inventory_observed` machine-board effect intents with deterministic ids. It does not create tokens, store secrets, write back to Proxmox, or mutate infrastructure.

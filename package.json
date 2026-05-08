@@ -12,6 +12,8 @@
     "./schemas": "./src/schemas/index.js",
     "./schemas/*": "./src/schemas/*",
     "./adapters/openclaw/*": "./src/adapters/openclaw/*",
+    "./adapters/proxmox": "./src/adapters/proxmox/index.js",
+    "./adapters/proxmox/*": "./src/adapters/proxmox/*",
     "./src/*": "./src/*"
   },
   "scripts": {

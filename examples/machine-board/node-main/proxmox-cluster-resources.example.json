@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "type": "node",
+      "node": "node-main",
+      "status": "online"
+    },
+    {
+      "type": "qemu",
+      "node": "node-main",
+      "vmid": 100,
+      "name": "admin-vm",
+      "status": "running"
+    },
+    {
+      "type": "lxc",
+      "node": "node-main",
+      "vmid": 200,
+      "name": "parley-runtime",
+      "status": "stopped"
+    },
+    {
+      "type": "storage",
+      "node": "node-main",
+      "storage": "local-zfs",
+      "status": "available"
+    }
+  ]
+}
