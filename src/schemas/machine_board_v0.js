@@ -6,17 +6,18 @@ export const PARLEY_MACHINE_BOARD_V0_SCHEMA_ID = "parley.machine-board.v0";
 export const PARLEY_MACHINE_BOARD_V0_DOMAIN_TYPE = "machine";
 
 export const MACHINE_BOARD_OBJECT_KINDS = Object.freeze([
-  "proxmox.node",
-  "proxmox.vm",
-  "proxmox.lxc",
+  "machine.node",
+  "compute.instance",
+  "container.instance",
   "storage.device",
   "storage.pool",
-  "network.bridge",
-  "backup.job",
-  "api.credential_identity",
+  "network.interface",
+  "network.segment",
   "service.endpoint",
-  "recovery.artifact",
+  "credential.identity",
   "telemetry.source",
+  "recovery.artifact",
+  "backup.job",
   "safety.obligation"
 ]);
 
@@ -72,6 +73,7 @@ export const PARLEY_MACHINE_BOARD_V0_SCHEMA = Object.freeze({
     desired: Object.freeze(["phase", "power_state", "role", "protected"]),
     observed: Object.freeze(["exists", "power_state", "last_seen_at", "source"])
   }),
+  provider_policy: "Provider-specific details belong in provider metadata or provider adapters/fixtures, not in the generic machine-board kind ontology.",
   secret_policy: "Credential objects are identity-only. Secret values, token material, passwords, and private keys are never valid machine-board payload fields.",
   execution_policy: "observe_only and dry_run operations may be recorded without infrastructure mutation. mutating operations require explicit approval evidence and remain outside this preparation slice."
 });
@@ -137,6 +139,25 @@ export function assertMachineBoardObjectKind(value, fieldName = "kind") {
   return assertEnum(value, MACHINE_BOARD_OBJECT_KINDS, fieldName);
 }
 
+export function assertMachineBoardProviderMetadata(value, fieldName = "provider") {
+  if (value == null) {
+    return {
+      name: null,
+      resource_type: null,
+      native_id: null,
+      raw_ref: null
+    };
+  }
+  const raw = assertObject(value, fieldName);
+  assertAllowedKeys(raw, fieldName, ["name", "resource_type", "native_id", "raw_ref"]);
+  return {
+    name: assertNonEmptyString(raw.name, `${fieldName}.name`),
+    resource_type: assertOptionalString(raw.resource_type, `${fieldName}.resource_type`),
+    native_id: assertOptionalString(raw.native_id, `${fieldName}.native_id`),
+    raw_ref: assertOptionalString(raw.raw_ref, `${fieldName}.raw_ref`)
+  };
+}
+
 export function assertMachineBoardProtectedMetadata(value, fieldName = "protected") {
   if (value == null) {
     return {
@@ -198,13 +219,14 @@ export function assertMachineBoardState(value, fieldName = "state") {
 
 export function assertMachineBoardObject(value, fieldName = "machine_object") {
   const raw = assertObject(value, fieldName);
-  assertAllowedKeys(raw, fieldName, ["schema", "object_ref", "kind", "title", "role", "protected", "state", "metadata"]);
+  assertAllowedKeys(raw, fieldName, ["schema", "object_ref", "kind", "title", "role", "provider", "protected", "state", "metadata"]);
   return {
     schema: assertEnum(raw.schema ?? PARLEY_MACHINE_BOARD_V0_SCHEMA_ID, [PARLEY_MACHINE_BOARD_V0_SCHEMA_ID], `${fieldName}.schema`),
     object_ref: assertNonEmptyString(raw.object_ref, `${fieldName}.object_ref`),
     kind: assertMachineBoardObjectKind(raw.kind, `${fieldName}.kind`),
     title: assertOptionalString(raw.title, `${fieldName}.title`),
     role: assertOptionalString(raw.role, `${fieldName}.role`),
+    provider: assertMachineBoardProviderMetadata(raw.provider, `${fieldName}.provider`),
     protected: assertMachineBoardProtectedMetadata(raw.protected, `${fieldName}.protected`),
     state: assertMachineBoardState(raw.state ?? {}, `${fieldName}.state`),
     metadata: assertPlainObjectOrEmpty(raw.metadata, `${fieldName}.metadata`)
@@ -350,13 +372,13 @@ export function assertMachineBoardInventoryObservation(value, fieldName = "inven
     source: assertEnum(raw.source ?? "proxmox_inventory", MACHINE_BOARD_OBSERVED_SOURCES, `${fieldName}.source`),
     observations: observations.map((observation, index) => {
       const item = assertObject(observation, `${fieldName}.observations[${index}]`);
-      assertAllowedKeys(item, `${fieldName}.observations[${index}]`, ["object_ref", "kind", "exists", "power_state", "raw_ref"]);
+      assertAllowedKeys(item, `${fieldName}.observations[${index}]`, ["object_ref", "kind", "exists", "power_state", "provider"]);
       return {
         object_ref: assertNonEmptyString(item.object_ref, `${fieldName}.observations[${index}].object_ref`),
         kind: assertMachineBoardObjectKind(item.kind, `${fieldName}.observations[${index}].kind`),
         exists: item.exists == null ? null : assertBoolean(item.exists, `${fieldName}.observations[${index}].exists`),
         power_state: assertOptionalEnum(item.power_state, MACHINE_BOARD_POWER_STATES, `${fieldName}.observations[${index}].power_state`, null),
-        raw_ref: assertOptionalString(item.raw_ref, `${fieldName}.observations[${index}].raw_ref`)
+        provider: assertMachineBoardProviderMetadata(item.provider, `${fieldName}.observations[${index}].provider`)
       };
     }),
     export_ref: assertOptionalString(raw.export_ref, `${fieldName}.export_ref`)

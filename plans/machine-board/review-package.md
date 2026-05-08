@@ -39,7 +39,8 @@ Plan landing:
 ## What `parley.machine-board.v0` now covers
 
 - Stable schema id: `parley.machine-board.v0`
-- Machine object kinds including Proxmox nodes, VMs/LXCs, storage, network, credential identities, service endpoints, recovery artifacts, telemetry sources, and safety obligations.
+- Generic machine object kinds including machine nodes, compute instances, container instances, storage, network, credential identities, service endpoints, recovery artifacts, telemetry sources, and safety obligations.
+- Provider metadata envelope for adapter-specific traceability (`provider.name`, `provider.resource_type`, `provider.native_id`, `provider.raw_ref`).
 - Protected metadata semantics:
   - `protected.enabled`
   - `protected.reason`
@@ -76,7 +77,7 @@ Plan landing:
 
 The contract rejects credential secret material in node manifests. Forbidden credential keys include token/password/private-key style fields.
 
-The contract does not create Proxmox tokens, store Proxmox tokens, create VMs/LXCs, or mutate infrastructure. Mutating operation semantics are represented only as future gate logic requiring explicit approval evidence.
+The generic contract does not encode Proxmox as its ontology. Proxmox appears only as provider metadata in fixtures and adapter output. The contract does not create Proxmox tokens, store Proxmox tokens, create VMs/LXCs, or mutate infrastructure. Mutating operation semantics are represented only as future gate logic requiring explicit approval evidence.
 
 ## Validation evidence
 
@@ -91,7 +92,7 @@ Commands run:
 
 ## Remaining open design points
 
-1. Core object-kind integration: keep machine-domain object kinds profile-specific for now; do not extend `COORDINATION_OBJECT_KINDS` until an implementation slice needs direct board object validation.
+1. Core object-kind integration: keep machine-domain object kinds schema-specific and generic for now; do not extend `COORDINATION_OBJECT_KINDS` until an implementation slice needs direct board object validation.
 2. Artifact kinds: keep schema files registered as `invariant_spec` references. Add a first-class artifact kind only if Parley needs to query schema artifacts differently.
 3. Node-manifest enforcement depth: first implementation should enforce identity/shape/secret rules, but leave hardware and storage inventory details loose until the real node inventory shape is known.
 4. Effect idempotency: deterministic effect id is sufficient for v0. A first-class core `idempotency_key` can be considered later if multiple domains need the same pattern.

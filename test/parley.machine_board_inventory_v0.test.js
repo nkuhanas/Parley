@@ -20,8 +20,12 @@ test("node-main example manifest validates against parley.node-manifest.v0", asy
   assert.equal(manifest.node.board_id, "node-main");
   assert.equal(manifest.credentials.proxmox_api_token_identity.identity_only, true);
   assert.equal(manifest.credentials.proxmox_api_token_identity.secret_stored, false);
-  assert.equal(manifest.partitions.admin_vm.object_kind, "proxmox.vm");
-  assert.equal(manifest.partitions.parley_runtime.object_kind, "proxmox.lxc");
+  assert.equal(manifest.partitions.admin_vm.object_kind, "compute.instance");
+  assert.equal(manifest.partitions.admin_vm.provider.name, "proxmox");
+  assert.equal(manifest.partitions.admin_vm.provider.resource_type, "qemu");
+  assert.equal(manifest.partitions.parley_runtime.object_kind, "container.instance");
+  assert.equal(manifest.partitions.parley_runtime.provider.name, "proxmox");
+  assert.equal(manifest.partitions.parley_runtime.provider.resource_type, "lxc");
 });
 
 test("node-main inventory fixture validates as a Proxmox inventory snapshot", async () => {
@@ -43,13 +47,33 @@ test("inventory importer produces observe-only inventory_observed effect intents
   assert.equal(result.observation.board_id, "node-main");
   assert.deepEqual(result.observation.observations.map((item) => item.object_ref), [
     "node-main/node/node-main",
-    "node-main/vm/100",
-    "node-main/lxc/200"
+    "node-main/compute/100",
+    "node-main/container/200"
   ]);
   assert.deepEqual(result.observation.observations.map((item) => item.kind), [
-    "proxmox.node",
-    "proxmox.vm",
-    "proxmox.lxc"
+    "machine.node",
+    "compute.instance",
+    "container.instance"
+  ]);
+  assert.deepEqual(result.observation.observations.map((item) => item.provider), [
+    {
+      name: "proxmox",
+      resource_type: "node",
+      native_id: "node-main",
+      raw_ref: "proxmox/node/node-main"
+    },
+    {
+      name: "proxmox",
+      resource_type: "qemu",
+      native_id: "100",
+      raw_ref: "proxmox/qemu/100"
+    },
+    {
+      name: "proxmox",
+      resource_type: "lxc",
+      native_id: "200",
+      raw_ref: "proxmox/lxc/200"
+    }
   ]);
   assert.deepEqual(result.observation.observations.map((item) => item.power_state), [
     "running",
@@ -63,7 +87,7 @@ test("inventory importer produces observe-only inventory_observed effect intents
   assert.equal(result.effect_intents[1].effect_id, createMachineBoardEffectId({
     board_id: "node-main",
     effect_kind: "inventory_observed",
-    idempotency_key: "proxmox_inventory:2026-05-08T22:30:00.000Z:node-main/vm/100"
+    idempotency_key: "proxmox_inventory:2026-05-08T22:30:00.000Z:node-main/compute/100"
   }));
 });
 

@@ -47,24 +47,46 @@ function normalizePowerState(status) {
   return PROXMOX_STATUS_TO_POWER_STATE[String(status).toLowerCase()] ?? "unknown";
 }
 
-function proxmoxKindForType(type) {
-  if (type === "node") return "proxmox.node";
-  if (type === "qemu") return "proxmox.vm";
-  if (type === "lxc") return "proxmox.lxc";
+function machineKindForProxmoxType(type) {
+  if (type === "node") return "machine.node";
+  if (type === "qemu") return "compute.instance";
+  if (type === "lxc") return "container.instance";
   throw new Error(`unsupported Proxmox resource type ${type}`);
 }
 
 function objectRefForResource(boardId, resource, fieldName) {
   if (resource.type === "node") return `${boardId}/node/${assertNonEmptyString(resource.node, `${fieldName}.node`)}`;
-  if (resource.type === "qemu") return `${boardId}/vm/${assertNonEmptyString(String(resource.vmid ?? ""), `${fieldName}.vmid`)}`;
-  if (resource.type === "lxc") return `${boardId}/lxc/${assertNonEmptyString(String(resource.vmid ?? resource.ctid ?? ""), `${fieldName}.vmid`)}`;
+  if (resource.type === "qemu") return `${boardId}/compute/${assertNonEmptyString(String(resource.vmid ?? ""), `${fieldName}.vmid`)}`;
+  if (resource.type === "lxc") return `${boardId}/container/${assertNonEmptyString(String(resource.vmid ?? resource.ctid ?? ""), `${fieldName}.vmid`)}`;
   throw new Error(`unsupported Proxmox resource type ${resource.type}`);
 }
 
-function rawRefForResource(resource) {
-  if (resource.type === "node") return `proxmox/node/${resource.node}`;
-  if (resource.type === "qemu") return `proxmox/qemu/${resource.vmid}`;
-  if (resource.type === "lxc") return `proxmox/lxc/${resource.vmid ?? resource.ctid}`;
+function providerForResource(resource) {
+  if (resource.type === "node") {
+    return {
+      name: "proxmox",
+      resource_type: "node",
+      native_id: resource.node,
+      raw_ref: `proxmox/node/${resource.node}`
+    };
+  }
+  if (resource.type === "qemu") {
+    return {
+      name: "proxmox",
+      resource_type: "qemu",
+      native_id: String(resource.vmid),
+      raw_ref: `proxmox/qemu/${resource.vmid}`
+    };
+  }
+  if (resource.type === "lxc") {
+    const nativeId = String(resource.vmid ?? resource.ctid);
+    return {
+      name: "proxmox",
+      resource_type: "lxc",
+      native_id: nativeId,
+      raw_ref: `proxmox/lxc/${nativeId}`
+    };
+  }
   return null;
 }
 
@@ -106,10 +128,10 @@ export function createMachineBoardInventoryObservationFromProxmox({ manifest, in
     export_ref: snapshot.export_ref,
     observations: snapshot.resources.map((resource, index) => ({
       object_ref: objectRefForResource(boardId, resource, `inventory.resources[${index}]`),
-      kind: proxmoxKindForType(resource.type),
+      kind: machineKindForProxmoxType(resource.type),
       exists: true,
       power_state: normalizePowerState(resource.status),
-      raw_ref: rawRefForResource(resource)
+      provider: providerForResource(resource)
     }))
   });
 

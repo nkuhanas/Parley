@@ -3,13 +3,14 @@ import {
   MACHINE_BOARD_DESIRED_PHASES,
   MACHINE_BOARD_OBJECT_KINDS,
   MACHINE_BOARD_POWER_STATES,
-  assertMachineBoardProtectedMetadata
+  assertMachineBoardProtectedMetadata,
+  assertMachineBoardProviderMetadata
 } from "./machine_board_v0.js";
 
 export const PARLEY_NODE_MANIFEST_V0_SCHEMA_ID = "parley.node-manifest.v0";
 
 export const NODE_MANIFEST_PHASES = Object.freeze(["pre_node_schema", "installed", "bootstrapped", "managed", "stable", "retired"]);
-export const NODE_MANIFEST_PARTITION_KINDS = Object.freeze(["vm", "lxc", "host", "service", "storage", "other"]);
+export const NODE_MANIFEST_PARTITION_KINDS = Object.freeze(["host", "compute", "container", "service", "storage", "other"]);
 export const NODE_MANIFEST_OBSERVED_STATES = Object.freeze(["unknown", "missing", "present", "running", "stopped", "degraded"]);
 export const NODE_MANIFEST_CREDENTIAL_DEFAULT_STATES = Object.freeze(["present", "absent", "absent_or_revoked", "revoked", "expired", "manual_only", "unknown"]);
 
@@ -119,6 +120,15 @@ function assertStorage(value, fieldName = "storage") {
   return assertPlainObjectOrEmpty(value, fieldName);
 }
 
+function defaultMachineObjectKindForPartition(kind) {
+  if (kind === "host") return "machine.node";
+  if (kind === "compute") return "compute.instance";
+  if (kind === "container") return "container.instance";
+  if (kind === "service") return "service.endpoint";
+  if (kind === "storage") return "storage.pool";
+  return null;
+}
+
 export function assertNodeManifestPartition(value, fieldName = "partition") {
   const raw = assertObject(value, fieldName);
   assertAllowedKeys(raw, fieldName, [
@@ -126,9 +136,8 @@ export function assertNodeManifestPartition(value, fieldName = "partition") {
     "role",
     "protected",
     "phase",
-    "vmid",
-    "ctid",
-    "ip",
+    "address",
+    "provider",
     "object_kind",
     "desired_state",
     "observed_state",
@@ -137,7 +146,7 @@ export function assertNodeManifestPartition(value, fieldName = "partition") {
   ]);
   const kind = assertEnum(raw.kind, NODE_MANIFEST_PARTITION_KINDS, `${fieldName}.kind`);
   const objectKind = raw.object_kind == null
-    ? kind === "vm" ? "proxmox.vm" : kind === "lxc" ? "proxmox.lxc" : null
+    ? defaultMachineObjectKindForPartition(kind)
     : assertEnum(raw.object_kind, MACHINE_BOARD_OBJECT_KINDS, `${fieldName}.object_kind`);
   return {
     kind,
@@ -148,9 +157,8 @@ export function assertNodeManifestPartition(value, fieldName = "partition") {
         ? raw.protected
         : assertMachineBoardProtectedMetadata(raw.protected, `${fieldName}.protected`),
     phase: assertOptionalEnum(raw.phase, MACHINE_BOARD_DESIRED_PHASES, `${fieldName}.phase`, null),
-    vmid: raw.vmid ?? null,
-    ctid: raw.ctid ?? null,
-    ip: assertOptionalString(raw.ip, `${fieldName}.ip`),
+    address: assertOptionalString(raw.address, `${fieldName}.address`),
+    provider: assertMachineBoardProviderMetadata(raw.provider, `${fieldName}.provider`),
     object_kind: objectKind,
     desired_state: assertOptionalEnum(raw.desired_state, MACHINE_BOARD_DESIRED_PHASES, `${fieldName}.desired_state`, null),
     observed_state: assertOptionalEnum(raw.observed_state, NODE_MANIFEST_OBSERVED_STATES, `${fieldName}.observed_state`, "unknown"),

@@ -7,48 +7,64 @@
     "updated_at": "2026-05-08T22:00:00.000Z"
   },
   "hardware": {
-    "profile": "proxmox-host-placeholder",
+    "profile": "machine-host-placeholder",
     "inventory_status": "pending-real-node"
   },
   "storage": {
-    "profile": "zfs-placeholder",
+    "profile": "storage-placeholder",
     "inventory_status": "pending-real-node"
   },
   "partitions": {
     "host": {
       "kind": "host",
-      "role": "proxmox-host",
+      "role": "host",
       "protected": {
         "enabled": true,
         "reason": "host"
       },
-      "object_kind": "proxmox.node",
+      "object_kind": "machine.node",
+      "provider": {
+        "name": "proxmox",
+        "resource_type": "node",
+        "native_id": "node-main",
+        "raw_ref": "proxmox/node/node-main"
+      },
       "desired_state": "active",
       "observed_state": "unknown",
       "power_state": "unknown"
     },
     "admin_vm": {
-      "kind": "vm",
+      "kind": "compute",
       "role": "admin-vm",
       "protected": {
         "enabled": true,
         "reason": "control_plane"
       },
-      "vmid": 100,
-      "ip": "10.0.0.10",
+      "address": "10.0.0.10",
+      "provider": {
+        "name": "proxmox",
+        "resource_type": "qemu",
+        "native_id": "100",
+        "raw_ref": "proxmox/qemu/100"
+      },
       "desired_state": "active",
       "observed_state": "unknown",
       "power_state": "unknown"
     },
     "parley_runtime": {
-      "kind": "lxc",
+      "kind": "container",
       "role": "parley-runtime",
       "protected": {
         "enabled": true,
         "reason": "control_plane"
       },
-      "ctid": 200,
-      "ip": "10.0.0.20",
+      "address": "10.0.0.20",
+      "provider": {
+        "name": "proxmox",
+        "resource_type": "lxc",
+        "native_id": "200",
+        "raw_ref": "proxmox/lxc/200"
+      },
       "desired_state": "active",
       "observed_state": "unknown",
       "power_state": "unknown"

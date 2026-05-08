@@ -100,7 +100,7 @@ Implication: machine-board canonical schemas should not require unsafe broad lan
 
 ### 7. Existing object kinds are coordination-oriented and closed
 
-`COORDINATION_OBJECT_KINDS` is a closed enum containing plan/review/handoff/etc. It does not currently include domain objects like `proxmox.vm`, `storage.pool`, or `service.endpoint`.
+`COORDINATION_OBJECT_KINDS` is a closed enum containing plan/review/handoff/etc. It does not currently include domain objects like `compute.instance`, `storage.pool`, or `service.endpoint`.
 
 Implication: one design decision is required before implementation:
 

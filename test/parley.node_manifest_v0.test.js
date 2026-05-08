@@ -27,14 +27,19 @@ function validManifest(overrides = {}) {
     },
     partitions: {
       control: {
-        kind: "vm",
+        kind: "compute",
         role: "control-plane",
         protected: {
           enabled: true,
           reason: "control_plane"
         },
-        vmid: 100,
-        ip: "10.0.0.10",
+        address: "10.0.0.10",
+        provider: {
+          name: "proxmox",
+          resource_type: "qemu",
+          native_id: "100",
+          raw_ref: "proxmox/qemu/100"
+        },
         observed_state: "unknown"
       }
     },
@@ -76,7 +81,9 @@ test("node-manifest validates a secret-free reconstructability manifest", () => 
 
   assert.equal(manifest.schema, PARLEY_NODE_MANIFEST_V0_SCHEMA_ID);
   assert.equal(manifest.node.name, "node-main");
-  assert.equal(manifest.partitions.control.object_kind, "proxmox.vm");
+  assert.equal(manifest.partitions.control.object_kind, "compute.instance");
+  assert.equal(manifest.partitions.control.provider.name, "proxmox");
+  assert.equal(manifest.partitions.control.provider.native_id, "100");
   assert.equal(manifest.partitions.control.protected.required_approval, "explicit_human");
   assert.equal(manifest.credentials.proxmox_api_token.identity_only, true);
   assert.equal(manifest.credentials.proxmox_api_token.secret_stored, false);
@@ -115,8 +122,9 @@ test("node-manifest requires credential identities to remain identity-only", () 
   }), /secret_stored must be false/);
 });
 
-test("node-manifest partition validation infers Parley machine object kinds for VM and LXC partitions", () => {
-  assert.equal(assertNodeManifestPartition({ kind: "vm" }).object_kind, "proxmox.vm");
-  assert.equal(assertNodeManifestPartition({ kind: "lxc" }).object_kind, "proxmox.lxc");
-  assert.throws(() => assertNodeManifestPartition({ kind: "container" }), /kind must be one of/);
+test("node-manifest partition validation infers generic machine object kinds", () => {
+  assert.equal(assertNodeManifestPartition({ kind: "host" }).object_kind, "machine.node");
+  assert.equal(assertNodeManifestPartition({ kind: "compute" }).object_kind, "compute.instance");
+  assert.equal(assertNodeManifestPartition({ kind: "container" }).object_kind, "container.instance");
+  assert.throws(() => assertNodeManifestPartition({ kind: "virtual_machine" }), /kind must be one of/);
 });

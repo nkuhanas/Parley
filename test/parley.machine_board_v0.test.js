@@ -18,10 +18,16 @@ import {
 function validMachineObject(overrides = {}) {
   return {
     schema: PARLEY_MACHINE_BOARD_V0_SCHEMA_ID,
-    object_ref: "node-main/vm/100",
-    kind: "proxmox.vm",
+    object_ref: "node-main/compute/100",
+    kind: "compute.instance",
     title: "Primary application VM",
     role: "app",
+    provider: {
+      name: "proxmox",
+      resource_type: "qemu",
+      native_id: "100",
+      raw_ref: "proxmox/qemu/100"
+    },
     protected: {
       enabled: true,
       reason: "control_plane",
@@ -52,8 +58,9 @@ function validMachineObject(overrides = {}) {
 test("machine-board v0 exposes stable canonical schema metadata", () => {
   assert.equal(PARLEY_MACHINE_BOARD_V0_SCHEMA.schema_id, PARLEY_MACHINE_BOARD_V0_SCHEMA_ID);
   assert.equal(PARLEY_MACHINE_BOARD_V0_SCHEMA.canonical_location, "src/schemas/machine_board_v0.js");
-  assert.ok(MACHINE_BOARD_OBJECT_KINDS.includes("proxmox.node"));
-  assert.ok(MACHINE_BOARD_OBJECT_KINDS.includes("api.credential_identity"));
+  assert.ok(MACHINE_BOARD_OBJECT_KINDS.includes("machine.node"));
+  assert.ok(MACHINE_BOARD_OBJECT_KINDS.includes("compute.instance"));
+  assert.ok(MACHINE_BOARD_OBJECT_KINDS.includes("credential.identity"));
   assert.ok(MACHINE_BOARD_PROTECTED_REASONS.includes("credential"));
   assert.ok(MACHINE_BOARD_DOMAIN_EFFECT_KINDS.includes("inventory_observed"));
   assert.match(PARLEY_MACHINE_BOARD_V0_SCHEMA.idempotency_rule, /board_id \+ effect_kind \+ idempotency_key/);
@@ -63,7 +70,9 @@ test("machine-board object validation normalizes protected desired and observed 
   const object = assertMachineBoardObject(validMachineObject());
 
   assert.equal(object.schema, PARLEY_MACHINE_BOARD_V0_SCHEMA_ID);
-  assert.equal(object.kind, "proxmox.vm");
+  assert.equal(object.kind, "compute.instance");
+  assert.equal(object.provider.name, "proxmox");
+  assert.equal(object.provider.resource_type, "qemu");
   assert.equal(object.protected.enabled, true);
   assert.equal(object.protected.required_approval, "explicit_human");
   assert.equal(object.protected.mutation_policy, "blocked_without_approval");
@@ -72,7 +81,7 @@ test("machine-board object validation normalizes protected desired and observed 
 });
 
 test("machine-board rejects unknown object kinds and extra payload fields", () => {
-  assert.throws(() => assertMachineBoardObject(validMachineObject({ kind: "proxmox.cluster" })), /kind must be one of/);
+  assert.throws(() => assertMachineBoardObject(validMachineObject({ kind: "provider.cluster" })), /kind must be one of/);
   assert.throws(() => assertMachineBoardObject(validMachineObject({ surprise: true })), /surprise is not allowed/);
 });
 
@@ -90,7 +99,7 @@ test("machine-board definition defaults enum declarations and validates objects"
 
   assert.deepEqual(definition.object_kinds, [...MACHINE_BOARD_OBJECT_KINDS]);
   assert.deepEqual(definition.protected_reasons, [...MACHINE_BOARD_PROTECTED_REASONS]);
-  assert.equal(definition.objects[0].object_ref, "node-main/vm/100");
+  assert.equal(definition.objects[0].object_ref, "node-main/compute/100");
 });
 
 test("machine-board domain effects use deterministic idempotent effect ids", () => {
@@ -105,7 +114,7 @@ test("machine-board domain effects use deterministic idempotent effect ids", () 
     effect_kind: "inventory_observed",
     idempotency_key: "scan:2026-05-08T22:00Z",
     effect_id: effectId,
-    target_object_ref: "node-main/vm/100",
+    target_object_ref: "node-main/compute/100",
     evidence_ref: "repo://exports/node-main/inventory.json"
   });
 
@@ -142,18 +151,24 @@ test("machine-board inventory observation is observe-only evidence", () => {
     source: "proxmox_inventory",
     observations: [
       {
-        object_ref: "node-main/vm/100",
-        kind: "proxmox.vm",
+        object_ref: "node-main/compute/100",
+        kind: "compute.instance",
         exists: true,
         power_state: "running",
-        raw_ref: "pve/qemu/100"
+        provider: {
+          name: "proxmox",
+          resource_type: "qemu",
+          native_id: "100",
+          raw_ref: "pve/qemu/100"
+        }
       }
     ],
     export_ref: "repo://exports/node-main/inventory-20260508.json"
   });
 
   assert.equal(observation.schema, PARLEY_MACHINE_BOARD_V0_SCHEMA_ID);
-  assert.equal(observation.observations[0].object_ref, "node-main/vm/100");
+  assert.equal(observation.observations[0].object_ref, "node-main/compute/100");
+  assert.equal(observation.observations[0].provider.name, "proxmox");
   assert.throws(() => assertMachineBoardInventoryObservation({
     board_id: "node-main",
     observed_at: "not-a-date",
