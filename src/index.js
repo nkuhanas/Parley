@@ -1,5 +1,6 @@
 export { registerParleyTools } from "./adapters/openclaw/index.js";
 export { createParleyBoardConfig } from "./adapters/openclaw/config.js";
+export * from "./service/index.js";
 export { resolveParleyConfig, resolveParleyPaths, resolveParleyBoardRegistry } from "./core/config.js";
 export {
   resolveCallerIdentity,

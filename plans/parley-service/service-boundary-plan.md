@@ -14,7 +14,7 @@ title: Decouple Parley into a dedicated service with OpenClaw facade clients
 status: active
 version: 3
 created_at: "2026-05-08T23:25:20.000Z"
-updated_at: "2026-05-08T23:45:47.760Z"
+updated_at: "2026-05-08T23:55:15.861Z"
 owner: kairos-operator
 participants:
   - kairos-operator
@@ -252,7 +252,7 @@ OpenClaw adapter does not own:
 ### Phase 1 — Service boundary and API contract spec
 
 Kind: implementation
-Status: active
+Status: complete
 Owner: kairos-operator
 
 Required from:
@@ -304,7 +304,7 @@ Non-goals before activation:
 ### Phase 2 — In-process application service facade
 
 Kind: implementation
-Status: proposed
+Status: active
 Owner: kairos-operator
 
 Required from:
@@ -479,7 +479,7 @@ Non-goals before activation:
 
 ## Review and Approval
 
-Sensei approved activation on 2026-05-08 after final GPT review notes were folded into version 3. The plan was imported into Parley board state, marked ready without additional review, and activated for Phase 1.
+Sensei approved activation on 2026-05-08 after final GPT review notes were folded into version 3. The plan was imported into Parley board state, marked ready without additional review, activated for Phase 1, and advanced to Phase 2 after Phase 1 contract review acceptance.
 
 ## Change Log
 
@@ -488,3 +488,4 @@ Sensei approved activation on 2026-05-08 after final GPT review notes were folde
 - 2026-05-08: Folded final GPT review notes: mutation `code`/`message`, primary artifact response fields, `board_id` precedence, and Phase 1 `request_id` trace semantics.
 - 2026-05-08: Imported plan into Parley state, marked ready with Sensei approval, and activated Phase 1.
 - 2026-05-08: Folded Phase 1 review caveat: Phase 2 should implement current-tool-aligned query names first and defer dashboard-friendly aliases/wrappers until needed.
+- 2026-05-08: Completed Phase 1 and advanced active lifecycle work to Phase 2 after review acceptance.
