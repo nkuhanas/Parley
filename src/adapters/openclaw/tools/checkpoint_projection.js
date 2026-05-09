@@ -1,36 +1,7 @@
-import { createBoardProjectionTool } from "./board_projection.js";
-import { createWhereAmITool } from "./where_am_i.js";
-import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
-import {
-  createProjectionCheckpointRecord,
-  loadProjectionCheckpointRecord,
-  saveProjectionCheckpointRecord
-} from "../../../core/storage/board_store.js";
-import {
-  buildProjectionCursor,
-  compareProjectionCursors,
-  normalizeProjectionType,
-  SUPPORTED_CHECKPOINT_PROJECTIONS
-} from "../../../core/board/projection_checkpoint.js";
-import { nowIso } from "../../../core/time.js";
-
-async function buildProjectionForCheckpoint(api, toolCallId, params, projectionType) {
-  if (projectionType === "where_am_i") {
-    const delegated = await createWhereAmITool(api).execute(toolCallId, {
-      callerRuntimeRef: params?.callerRuntimeRef,
-      boardId: params?.boardId,
-      includeTerminal: params?.includeTerminal
-    });
-    return delegated.details.projection;
-  }
-
-  const delegated = await createBoardProjectionTool(api).execute(toolCallId, {
-    callerRuntimeRef: params?.callerRuntimeRef,
-    boardId: params?.boardId,
-    includeRecords: false
-  });
-  return delegated.details.projection;
-}
+import { checkpointProjection } from "../../../service/index.js";
+import { SUPPORTED_CHECKPOINT_PROJECTIONS } from "../../../core/board/projection_checkpoint.js";
+import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
+import { serviceRequestFromTool } from "./service_request.js";
 
 export function createCheckpointProjectionTool(api) {
   return {
@@ -58,48 +29,9 @@ export function createCheckpointProjectionTool(api) {
         }
       }
     },
-    async execute(toolCallId, params) {
-      const identity = resolveToolCaller(api, params);
-      const projectionType = normalizeProjectionType(params?.projectionType);
-      const previousCheckpoint = await loadProjectionCheckpointRecord(
-        api.pluginConfig,
-        identity.board,
-        identity.board_agent_id,
-        projectionType
-      );
-      const projection = await buildProjectionForCheckpoint(api, toolCallId, params, projectionType);
-      const currentCursor = buildProjectionCursor(projectionType, projection);
-      const comparison = compareProjectionCursors(previousCheckpoint?.cursor ?? null, currentCursor);
-
-      let checkpoint = previousCheckpoint;
-      if (params?.advance === true) {
-        const timestamp = nowIso();
-        checkpoint = await saveProjectionCheckpointRecord(
-          api.pluginConfig,
-          identity.board,
-          createProjectionCheckpointRecord({
-            board_id: identity.board_id,
-            board_agent_id: identity.board_agent_id,
-            projection_type: projectionType,
-            cursor: currentCursor,
-            last_seen_at: timestamp,
-            last_seen_by_runtime_ref: identity.runtime_ref,
-            created_at: previousCheckpoint?.created_at ?? timestamp,
-            updated_at: timestamp
-          })
-        );
-      }
-
-      return boardResult({
-        tool: "parley_checkpoint_projection",
-        identity,
-        projection_type: projectionType,
-        advanced: params?.advance === true,
-        comparison,
-        previous_checkpoint: previousCheckpoint,
-        current_cursor: currentCursor,
-        checkpoint
-      });
+    async execute(_toolCallId, params) {
+      const response = await checkpointProjection(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
+      return boardResult(response.data);
     }
   };
 }

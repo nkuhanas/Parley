@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  checkpointProjection,
   describe,
   getBoardProjection,
   getPlanSetupStatus,
@@ -20,7 +21,14 @@ import {
 } from "../src/service/index.js";
 import { resolveParleyBoardRegistry } from "../src/core/config.js";
 import { createParleyPlanV1Document } from "../src/core/schema/index.js";
-import { createObligationRecord, saveObligationRecord, savePlanSetupRecord } from "../src/core/storage/board_store.js";
+import {
+  createArtifactRecord,
+  createObligationRecord,
+  loadProjectionCheckpointRecord,
+  saveArtifactRecord,
+  saveObligationRecord,
+  savePlanSetupRecord
+} from "../src/core/storage/board_store.js";
 import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
 
 const AGENT_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "parley-agent" };
@@ -379,6 +387,85 @@ test("service searchReferences rejects missing search queries", async () => {
       (error) => {
         assert.equal(error.code, SERVICE_ERROR_CODES.VALIDATION_FAILED);
         assert.match(error.message, /query is required/);
+        return true;
+      }
+    );
+  });
+});
+
+
+test("service checkpointProjection compares and advances board-agent cursors", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+
+    const firstInspect = await checkpointProjection({
+      caller: CALLER,
+      input: { projection_type: "minimal_board" }
+    }, { pluginConfig });
+    assert.equal(firstInspect.status, "ok");
+    assert.equal(firstInspect.data.tool, "parley_checkpoint_projection");
+    assert.equal(firstInspect.data.identity.board_id, "project");
+    assert.equal(firstInspect.data.projection_type, "minimal_board");
+    assert.equal(firstInspect.data.advanced, false);
+    assert.equal(firstInspect.data.previous_checkpoint, null);
+    assert.equal(firstInspect.data.comparison.has_previous, false);
+    assert.equal(firstInspect.data.comparison.changed, true);
+    assert.equal(firstInspect.data.checkpoint, null);
+
+    const firstAdvance = await checkpointProjection({
+      caller: CALLER,
+      input: { projection_type: "minimal_board", advance: true }
+    }, { pluginConfig });
+    assert.equal(firstAdvance.data.advanced, true);
+    assert.equal(firstAdvance.data.checkpoint.board_id, "project");
+    assert.equal(firstAdvance.data.checkpoint.board_agent_id, "parley-agent");
+    assert.equal(firstAdvance.data.checkpoint.projection_type, "minimal_board");
+    assert.deepEqual(firstAdvance.data.checkpoint.last_seen_by_runtime_ref, AGENT_RUNTIME_REF);
+
+    const stored = await loadProjectionCheckpointRecord(pluginConfig, board, "parley-agent", "minimal_board");
+    assert.equal(stored.cursor.projection_digest, firstAdvance.data.current_cursor.projection_digest);
+
+    const unchangedInspect = await checkpointProjection({
+      caller: CALLER,
+      input: { projection_type: "minimal_board" }
+    }, { pluginConfig });
+    assert.equal(unchangedInspect.data.comparison.has_previous, true);
+    assert.equal(unchangedInspect.data.comparison.changed, false);
+    assert.deepEqual(unchangedInspect.data.comparison.count_deltas, {});
+
+    await saveArtifactRecord(pluginConfig, board, createArtifactRecord({
+      board_id: "project",
+      artifact_id: "artifact_checkpoint_delta",
+      kind: "plan",
+      storage_mode: "reference_only",
+      uri: path.join(pluginConfig.__tempRoot, "refs", "checkpoint-delta.md"),
+      title: "Checkpoint Delta Plan"
+    }));
+
+    const changedInspect = await checkpointProjection({
+      caller: CALLER,
+      input: { projection_type: "minimal_board" }
+    }, { pluginConfig });
+    assert.equal(changedInspect.data.comparison.changed, true);
+    assert.deepEqual(changedInspect.data.comparison.count_deltas.artifacts, { before: 0, after: 1, delta: 1 });
+    assert.deepEqual(changedInspect.data.comparison.count_deltas["artifacts_by_kind.plan"], { before: 0, after: 1, delta: 1 });
+
+    const whereAdvance = await checkpointProjection({
+      caller: CALLER,
+      input: { projection_type: "where_am_i", advance: true }
+    }, { pluginConfig });
+    assert.equal(whereAdvance.data.checkpoint.projection_type, "where_am_i");
+    assert.equal(whereAdvance.data.current_cursor.counts.assigned, 0);
+  });
+});
+
+test("service checkpointProjection rejects unsupported projection types", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    await assert.rejects(
+      () => checkpointProjection({ caller: CALLER, input: { projection_type: "activation_candidates" } }, { pluginConfig }),
+      (error) => {
+        assert.equal(error.code, SERVICE_ERROR_CODES.VALIDATION_FAILED);
+        assert.match(error.message, /projectionType must be one of/);
         return true;
       }
     );

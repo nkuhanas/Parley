@@ -4,6 +4,9 @@ export {
   myBoards
 } from "./board.js";
 export {
+  checkpointProjection
+} from "./checkpoint.js";
+export {
   validatePlan,
   validateState
 } from "./validation.js";
