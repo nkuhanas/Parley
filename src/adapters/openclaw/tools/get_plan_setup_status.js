@@ -1,6 +1,6 @@
-import { loadPlanOrThrow } from "./plan_common.js";
-import { derivePlanSetupState, isHumanGatePhase } from "../../../core/plan/plan_state.js";
-import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
+import { getPlanSetupStatus } from "../../../service/index.js";
+import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
+import { serviceRequestFromTool } from "./service_request.js";
 
 export function createGetPlanSetupStatusAction(api) {
   return {
@@ -18,21 +18,12 @@ export function createGetPlanSetupStatusAction(api) {
       }
     },
     async execute(_toolCallId, params) {
-      const identity = resolveToolCaller(api, params);
-      const plan = await loadPlanOrThrow(api, identity, params.planId ?? params.plan_id);
+      const response = await getPlanSetupStatus(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
       return boardResult({
         tool: "parley_get_plan_setup_status",
-        identity,
-        plan: {
-          plan_id: plan.plan_id,
-          title: plan.title,
-          status: plan.status,
-          phase_count: plan.phases.length,
-          checkpoint_count: plan.phases.filter(isHumanGatePhase).length,
-          generatedMarkdownPath: plan.landing.resolved_path,
-          generatedMarkdownUri: plan.landing.uri
-        },
-        setupState: derivePlanSetupState(plan, identity.board)
+        identity: response.data.identity,
+        plan: response.data.plan,
+        setupState: response.data.setupState
       });
     }
   };

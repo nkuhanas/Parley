@@ -1,5 +1,6 @@
-import { resolveCallerBoardMemberships } from "../../../core/board/board.js";
-import { boardResult, callerRuntimeRefFromToolContext, callerRuntimeAliasesFromToolContext, callerRuntimeRefParameter } from "./v2_common.js";
+import { myBoards } from "../../../service/index.js";
+import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
+import { serviceRequestFromTool } from "./service_request.js";
 
 export function createMyBoardsTool(api) {
   return {
@@ -14,13 +15,10 @@ export function createMyBoardsTool(api) {
       }
     },
     async execute(_toolCallId, params) {
-      const result = resolveCallerBoardMemberships(api.pluginConfig, {
-        callerRuntimeRef: params?.callerRuntimeRef ?? callerRuntimeRefFromToolContext(api.toolContext),
-        runtimeAliases: callerRuntimeAliasesFromToolContext(api.toolContext)
-      });
+      const response = await myBoards(serviceRequestFromTool(api, params, {}), { pluginConfig: api.pluginConfig });
       return boardResult({
         tool: "parley_my_boards",
-        result
+        result: response.data
       });
     }
   };

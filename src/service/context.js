@@ -33,6 +33,8 @@ export function normalizeCallerContext(raw = {}) {
     actor_id: actorId,
     actor_type: actorType,
     runtime: optionalString(raw.runtime),
+    runtime_ref: raw.runtime_ref ?? raw.runtimeRef,
+    runtime_aliases: raw.runtime_aliases ?? raw.runtimeAliases,
     board_id: optionalString(raw.board_id ?? raw.boardId),
     request_id: optionalString(raw.request_id ?? raw.requestId),
     capabilities: stringArray(raw.capabilities)

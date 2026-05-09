@@ -19,6 +19,8 @@ test("service caller context normalizes transport-safe trace metadata", () => {
     actorId: "parley-agent",
     actorType: "agent",
     runtime: "openclaw",
+    runtimeRef: { scheme: "openclaw", type: "session", id: "session-1" },
+    runtimeAliases: [{ runtime_ref: { scheme: "openclaw", type: "agent", id: "parley-agent" } }],
     boardId: "parley",
     requestId: "req-1",
     capabilities: ["read", "mutate"]
@@ -28,6 +30,8 @@ test("service caller context normalizes transport-safe trace metadata", () => {
     actor_id: "parley-agent",
     actor_type: "agent",
     runtime: "openclaw",
+    runtime_ref: { scheme: "openclaw", type: "session", id: "session-1" },
+    runtime_aliases: [{ runtime_ref: { scheme: "openclaw", type: "agent", id: "parley-agent" } }],
     board_id: "parley",
     request_id: "req-1",
     capabilities: ["read", "mutate"]

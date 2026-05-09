@@ -1,5 +1,6 @@
-import { buildBoardProjection } from "../../../core/board/board_projection.js";
-import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
+import { getBoardProjection } from "../../../service/index.js";
+import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
+import { serviceRequestFromTool } from "./service_request.js";
 
 export function createBoardProjectionTool(api) {
   return {
@@ -18,15 +19,11 @@ export function createBoardProjectionTool(api) {
       }
     },
     async execute(_toolCallId, params) {
-      const identity = resolveToolCaller(api, params);
-      const projection = await buildBoardProjection(api.pluginConfig, identity.board, {
-        includeRecords: params?.includeRecords,
-        recordLimit: params?.recordLimit
-      });
+      const response = await getBoardProjection(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
       return boardResult({
         tool: "parley_board_projection",
-        identity,
-        projection
+        identity: response.data.identity,
+        projection: response.data.projection
       });
     }
   };
