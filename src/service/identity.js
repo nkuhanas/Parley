@@ -6,7 +6,7 @@ function nonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function runtimeRefFromCaller(caller = {}) {
+export function callerRuntimeRefFromServiceCaller(caller = {}) {
   const explicit = caller.runtime_ref ?? caller.runtimeRef;
   if (explicit != null) return explicit;
 
@@ -17,7 +17,7 @@ function runtimeRefFromCaller(caller = {}) {
   return { scheme: runtime, type: caller.actor_type ?? caller.actorType ?? "agent", id: actorId };
 }
 
-function runtimeAliasesFromCaller(caller = {}) {
+export function callerRuntimeAliasesFromServiceCaller(caller = {}) {
   const aliases = caller.runtime_aliases ?? caller.runtimeAliases;
   if (aliases == null) return [];
   if (!Array.isArray(aliases)) {
@@ -46,8 +46,8 @@ function translateIdentityError(error) {
 export function resolveServiceCallerMemberships(pluginConfig, caller) {
   try {
     return resolveCallerBoardMemberships(pluginConfig, {
-      callerRuntimeRef: runtimeRefFromCaller(caller),
-      runtimeAliases: runtimeAliasesFromCaller(caller)
+      callerRuntimeRef: callerRuntimeRefFromServiceCaller(caller),
+      runtimeAliases: callerRuntimeAliasesFromServiceCaller(caller)
     });
   } catch (error) {
     throw translateIdentityError(error);
@@ -57,8 +57,8 @@ export function resolveServiceCallerMemberships(pluginConfig, caller) {
 export function resolveServiceCallerIdentity(pluginConfig, caller, input = {}) {
   try {
     return resolveCallerIdentity(pluginConfig, {
-      callerRuntimeRef: runtimeRefFromCaller(caller),
-      runtimeAliases: runtimeAliasesFromCaller(caller),
+      callerRuntimeRef: callerRuntimeRefFromServiceCaller(caller),
+      runtimeAliases: callerRuntimeAliasesFromServiceCaller(caller),
       boardId: boardIdForRead(input, caller)
     });
   } catch (error) {

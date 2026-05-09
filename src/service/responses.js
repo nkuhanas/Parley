@@ -48,6 +48,7 @@ export function mutationResponse({ status = "ok", code, message, ids, artifact_r
 
 export function queryResponse({ status = "ok", code, message, data, summary, cursor, next_actions, warnings, diagnostics } = {}) {
   return compactObject({
+    // Query responses do not use needs_review; surface review state in data or next_actions.
     status: status === "needs_review" ? "ok" : normalizeStatus(status),
     code,
     message,
@@ -73,6 +74,7 @@ export function artifactHandle(artifact = {}, role = undefined) {
 export function artifactReadResponse({ status = "ok", code, message, artifact = {}, include_body = false, body, body_truncated, summary, diagnostics } = {}) {
   const handle = artifactHandle(artifact);
   return compactObject({
+    // Artifact reads are queries; review state belongs in data/summary, not response status.
     status: status === "needs_review" ? "ok" : normalizeStatus(status),
     code,
     message,

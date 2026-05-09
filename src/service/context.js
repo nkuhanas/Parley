@@ -19,7 +19,7 @@ export function normalizeCallerContext(raw = {}) {
   const actorType = optionalString(raw.actor_type ?? raw.actorType) ?? "agent";
   if (actorId == null) {
     throw serviceError(
-      SERVICE_ERROR_CODES.ANONYMOUS_MUTATION_REJECTED,
+      SERVICE_ERROR_CODES.AMBIGUOUS_CALLER_IDENTITY,
       "CallerContext.actor_id is required."
     );
   }

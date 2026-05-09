@@ -34,6 +34,13 @@ test("service caller context normalizes transport-safe trace metadata", () => {
   });
 });
 
+test("service caller context reports missing actor as generic identity ambiguity", () => {
+  assert.throws(
+    () => normalizeCallerContext({}),
+    (error) => error.code === SERVICE_ERROR_CODES.AMBIGUOUS_CALLER_IDENTITY
+  );
+});
+
 test("service board targeting defaults reads but requires explicit mutation board", () => {
   const caller = { actor_id: "parley-agent", actor_type: "agent", board_id: "caller-board" };
 

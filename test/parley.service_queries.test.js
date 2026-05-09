@@ -4,9 +4,19 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { getBoardProjection, getPlanSetupStatus, myBoards, SERVICE_ERROR_CODES } from "../src/service/index.js";
+import {
+  describe,
+  getBoardProjection,
+  getPlanSetupStatus,
+  listBoardObligations,
+  listRuntimeObligations,
+  myBoards,
+  SERVICE_ERROR_CODES,
+  whereAmI
+} from "../src/service/index.js";
 import { resolveParleyBoardRegistry } from "../src/core/config.js";
-import { savePlanSetupRecord } from "../src/core/storage/board_store.js";
+import { createObligationRecord, saveObligationRecord, savePlanSetupRecord } from "../src/core/storage/board_store.js";
+import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
 
 const AGENT_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "parley-agent" };
 const CALLER = { actor_id: "parley-agent", actor_type: "agent", runtime: "openclaw", board_id: "project" };
@@ -173,5 +183,89 @@ test("service board-scoped queries report missing board ids with protocol codes"
         return true;
       }
     );
+  });
+});
+
+test("service whereAmI bridges existing recovery shape through query envelope", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    await saveThreadRecord(pluginConfig, createThreadRecord({
+      thread_id: "thread_service_runtime",
+      kind: "coordination",
+      control_mode: "peer",
+      initiator: "project-reviewer",
+      recipient: "parley-agent",
+      next_action_owner: "parley-agent",
+      thread_state: "active"
+    }));
+
+    const result = await whereAmI({ caller: CALLER, input: { verbosity: "compact" } }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_where_am_i");
+    assert.equal(result.data.scope, "runtime_and_board");
+    assert.equal(result.data.runtime.obligations.length, 1);
+    assert.equal(result.data.projection.board_agent_id, "parley-agent");
+  });
+});
+
+test("service listRuntimeObligations remains non-board-affined", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    await saveThreadRecord(pluginConfig, createThreadRecord({
+      thread_id: "thread_runtime_only",
+      kind: "coordination",
+      control_mode: "peer",
+      initiator: "project-reviewer",
+      recipient: "parley-agent",
+      next_action_owner: "parley-agent",
+      thread_state: "active"
+    }));
+
+    const result = await listRuntimeObligations({ caller: CALLER, input: {} }, { pluginConfig });
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_query_runtime_obligations");
+    assert.equal(result.data.counts.matched, 1);
+    assert.equal(result.data.obligations[0].target.thread_id, "thread_runtime_only");
+
+    await assert.rejects(
+      () => listRuntimeObligations({ caller: CALLER, input: { board_id: "project" } }, { pluginConfig }),
+      (error) => {
+        assert.equal(error.code, SERVICE_ERROR_CODES.VALIDATION_FAILED);
+        assert.match(error.message, /not board-affined/);
+        return true;
+      }
+    );
+  });
+});
+
+test("service listBoardObligations uses caller board default without changing obligation filtering", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    await saveObligationRecord(pluginConfig, board, createObligationRecord({
+      board_id: "project",
+      obligation_id: "obligation_service_query",
+      agent: "parley-agent",
+      type: "implement_phase",
+      status: "active",
+      target: { artifact_id: "artifact_service_query", artifact_version: 1, plan_id: "plan_service_query", phase_id: "phase_1" },
+      reason: "service query test obligation"
+    }));
+
+    const result = await listBoardObligations({ caller: CALLER, input: { target_kinds: ["plans"] } }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_query_board_obligations");
+    assert.equal(result.data.counts.matched, 1);
+    assert.deepEqual(result.data.obligations[0].target_kinds, ["plans", "artifacts", "phases"]);
+  });
+});
+
+test("service describe bridges descriptors through query envelope", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const result = await describe({ caller: CALLER, input: { topic: "query" } }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_describe");
+    assert.equal(result.data.topic, "query");
+    assert.ok(result.data.descriptor.actions.includes("board_obligations"));
   });
 });
