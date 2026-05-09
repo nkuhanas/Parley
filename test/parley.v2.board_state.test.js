@@ -36,6 +36,7 @@ import {
 } from "../src/core/storage/board_store.js";
 import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
 import { createParleyPlanV1Document } from "../src/core/schema/index.js";
+import { renderPlanSetupMarkdown } from "../src/core/plan/plan_state.js";
 
 const REPO_ROOT = path.join(os.tmpdir(), "parley-test-repo");
 const AGENT_RUNTIME_REF = { scheme: "openclaw", type: "agent", id: "parley-agent" };
@@ -1106,8 +1107,14 @@ test("Parley plan artifact registration imports tracked setup state and lifecycl
     const savedPlan = await loadPlanSetupRecord(pluginConfig, board, "plan_imported_projection");
     assert.equal(savedPlan.artifact_id, "artifact_imported_projection");
     assert.equal(savedPlan.overview.purpose, "Verify registration imports canonical mutable plan state.");
+    assert.equal(savedPlan.overview.review_and_approval, "No review recorded yet.");
+    assert.equal(savedPlan.overview.change_log, "- v1: Import smoke projection.");
     assert.equal(savedPlan.phases.length, 1);
     assert.equal(savedPlan.phases[0].owner, "parley-agent");
+
+    const exportedMarkdown = renderPlanSetupMarkdown(savedPlan);
+    assert.match(exportedMarkdown, /## Review and Approval\n\nNo review recorded yet\./);
+    assert.match(exportedMarkdown, /## Change Log\n\n- v1: Import smoke projection\./);
   });
 });
 

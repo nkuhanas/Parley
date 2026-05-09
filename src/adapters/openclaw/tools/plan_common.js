@@ -448,7 +448,9 @@ function importedOverview(frontmatter, body) {
     approach: sectionContent(body, "Plan"),
     acceptanceCriteria: markdownListItems(sectionContent(body, "Acceptance Criteria")),
     risksAndConstraints: markdownListItems(sectionContent(body, "Risks and Constraints")),
-    openQuestions: markdownListItems(sectionContent(body, "Open Questions"))
+    openQuestions: markdownListItems(sectionContent(body, "Open Questions")),
+    reviewAndApproval: sectionContent(body, "Review and Approval"),
+    changeLog: sectionContent(body, "Change Log")
   });
 }
 

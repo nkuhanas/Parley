@@ -11,10 +11,10 @@ authority:
 plan_id: plan_parley_service_boundary_v1
 board_id: parley
 title: Decouple Parley into a dedicated service with OpenClaw facade clients
-status: active
+status: paused
 version: 3
 created_at: "2026-05-08T23:25:20.000Z"
-updated_at: "2026-05-09T00:38:48.786Z"
+updated_at: "2026-05-09T02:06:06.028Z"
 owner: kairos-operator
 participants:
   - kairos-operator
@@ -350,7 +350,7 @@ Non-goals before activation:
 ### Phase 3 — Move OpenClaw tools onto service client boundary
 
 Kind: implementation
-Status: active
+Status: complete
 Owner: kairos-operator
 
 Required from:
@@ -394,7 +394,7 @@ Non-goals before activation:
 ### Phase 4 — Dashboard-ready service transport design
 
 Kind: implementation
-Status: deferred
+Status: active
 Owner: kairos-operator
 
 Required from:

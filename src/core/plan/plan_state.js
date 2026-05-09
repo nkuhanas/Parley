@@ -53,7 +53,9 @@ export function normalizePlanOverview(input = {}) {
     non_goals: stringArray(input.nonGoals ?? input.non_goals),
     open_questions: stringArray(input.openQuestions ?? input.open_questions),
     acceptance_criteria: stringArray(input.acceptanceCriteria ?? input.acceptance_criteria),
-    risks_and_constraints: stringArray(input.risksAndConstraints ?? input.risks_and_constraints)
+    risks_and_constraints: stringArray(input.risksAndConstraints ?? input.risks_and_constraints),
+    review_and_approval: optionalString(input.reviewAndApproval ?? input.review_and_approval),
+    change_log: optionalString(input.changeLog ?? input.change_log)
   };
 }
 
@@ -235,8 +237,8 @@ export function renderPlanSetupMarkdown(plan) {
       acceptance_criteria: listMarkdown(overview.acceptance_criteria),
       risks_and_constraints: listMarkdown(overview.risks_and_constraints),
       open_questions: listMarkdown(overview.open_questions, "None recorded."),
-      review_and_approval: plan.phases.filter(isHumanGatePhase).length === 0 ? "No review recorded yet." : listMarkdown(plan.phases.filter(isHumanGatePhase).map((phase) => `${phase.title} (${phase.required_from})`)),
-      change_log: `- v${plan.version}: Generated from Parley plan setup state.`
+      review_and_approval: overview.review_and_approval ?? (plan.phases.filter(isHumanGatePhase).length === 0 ? "No review recorded yet." : listMarkdown(plan.phases.filter(isHumanGatePhase).map((phase) => `${phase.title} (${phase.required_from})`))),
+      change_log: overview.change_log ?? `- v${plan.version}: Generated from Parley plan setup state.`
     }
   });
 }
