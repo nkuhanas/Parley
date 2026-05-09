@@ -14,8 +14,10 @@ export {
   searchReferences
 } from "./references.js";
 export {
-  describe,
   listBoardObligations,
-  listRuntimeObligations,
+  listRuntimeObligations
+} from "./obligations.js";
+export {
+  describe,
   whereAmI
 } from "./adapter_bridge.js";

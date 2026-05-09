@@ -1,23 +1,14 @@
-import {
-  listArtifactRecords,
-  listCoordinationObjectRecords,
-  listEffectRecords,
-  listObligationRecords
-} from "../../../core/storage/board_store.js";
 import { listThreadRecords } from "../../../core/storage/store.js";
+import { listBoardObligations as serviceListBoardObligations, listRuntimeObligations as serviceListRuntimeObligations } from "../../../service/queries/obligations.js";
 import { resolveCallerBoardMemberships } from "../../../core/board/board.js";
 import { createValidationError, BOARD_OBLIGATION_TARGET_KINDS, BOARD_OBLIGATION_TARGET_KIND_ALIASES, OBLIGATION_FILTERS } from "./descriptors.js";
 import {
-  decorateBoardObligationItem,
   decorateRuntimeObligation,
-  obligationPrioritySummary,
-  sortBoardObligationItemsByPriority,
   sortObligationsByPriority
 } from "./obligation_priority.js";
-import { boardResult, callerRuntimeAliasesFromToolContext, callerRuntimeRefFromToolContext, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
+import { boardResult, callerRuntimeAliasesFromToolContext, callerRuntimeRefFromToolContext, callerRuntimeRefParameter } from "./v2_common.js";
+import { serviceRequestFromTool } from "./service_request.js";
 
-const TERMINAL_STATUSES = new Set(["resolved", "cancelled", "superseded"]);
-const NEEDS_MY_ACTION_STATUSES = new Set(["active", "blocking", "waiting", "deferred", "stale"]);
 const TERMINAL_THREAD_STATES = new Set(["concluded", "failed"]);
 
 function normalizeStringArray(value, fieldName) {
@@ -73,41 +64,6 @@ function normalizeLimit(value) {
   if (value == null) return 50;
   if (!Number.isInteger(value) || value < 0) throw new Error("limit must be a non-negative integer");
   return Math.min(value, 200);
-}
-
-function boardTargetKindsForObligation(obligation) {
-  const target = obligation?.target ?? {};
-  const kinds = [];
-  if (target.plan_id != null) kinds.push("plans");
-  if (target.artifact_id != null) kinds.push("artifacts");
-  if (target.object_id != null) kinds.push("objects");
-  if (target.phase_id != null) kinds.push("phases");
-  if (target.relationship_id != null) kinds.push("relationships");
-  if (target.checkpoint_id != null) kinds.push("checkpoints");
-  if (target.obligation_id != null) kinds.push("board_obligations");
-  return kinds.length > 0 ? kinds : ["unknown"];
-}
-
-function includeBoardObligationByFilter(obligation, identity, filter) {
-  if (filter === "all") return true;
-  if (obligation.agent !== identity.board_agent_id) return false;
-  if (filter === "assigned_to_me") return true;
-  return NEEDS_MY_ACTION_STATUSES.has(obligation.status) && !TERMINAL_STATUSES.has(obligation.status);
-}
-
-function byId(records, fieldName) {
-  const out = new Map();
-  for (const record of records) out.set(record[fieldName], record);
-  return out;
-}
-
-function countBy(records, fieldName) {
-  const counts = {};
-  for (const record of records) {
-    const key = record[fieldName] ?? "unknown";
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
-  return counts;
 }
 
 function resolveRuntimeIdentity(api, params) {
@@ -191,31 +147,10 @@ export function createRuntimeObligationsQueryAction(api) {
       }
     },
     async execute(_toolCallId, params) {
-      const filter = normalizeFilter(params?.filter, "query.runtime_obligations");
-      const limit = normalizeLimit(params?.limit);
-      const runtime = await runtimeObligationsForCaller(api, params);
-      const matched = runtime.obligations.filter((obligation) => {
-        if (filter === "all" || filter === "assigned_to_me") return true;
-        return NEEDS_MY_ACTION_STATUSES.has(obligation.status) && !TERMINAL_STATUSES.has(obligation.status);
-      });
-      const returned = matched.slice(0, limit);
-      const prioritySummary = obligationPrioritySummary(matched);
-      return boardResult({
-        tool: "parley_query_runtime_obligations",
-        identity: runtime.identity,
-        participant_ids: runtime.participant_ids,
-        query: { filter, limit },
-        counts: {
-          matched: matched.length,
-          returned: returned.length,
-          truncated: matched.length > returned.length,
-          by_status: countBy(matched, "status"),
-          by_type: countBy(matched, "type"),
-          by_priority: prioritySummary.by_priority,
-          highest_priority: prioritySummary.highest_priority
-        },
-        obligations: returned
-      });
+      normalizeFilter(params?.filter, "query.runtime_obligations");
+      normalizeLimit(params?.limit);
+      const response = await serviceListRuntimeObligations(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
+      return boardResult(response.data);
     }
   };
 }
@@ -240,69 +175,11 @@ export function createBoardObligationsQueryAction(api) {
     },
     async execute(_toolCallId, params) {
       rejectScopeAlias(params ?? {});
-      const identity = resolveToolCaller(api, params);
-      const filter = normalizeFilter(params?.filter, "query.board_obligations");
-      const targetKinds = normalizeBoardTargetKinds(params ?? {});
-      const limit = normalizeLimit(params?.limit);
-      const [obligations, effects, artifacts, objects] = await Promise.all([
-        listObligationRecords(api.pluginConfig, identity.board),
-        listEffectRecords(api.pluginConfig, identity.board),
-        listArtifactRecords(api.pluginConfig, identity.board),
-        listCoordinationObjectRecords(api.pluginConfig, identity.board)
-      ]);
-      const effectsById = byId(effects, "effect_id");
-      const artifactsById = byId(artifacts, "artifact_id");
-      const objectsById = byId(objects, "object_id");
-      const targetKindSet = new Set(targetKinds);
-      const matched = sortBoardObligationItemsByPriority(obligations
-        .filter((obligation) => includeBoardObligationByFilter(obligation, identity, filter))
-        .map((obligation) => decorateBoardObligationItem({ obligation, target_kinds: boardTargetKindsForObligation(obligation) }))
-        .filter((item) => targetKindSet.size === 0 || item.target_kinds.some((kind) => targetKindSet.has(kind))));
-      const returned = matched.slice(0, limit).map((item) => {
-        const sourceEffect = item.obligation.source_effect_id == null ? null : effectsById.get(item.obligation.source_effect_id) ?? null;
-        const objectId = item.obligation.target?.object_id ?? sourceEffect?.target?.object_id ?? null;
-        const artifactId = item.obligation.target?.artifact_id ?? sourceEffect?.target?.artifact_id ?? null;
-        return {
-          priority: item.priority,
-          obligation: item.obligation,
-          target_kinds: item.target_kinds,
-          source_effect: sourceEffect,
-          object: objectId == null ? null : objectsById.get(objectId) ?? null,
-          artifact: artifactId == null ? null : artifactsById.get(artifactId) ?? null,
-          source_refs: {
-            source_effect_id: item.obligation.source_effect_id ?? null,
-            source_thread_id: sourceEffect?.source_thread_id ?? item.obligation.target?.thread_id ?? null,
-            source_message_id: sourceEffect?.source_message_id ?? item.obligation.target?.message_id ?? null,
-            object_id: objectId,
-            artifact_id: artifactId,
-            plan_id: item.obligation.target?.plan_id ?? null,
-            phase_id: item.obligation.target?.phase_id ?? null,
-            relationship_id: item.obligation.target?.relationship_id ?? null,
-            checkpoint_id: item.obligation.target?.checkpoint_id ?? null,
-            board_obligation_id: item.obligation.target?.obligation_id ?? null
-          }
-        };
-      });
-      const prioritySummary = obligationPrioritySummary(matched.map((item) => item.obligation));
-      return boardResult({
-        tool: "parley_query_board_obligations",
-        identity,
-        query: {
-          filter,
-          target_kinds: targetKinds,
-          limit
-        },
-        counts: {
-          matched: matched.length,
-          returned: returned.length,
-          truncated: matched.length > returned.length,
-          by_status: countBy(matched.map((item) => item.obligation), "status"),
-          by_type: countBy(matched.map((item) => item.obligation), "type"),
-          by_priority: prioritySummary.by_priority,
-          highest_priority: prioritySummary.highest_priority
-        },
-        obligations: returned
-      });
+      normalizeFilter(params?.filter, "query.board_obligations");
+      normalizeBoardTargetKinds(params ?? {});
+      normalizeLimit(params?.limit);
+      const response = await serviceListBoardObligations(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
+      return boardResult(response.data);
     }
   };
 }
