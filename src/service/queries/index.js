@@ -8,6 +8,9 @@ export {
   validateState
 } from "./validation.js";
 export {
+  searchReferences
+} from "./references.js";
+export {
   describe,
   listBoardObligations,
   listRuntimeObligations,

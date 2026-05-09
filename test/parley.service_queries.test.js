@@ -13,6 +13,7 @@ import {
   mutate,
   myBoards,
   SERVICE_ERROR_CODES,
+  searchReferences,
   validatePlan,
   validateState,
   whereAmI
@@ -326,6 +327,61 @@ test("service validateState validates board records through query envelope", asy
     assert.equal(result.data.identity.board_id, "project");
     assert.equal(result.data.validation.ok, true);
     assert.equal(result.data.validation.board_id, "project");
+  });
+});
+
+
+test("service searchReferences searches board reference namespaces through query envelope", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const docsRoot = path.join(pluginConfig.__tempRoot, "repo", "plans");
+    await fs.mkdir(path.join(docsRoot, "nested"), { recursive: true });
+    await fs.writeFile(
+      path.join(docsRoot, "checkpoint-guide.md"),
+      "Checkpoint recovery notes mention runtime search behavior.",
+      "utf8"
+    );
+    await fs.writeFile(
+      path.join(docsRoot, "nested", "reference.md"),
+      "This reference mentions checkpoint once but does not match the path.",
+      "utf8"
+    );
+    await fs.writeFile(
+      path.join(docsRoot, "ignored.bin"),
+      "checkpoint binary-looking file should not be searched by extension.",
+      "utf8"
+    );
+
+    const result = await searchReferences({
+      caller: CALLER,
+      input: { query: "checkpoint", limit: 1 }
+    }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.cursor, undefined);
+    assert.equal(result.data.tool, "parley_query_search");
+    assert.equal(result.data.identity.board_id, "project");
+    assert.deepEqual(result.data.query, { query: "checkpoint", namespaces: ["project_plans"], limit: 1 });
+    assert.equal(result.data.counts.matched, 2);
+    assert.equal(result.data.counts.returned, 1);
+    assert.equal(result.data.counts.truncated, true);
+    assert.equal(result.data.results.length, 1);
+    assert.equal(result.data.results[0].namespace, "project_plans");
+    assert.equal(result.data.results[0].relative_path, "checkpoint-guide.md");
+    assert.equal(result.data.results[0].uri, "repo://plans/checkpoint-guide.md");
+    assert.match(result.data.results[0].excerpt, /Checkpoint recovery/);
+  });
+});
+
+test("service searchReferences rejects missing search queries", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    await assert.rejects(
+      () => searchReferences({ caller: CALLER, input: { board_id: "project" } }, { pluginConfig }),
+      (error) => {
+        assert.equal(error.code, SERVICE_ERROR_CODES.VALIDATION_FAILED);
+        assert.match(error.message, /query is required/);
+        return true;
+      }
+    );
   });
 });
 

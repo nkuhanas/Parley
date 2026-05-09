@@ -669,6 +669,14 @@ test("Parley query/mutate façade routes only proven v2 actions", async () => {
     assert.equal(searchResult.details.result.counts.returned, 1);
     assert.equal(searchResult.details.result.results[0].namespace, "project_refs");
     assert.match(searchResult.details.result.results[0].uri, /namespace-search\.md$/);
+    await assert.rejects(
+      () => queryTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", action: "search", input: {} }),
+      (error) => {
+        assert.equal(error.code, "MISSING_SEARCH_QUERY");
+        assert.match(error.message, /query.search input.query required/);
+        return true;
+      }
+    );
 
     const whereResult = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
