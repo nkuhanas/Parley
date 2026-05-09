@@ -1,74 +1,6 @@
-import { createCreateObjectTool } from "./create_object.js";
-import { createCreateObligationTool } from "./create_obligation.js";
-import { createCreateTriggerTool } from "./create_trigger.js";
-import { createResolveObligationTool } from "./resolve_obligation.js";
-import { createCreatePlanAction } from "./create_plan.js";
-import { createWritePlanOverviewAction } from "./write_plan_overview.js";
-import { createAddPlanPhaseAction } from "./add_plan_phase.js";
-import { createAddPlanCheckpointAction } from "./add_plan_checkpoint.js";
-import { createActivatePlanAction, createMarkPlanReadyAction, createPausePlanAction, createRecordPhaseOutcomeAction, createRecordPlanDispositionAction, createRecordReviewDecisionAction, createRequestPlanReviewAction, createResumePlanAction } from "./plan_lifecycle.js";
-import { createRecordEffectTool } from "./record_effect.js";
-import { createRecordRelationshipTool } from "./record_relationship.js";
-import { createRemoveRelationshipTool } from "./remove_relationship.js";
-import { createRegisterArtifactTool } from "./register_artifact.js";
-import { createValidationError, MUTATE_ACTIONS } from "./descriptors.js";
+import { mutate } from "../../../service/index.js";
 import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
-
-const MUTATE_TOOL_FACTORIES = {
-  register_artifact: createRegisterArtifactTool,
-  create_object: createCreateObjectTool,
-  record_effect: createRecordEffectTool,
-  create_obligation: createCreateObligationTool,
-  create_trigger: createCreateTriggerTool,
-  resolve_obligation: createResolveObligationTool,
-  record_relationship: createRecordRelationshipTool,
-  remove_relationship: createRemoveRelationshipTool,
-  create_plan: createCreatePlanAction,
-  write_plan_overview: createWritePlanOverviewAction,
-  add_plan_phase: createAddPlanPhaseAction,
-  add_plan_checkpoint: createAddPlanCheckpointAction,
-  request_plan_review: createRequestPlanReviewAction,
-  mark_plan_ready: createMarkPlanReadyAction,
-  record_review_decision: createRecordReviewDecisionAction,
-  activate_plan: createActivatePlanAction,
-  pause_plan: createPausePlanAction,
-  resume_plan: createResumePlanAction,
-  record_plan_disposition: createRecordPlanDispositionAction,
-  record_phase_outcome: createRecordPhaseOutcomeAction
-};
-
-function pickSharedParams(params) {
-  const shared = {};
-  if (params?.callerRuntimeRef != null) shared.callerRuntimeRef = params.callerRuntimeRef;
-  if (params?.boardId != null) shared.boardId = params.boardId;
-  return shared;
-}
-
-function normalizeInput(input) {
-  if (input == null) return {};
-  if (typeof input !== "object" || Array.isArray(input)) throw new Error("input must be an object");
-  return input;
-}
-
-function getFactory(action) {
-  const factory = MUTATE_TOOL_FACTORIES[action];
-  if (factory == null) {
-    throw createValidationError(`unsupported parley_mutate action: ${action}`, {
-      code: "INVALID_PARLEY_MUTATE_ACTION",
-      validValues: MUTATE_ACTIONS,
-      describeTopic: "mutate"
-    });
-  }
-  return factory;
-}
-
-function assertDelegatedParams(tool, params) {
-  if (tool.parameters?.additionalProperties !== false) return;
-  const allowed = new Set(Object.keys(tool.parameters?.properties ?? {}));
-  for (const key of Object.keys(params)) {
-    if (!allowed.has(key)) throw new Error(`${tool.name} does not accept parameter: ${key}`);
-  }
-}
+import { serviceRequestFromTool } from "./service_request.js";
 
 export function createMutateTool(api) {
   return {
@@ -93,20 +25,13 @@ export function createMutateTool(api) {
         }
       }
     },
-    async execute(toolCallId, params) {
-      const factory = getFactory(params?.action);
-      const delegatedTool = factory(api);
-      const delegatedParams = {
-        ...pickSharedParams(params),
-        ...normalizeInput(params?.input)
-      };
-      assertDelegatedParams(delegatedTool, delegatedParams);
-      const delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+    async execute(_toolCallId, params) {
+      const response = await mutate(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
 
       return boardResult({
         tool: "parley_mutate",
         action: params.action,
-        result: delegated.details
+        result: response.data
       });
     }
   };

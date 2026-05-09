@@ -10,6 +10,7 @@ import {
   getPlanSetupStatus,
   listBoardObligations,
   listRuntimeObligations,
+  mutate,
   myBoards,
   SERVICE_ERROR_CODES,
   whereAmI
@@ -267,5 +268,29 @@ test("service describe bridges descriptors through query envelope", async () => 
     assert.equal(result.data.tool, "parley_describe");
     assert.equal(result.data.topic, "query");
     assert.ok(result.data.descriptor.actions.includes("board_obligations"));
+  });
+});
+
+test("service mutate bridge routes proven write actions through command envelope", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const result = await mutate({
+      caller: CALLER,
+      input: {
+        board_id: "project",
+        action: "register_artifact",
+        input: {
+          artifactId: "artifact_service_mutate",
+          kind: "plan",
+          storageMode: "reference_only",
+          uri: path.join(pluginConfig.__tempRoot, "refs", "service-mutate-plan.md"),
+          title: "Service Mutate Plan"
+        }
+      }
+    }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_register_artifact");
+    assert.equal(result.data.artifact.artifact_id, "artifact_service_mutate");
+    assert.equal(result.data.guidance.next[0].tool, "parley_where_am_i");
   });
 });
