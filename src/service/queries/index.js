@@ -4,6 +4,10 @@ export {
   myBoards
 } from "./board.js";
 export {
+  validatePlan,
+  validateState
+} from "./validation.js";
+export {
   describe,
   listBoardObligations,
   listRuntimeObligations,

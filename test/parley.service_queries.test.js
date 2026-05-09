@@ -13,9 +13,12 @@ import {
   mutate,
   myBoards,
   SERVICE_ERROR_CODES,
+  validatePlan,
+  validateState,
   whereAmI
 } from "../src/service/index.js";
 import { resolveParleyBoardRegistry } from "../src/core/config.js";
+import { createParleyPlanV1Document } from "../src/core/schema/index.js";
 import { createObligationRecord, saveObligationRecord, savePlanSetupRecord } from "../src/core/storage/board_store.js";
 import { createThreadRecord, saveThreadRecord } from "../src/core/storage/store.js";
 
@@ -268,6 +271,61 @@ test("service describe bridges descriptors through query envelope", async () => 
     assert.equal(result.data.tool, "parley_describe");
     assert.equal(result.data.topic, "query");
     assert.ok(result.data.descriptor.actions.includes("board_obligations"));
+  });
+});
+
+test("service validatePlan validates tracked plan documents through core state", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const plan = testPlanRecord(board);
+    await savePlanSetupRecord(pluginConfig, board, plan);
+    await fs.mkdir(path.dirname(plan.landing.resolved_path), { recursive: true });
+    await fs.writeFile(plan.landing.resolved_path, createParleyPlanV1Document({
+      authority: "implementation-plan",
+      plan_id: plan.plan_id,
+      board_id: "project",
+      title: plan.title,
+      status: "draft",
+      version: 1,
+      owner: "parley-agent",
+      participants: ["parley-agent"],
+      scope: { summary: "Test service validation.", in: ["Validate"], out: ["Mutate"] },
+      landing: { namespace: "project_plans", subpath: "service", filename: "query-plan.md" },
+      review: { required_reviewers: [], approvals: [], objections: [] },
+      sections: {
+        purpose: "Test service validation.",
+        background: "Service validates tracked plan markdown.",
+        scope: "Validate only.",
+        current_state: "Plan exists.",
+        target_state: "Plan validates.",
+        plan: "Read and validate.",
+        phases: "None recorded.",
+        acceptance_criteria: "- Validation succeeds.",
+        risks_and_constraints: "- Must stay read-only.",
+        open_questions: "None recorded.",
+        review_and_approval: "No review recorded yet.",
+        change_log: "- v1: Test projection."
+      }
+    }), "utf8");
+
+    const result = await validatePlan({ caller: CALLER, input: { plan_id: plan.plan_id } }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.identity.board_id, "project");
+    assert.equal(result.data.validation.ok, true);
+    assert.equal(result.data.validation.setup_complete, true);
+    assert.equal(result.data.resolved_path, plan.landing.resolved_path);
+  });
+});
+
+test("service validateState validates board records through query envelope", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const result = await validateState({ caller: CALLER, input: { board_id: "project" } }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.identity.board_id, "project");
+    assert.equal(result.data.validation.ok, true);
+    assert.equal(result.data.validation.board_id, "project");
   });
 });
 

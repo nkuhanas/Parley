@@ -1,5 +1,6 @@
-import { validateParleyBoardState } from "../../../core/board/state_validator.js";
-import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
+import { validateState } from "../../../service/index.js";
+import { boardResult, callerRuntimeRefParameter } from "./v2_common.js";
+import { serviceRequestFromTool } from "./service_request.js";
 
 export function createValidateStateAction(api) {
   return {
@@ -16,12 +17,11 @@ export function createValidateStateAction(api) {
       }
     },
     async execute(_toolCallId, params) {
-      const identity = resolveToolCaller(api, params);
-      const validation = await validateParleyBoardState(api.pluginConfig, identity.board, {});
+      const response = await validateState(serviceRequestFromTool(api, params, params), { pluginConfig: api.pluginConfig });
       return boardResult({
         tool: "parley_validate_state",
-        identity,
-        validation
+        identity: response.data.identity,
+        validation: response.data.validation
       });
     }
   };
