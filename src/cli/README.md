@@ -4,6 +4,7 @@ The alpha CLI is intentionally small and uses the same runtime mode resolver as 
 
 ```sh
 parley mode
+parley health
 parley describe
 parley my-boards --config ./parley.config.json
 parley where-am-i --config ./parley.config.json --board project
@@ -17,7 +18,7 @@ Standalone CLI calls use the embedded Parley service boundary with local file-ba
 
 ## Client mode
 
-`PARLEY_MODE=client` requires `PARLEY_API_URL`. Remote HTTP transport is not implemented in this slice, so command execution fails clearly after config validation instead of falling back to local state.
+`PARLEY_MODE=client` requires `PARLEY_API_URL`. Client-mode commands use the remote client surface (`GET /health`, `POST /v1/queries/:queryName`) and never fall back to local state. Use `--auth-token-file` or `PARLEY_AUTH_TOKEN_FILE` for bearer auth without printing token material.
 
 ## Config
 

@@ -2,11 +2,12 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { ParleyConfigError, resolveParleyRuntimeConfig } from "../core/config.js";
-import { createParleyEmbeddedClient } from "../client/index.js";
+import { resolveParleyRuntimeConfig } from "../core/config.js";
+import { createParleyEmbeddedClient, createParleyRemoteClient } from "../client/index.js";
 
-const COMMANDS = new Set(["mode", "describe", "my-boards", "where-am-i"]);
+const COMMANDS = new Set(["mode", "health", "describe", "my-boards", "where-am-i"]);
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -24,12 +25,13 @@ function usage() {
 
 Commands:
   mode                         Show resolved runtime mode/config summary.
+  health                       Check remote service or embedded client health.
   describe [--topic <topic>] [--board <board>]
   my-boards                    List boards visible to the caller.
   where-am-i [--board <board>] [--verbosity compact|full] [--include-terminal]
 
 Standalone mode calls the embedded Parley service boundary with local file-backed state.
-Client mode requires PARLEY_API_URL/parleyApiUrl, but remote HTTP transport is not implemented in this slice.`;
+Client mode requires PARLEY_API_URL/parleyApiUrl and uses the remote client surface.`;
 }
 
 function parseArgs(argv) {
@@ -76,6 +78,8 @@ function cliOverrides(options) {
     parleyStateRoot: nonEmptyString(options["state-root"]),
     parleyRuntimeRoot: nonEmptyString(options["runtime-root"]),
     parleyApiUrl: nonEmptyString(options["api-url"]),
+    parleyAuthToken: nonEmptyString(options["auth-token"]),
+    parleyAuthTokenFile: nonEmptyString(options["auth-token-file"]),
     parleyAgentId: nonEmptyString(options.agent),
     parleyDefaultBoard: nonEmptyString(options["default-board"])
   }).filter(([, value]) => value != null));
@@ -128,50 +132,31 @@ function commandInput(command, options) {
   return {};
 }
 
-function methodName(command) {
-  if (command === "my-boards") return "myBoards";
-  if (command === "where-am-i") return "whereAmI";
-  return command;
+function pickConfigString(pluginConfig, env, keys, envKeys = []) {
+  for (const key of keys) {
+    const value = nonEmptyString(pluginConfig[key]);
+    if (value != null) return value;
+  }
+  for (const key of envKeys) {
+    const value = nonEmptyString(env[key]);
+    if (value != null) return value;
+  }
+  return undefined;
 }
 
-async function main(argv = process.argv.slice(2)) {
-  const options = parseArgs(argv);
-  const command = options._[0];
-  if (options.help || command == null) {
-    process.stdout.write(`${usage()}\n`);
-    return 0;
-  }
-  if (!COMMANDS.has(command)) {
-    throw new Error(`Unknown Parley command: ${command}`);
-  }
-
-  const configPath = nonEmptyString(options.config) ?? nonEmptyString(process.env.PARLEY_CONFIG);
-  const fileConfig = await loadJsonConfig(configPath);
-  const pluginConfig = { ...fileConfig, ...cliOverrides(options) };
-  const runtimeConfig = resolveParleyRuntimeConfig({
-    surface: "cli",
-    pluginConfig,
-    env: process.env
-  });
-
-  if (runtimeConfig.warnings.length > 0) {
-    for (const warning of runtimeConfig.warnings) process.stderr.write(`parley: ${warning}\n`);
-  }
-
-  if (command === "mode") {
-    printJson({ ok: true, command, runtime: runtimeSummary(runtimeConfig) });
-    return 0;
-  }
-
+function createClientForRuntime(runtimeConfig, pluginConfig, options = {}) {
   if (runtimeConfig.mode === "client") {
-    throw new ParleyConfigError(
-      "Parley client mode resolved successfully, but remote CLI transport is not implemented in this slice.",
-      "PARLEY_REMOTE_TRANSPORT_UNIMPLEMENTED",
-      { apiUrl: runtimeConfig.apiUrl, surface: runtimeConfig.surface }
-    );
+    return createParleyRemoteClient({
+      apiUrl: runtimeConfig.apiUrl,
+      authToken: pickConfigString(pluginConfig, options.env, ["parleyAuthToken", "authToken"], ["PARLEY_AUTH_TOKEN"]),
+      authTokenFile: pickConfigString(pluginConfig, options.env, ["parleyAuthTokenFile", "authTokenFile"], ["PARLEY_AUTH_TOKEN_FILE"]),
+      agentId: runtimeConfig.agentId,
+      defaultBoard: runtimeConfig.defaultBoard,
+      runtime: "cli",
+      fetchImpl: options.fetchImpl
+    });
   }
-
-  const client = createParleyEmbeddedClient({
+  return createParleyEmbeddedClient({
     surface: "cli",
     pluginConfig,
     runtimeConfig,
@@ -181,6 +166,47 @@ async function main(argv = process.argv.slice(2)) {
       board_id: runtimeConfig.defaultBoard
     }
   });
+}
+
+function methodName(command) {
+  if (command === "my-boards") return "myBoards";
+  if (command === "where-am-i") return "whereAmI";
+  return command;
+}
+
+export async function runParleyCli(argv = process.argv.slice(2), io = {}) {
+  const env = io.env ?? process.env;
+  const stdout = io.stdout ?? process.stdout;
+  const stderr = io.stderr ?? process.stderr;
+  const options = parseArgs(argv);
+  const command = options._[0];
+  if (options.help || command == null) {
+    stdout.write(`${usage()}\n`);
+    return 0;
+  }
+  if (!COMMANDS.has(command)) {
+    throw new Error(`Unknown Parley command: ${command}`);
+  }
+
+  const configPath = nonEmptyString(options.config) ?? nonEmptyString(env.PARLEY_CONFIG);
+  const fileConfig = await loadJsonConfig(configPath);
+  const pluginConfig = { ...fileConfig, ...cliOverrides(options) };
+  const runtimeConfig = resolveParleyRuntimeConfig({
+    surface: "cli",
+    pluginConfig,
+    env
+  });
+
+  if (runtimeConfig.warnings.length > 0) {
+    for (const warning of runtimeConfig.warnings) stderr.write(`parley: ${warning}\n`);
+  }
+
+  if (command === "mode") {
+    printJson({ ok: true, command, runtime: runtimeSummary(runtimeConfig) }, stdout);
+    return 0;
+  }
+
+  const client = createClientForRuntime(runtimeConfig, pluginConfig, { env, fetchImpl: io.fetchImpl });
   const method = methodName(command);
   const response = await client[method](commandInput(command, options));
   printJson({
@@ -188,13 +214,16 @@ async function main(argv = process.argv.slice(2)) {
     command,
     runtime: runtimeSummary(runtimeConfig),
     response
-  });
+  }, stdout);
   return 0;
 }
 
-main().then((exitCode) => {
-  process.exitCode = exitCode;
-}).catch((error) => {
-  printJson({ ok: false, error: cliErrorResponse(error) }, process.stderr);
-  process.exitCode = 1;
-});
+const invokedPath = process.argv[1] == null ? null : path.resolve(process.argv[1]);
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  runParleyCli().then((exitCode) => {
+    process.exitCode = exitCode;
+  }).catch((error) => {
+    printJson({ ok: false, error: cliErrorResponse(error) }, process.stderr);
+    process.exitCode = 1;
+  });
+}

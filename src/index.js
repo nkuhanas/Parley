@@ -1,7 +1,7 @@
 export { registerParleyTools } from "./adapters/openclaw/index.js";
 export { createParleyBoardConfig } from "./adapters/openclaw/config.js";
 export * from "./service/index.js";
-export { createParleyEmbeddedClient } from "./client/index.js";
+export { createParleyEmbeddedClient, createParleyRemoteClient } from "./client/index.js";
 export {
   PARLEY_RUNTIME_MODES,
   PARLEY_RUNTIME_SURFACES,

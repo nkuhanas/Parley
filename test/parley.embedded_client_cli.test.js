@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import { createParleyEmbeddedClient } from "../src/client/index.js";
+import { runParleyCli } from "../src/cli/parley.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -87,6 +88,14 @@ function cliEnv(tempRoot, overrides = {}) {
     HOME: tempRoot,
     USER: "parley-agent",
     ...overrides
+  };
+}
+
+function memoryStream() {
+  const chunks = [];
+  return {
+    write(chunk) { chunks.push(String(chunk)); },
+    text() { return chunks.join(""); }
   };
 }
 
@@ -182,19 +191,65 @@ test("CLI client mode still refuses missing API URL", async () => {
 });
 
 
-test("CLI client mode with API URL reports remote transport unsupported without local state", async () => {
+test("CLI client mode uses injected remote client transport without local state", async () => {
   await withTempRoot(async (tempRoot) => {
     const stateRoot = path.join(tempRoot, ".local", "share", "parley");
-    try {
-      await runCli(["my-boards"], {
-        env: cliEnv(tempRoot, { PARLEY_MODE: "client", PARLEY_API_URL: "http://127.0.0.1:7331" })
-      });
-      assert.fail("client mode CLI command should fail until remote transport exists");
-    } catch (error) {
-      const parsed = JSON.parse(error.stderr);
-      assert.equal(parsed.ok, false);
-      assert.equal(parsed.error.code, "PARLEY_REMOTE_TRANSPORT_UNIMPLEMENTED");
-      assert.equal(await exists(stateRoot), false);
-    }
+    const env = cliEnv(tempRoot, {
+      PARLEY_MODE: "client",
+      PARLEY_API_URL: "http://parley.test",
+      PARLEY_AGENT_ID: "parley-agent",
+      PARLEY_DEFAULT_BOARD: "project"
+    });
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: { get: () => "application/json" },
+        json: async () => ({ status: "ok", data: { url } })
+      };
+    };
+
+    const healthOut = memoryStream();
+    const healthErr = memoryStream();
+    const healthExit = await runParleyCli(["health"], { env, stdout: healthOut, stderr: healthErr, fetchImpl });
+    const health = JSON.parse(healthOut.text());
+    assert.equal(healthExit, 0);
+    assert.equal(healthErr.text(), "");
+    assert.equal(health.command, "health");
+    assert.equal(calls[0].url, "http://parley.test/health");
+
+    const stdout = memoryStream();
+    const stderr = memoryStream();
+    const exitCode = await runParleyCli(["describe", "--topic", "targets"], { env, stdout, stderr, fetchImpl });
+    const parsed = JSON.parse(stdout.text());
+    assert.equal(exitCode, 0);
+    assert.equal(stderr.text(), "");
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.runtime.mode, "client");
+    assert.equal(parsed.response.status, "ok");
+    assert.equal(calls[1].url, "http://parley.test/v1/queries/describe");
+    assert.deepEqual(JSON.parse(calls[1].init.body), {
+      caller: {
+        actor_id: "parley-agent",
+        actor_type: "agent",
+        runtime: "cli",
+        board_id: "project"
+      },
+      input: { topic: "targets" }
+    });
+
+    const recoveryOut = memoryStream();
+    const recoveryErr = memoryStream();
+    const recoveryExit = await runParleyCli(["where-am-i", "--board", "project"], { env, stdout: recoveryOut, stderr: recoveryErr, fetchImpl });
+    const recovery = JSON.parse(recoveryOut.text());
+    assert.equal(recoveryExit, 0);
+    assert.equal(recoveryErr.text(), "");
+    assert.equal(recovery.command, "where-am-i");
+    assert.equal(calls[2].url, "http://parley.test/v1/queries/whereAmI");
+    assert.equal(JSON.parse(calls[2].init.body).input.boardId, "project");
+    assert.equal(await exists(stateRoot), false);
   });
 });

@@ -98,6 +98,7 @@ export function createParleyEmbeddedClient(options = {}) {
     pluginConfig,
     caller,
     query,
+    health: async () => ({ status: "ok", data: { mode: runtimeConfig.mode, storageMode: runtimeConfig.storageMode } }),
     describe: (input = {}, options = {}) => query("describe", input, options),
     myBoards: (input = {}, options = {}) => query("myBoards", input, options),
     whereAmI: (input = {}, options = {}) => query("whereAmI", input, options)
