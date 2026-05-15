@@ -5,6 +5,7 @@ import {
   getPlanSetupStatus,
   listBoardObligations,
   listRuntimeObligations,
+  mutate,
   myBoards,
   searchReferences,
   validatePlan,
@@ -25,6 +26,10 @@ const QUERY_HANDLERS = Object.freeze({
   validatePlan,
   validateState,
   whereAmI
+});
+
+const COMMAND_HANDLERS = Object.freeze({
+  mutate
 });
 
 function nonEmptyString(value) {
@@ -92,15 +97,29 @@ export function createParleyEmbeddedClient(options = {}) {
     return handler(request, { pluginConfig });
   }
 
+  async function command(name, input = {}, commandOptions = {}) {
+    const handler = COMMAND_HANDLERS[name];
+    if (handler == null) {
+      throw new ParleyConfigError(`Unsupported embedded Parley command: ${name}`, "PARLEY_EMBEDDED_COMMAND_UNSUPPORTED", { name });
+    }
+    const request = {
+      caller: normalizeCaller(commandOptions.caller ?? caller, runtimeConfig),
+      input: input && typeof input === "object" && !Array.isArray(input) ? input : {}
+    };
+    return handler(request, { pluginConfig });
+  }
+
   return {
     mode: runtimeConfig.mode,
     runtimeConfig,
     pluginConfig,
     caller,
     query,
+    command,
     health: async () => ({ status: "ok", data: { mode: runtimeConfig.mode, storageMode: runtimeConfig.storageMode } }),
     describe: (input = {}, options = {}) => query("describe", input, options),
     myBoards: (input = {}, options = {}) => query("myBoards", input, options),
-    whereAmI: (input = {}, options = {}) => query("whereAmI", input, options)
+    whereAmI: (input = {}, options = {}) => query("whereAmI", input, options),
+    mutate: (input = {}, options = {}) => command("mutate", input, options)
   };
 }

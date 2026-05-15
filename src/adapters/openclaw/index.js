@@ -1,4 +1,4 @@
-import { resolveParleyRuntimeConfig } from "../../core/config.js";
+import { withOpenClawRuntimeConfig, wrapOpenClawToolForRuntime } from "./runtime_client.js";
 import { createOpenThreadTool } from "./tools/open_thread.js";
 import { createProbeThreadTool } from "./tools/probe.js";
 import { createClaimTurnTool } from "./tools/claim_turn.js";
@@ -34,38 +34,27 @@ import { createQueryTool } from "./tools/query.js";
 import { createMutateTool } from "./tools/mutate.js";
 import { createDescribeTool } from "./tools/describe.js";
 
-function withRuntimeContext(api, createTool) {
-  return (toolContext) => createTool({ ...api, toolContext });
+function createRuntimeTool(api, createTool) {
+  const tool = createTool(api);
+  return wrapOpenClawToolForRuntime(api, tool);
 }
 
-function withOpenClawRuntimeConfig(api) {
-  const runtimeConfig = resolveParleyRuntimeConfig({
-    surface: "openclaw-adapter",
-    pluginConfig: api.pluginConfig ?? {},
-    env: api.env ?? process.env
-  });
-  return {
-    ...api,
-    pluginConfig: {
-      ...(api.pluginConfig ?? {}),
-      __parleySurface: "openclaw-adapter",
-      __parleyRuntimeConfig: runtimeConfig
-    }
-  };
+function withRuntimeContext(api, createTool) {
+  return (toolContext) => createRuntimeTool({ ...api, toolContext }, createTool);
 }
 
 export function registerParleyTools(api) {
   const runtimeApi = withOpenClawRuntimeConfig(api);
   runtimeApi.registerTool(withRuntimeContext(runtimeApi, createDescribeTool));
-  runtimeApi.registerTool(createOpenThreadTool(runtimeApi));
-  runtimeApi.registerTool(createClaimTurnTool(runtimeApi));
-  runtimeApi.registerTool(createReplyThreadTool(runtimeApi));
-  runtimeApi.registerTool(createProbeThreadTool(runtimeApi));
-  runtimeApi.registerTool(createSettleTurnTool(runtimeApi));
-  runtimeApi.registerTool(createConcludeThreadTool(runtimeApi));
-  runtimeApi.registerTool(createRecordTransportResultTool(runtimeApi));
-  runtimeApi.registerTool(createDispatchTransportRequestTool(runtimeApi));
-  runtimeApi.registerTool(createRecordHumanSummaryAnchorTool(runtimeApi));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createOpenThreadTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createClaimTurnTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createReplyThreadTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createProbeThreadTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createSettleTurnTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createConcludeThreadTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createRecordTransportResultTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createDispatchTransportRequestTool));
+  runtimeApi.registerTool(createRuntimeTool(runtimeApi, createRecordHumanSummaryAnchorTool));
   runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRegisterArtifactTool));
   runtimeApi.registerTool(withRuntimeContext(runtimeApi, createCreateObjectTool));
   runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRecordEffectTool));

@@ -1,0 +1,310 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { createParleyEmbeddedClient, createParleyRemoteClient } from "../../client/index.js";
+import { ParleyConfigError, resolveParleyRuntimeConfig } from "../../core/config.js";
+import { createValidationError, QUERY_ACTIONS } from "./tools/descriptors.js";
+import { serviceCallerFromTool } from "./tools/service_request.js";
+import { boardResult } from "./tools/v2_common.js";
+
+const SERVICE_QUERY_TOOL_SPECS = Object.freeze({
+  parley_describe: { query: "describe", input: params => params ?? {}, result: data => rawToolResult(data) },
+  parley_where_am_i: { query: "whereAmI", input: params => params ?? {}, result: data => rawToolResult(data) },
+  parley_my_boards: { query: "myBoards", input: () => ({}), result: data => boardResult({ tool: "parley_my_boards", result: data }) },
+  parley_board_projection: { query: "getBoardProjection", input: params => params ?? {}, result: data => boardResult({ tool: "parley_board_projection", identity: data.identity, projection: data.projection }) },
+  parley_checkpoint_projection: { query: "checkpointProjection", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_validate_plan: { query: "validatePlan", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_plan", identity: data.identity, validation: data.validation, setupState: data.setupState, resolved_path: data.resolved_path }) },
+  parley_validate_state: { query: "validateState", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_state", identity: data.identity, validation: data.validation }) },
+  parley_get_plan_setup_status: { query: "getPlanSetupStatus", input: params => params ?? {}, result: data => boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }) },
+  parley_query_runtime_obligations: { query: "listRuntimeObligations", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_query_board_obligations: { query: "listBoardObligations", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_query_search: { query: "searchReferences", input: params => params ?? {}, result: data => boardResult(data) }
+});
+
+const MUTATE_TOOL_ACTIONS = Object.freeze({
+  parley_register_artifact: "register_artifact",
+  parley_create_object: "create_object",
+  parley_record_effect: "record_effect",
+  parley_create_obligation: "create_obligation",
+  parley_create_trigger: "create_trigger",
+  parley_resolve_obligation: "resolve_obligation",
+  parley_record_relationship: "record_relationship",
+  parley_remove_relationship: "remove_relationship",
+  parley_create_plan: "create_plan",
+  parley_write_plan_overview: "write_plan_overview",
+  parley_add_plan_phase: "add_plan_phase",
+  parley_add_plan_checkpoint: "add_plan_checkpoint",
+  parley_request_plan_review: "request_plan_review",
+  parley_mark_plan_ready: "mark_plan_ready",
+  parley_record_review_decision: "record_review_decision",
+  parley_activate_plan: "activate_plan",
+  parley_pause_plan: "pause_plan",
+  parley_resume_plan: "resume_plan",
+  parley_record_plan_disposition: "record_plan_disposition",
+  parley_record_phase_outcome: "record_phase_outcome"
+});
+
+const QUERY_ACTION_SET = new Set(QUERY_ACTIONS);
+
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function expandHome(value) {
+  if (typeof value !== "string") return value;
+  if (value === "~") return os.homedir();
+  if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
+  return value;
+}
+
+function compactObject(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => {
+    if (entry == null) return false;
+    if (Array.isArray(entry) && entry.length === 0) return false;
+    return true;
+  }));
+}
+
+function loadJsonConfig(configPath) {
+  if (configPath == null) return {};
+  const resolvedPath = path.resolve(expandHome(configPath));
+  try {
+    const parsed = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("PARLEY_CONFIG must contain a JSON object");
+    }
+    return parsed;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new ParleyConfigError(`Failed to parse PARLEY_CONFIG JSON: ${error.message}`, "PARLEY_CONFIG_INVALID_JSON", { configPath: resolvedPath });
+    }
+    if (error instanceof ParleyConfigError) throw error;
+    throw new ParleyConfigError(`Failed to read PARLEY_CONFIG: ${error.message}`, "PARLEY_CONFIG_READ_FAILED", { configPath: resolvedPath });
+  }
+}
+
+function authConfig(pluginConfig = {}, fileConfig = {}, env = {}) {
+  return compactObject({
+    parleyAuthTokenFile: nonEmptyString(pluginConfig.parleyAuthTokenFile ?? pluginConfig.authTokenFile)
+      ?? nonEmptyString(fileConfig.parleyAuthTokenFile ?? fileConfig.authTokenFile)
+      ?? nonEmptyString(env.PARLEY_AUTH_TOKEN_FILE),
+    parleyAuthToken: nonEmptyString(pluginConfig.parleyAuthToken ?? pluginConfig.authToken)
+      ?? nonEmptyString(fileConfig.parleyAuthToken ?? fileConfig.authToken)
+      ?? nonEmptyString(env.PARLEY_AUTH_TOKEN)
+  });
+}
+
+function materializeRuntimeConfig(pluginConfig = {}, runtimeConfig = {}) {
+  return {
+    ...pluginConfig,
+    parleyMode: runtimeConfig.mode,
+    ...(runtimeConfig.apiUrl != null ? { parleyApiUrl: runtimeConfig.apiUrl } : {}),
+    ...(runtimeConfig.agentId != null ? { parleyAgentId: runtimeConfig.agentId } : {}),
+    ...(runtimeConfig.defaultBoard != null ? { parleyDefaultBoard: runtimeConfig.defaultBoard } : {}),
+    ...(runtimeConfig.stateRoot != null ? { parleyStateRoot: runtimeConfig.stateRoot } : {}),
+    ...(runtimeConfig.runtimeRoot != null ? { parleyRuntimeRoot: runtimeConfig.runtimeRoot } : {}),
+    ...(runtimeConfig.testRoot != null ? { parleyTestRoot: runtimeConfig.testRoot } : {}),
+    ...(runtimeConfig.dbPath != null ? { parleyDbPath: runtimeConfig.dbPath } : {})
+  };
+}
+
+export function withOpenClawRuntimeConfig(api = {}) {
+  const env = api.env ?? process.env;
+  const fileConfig = loadJsonConfig(nonEmptyString(env.PARLEY_CONFIG));
+  const pluginConfig = api.pluginConfig ?? {};
+  const runtimeConfig = resolveParleyRuntimeConfig({
+    surface: "openclaw-adapter",
+    pluginConfig,
+    config: fileConfig,
+    env
+  });
+  const mergedPluginConfig = {
+    ...fileConfig,
+    ...pluginConfig,
+    ...authConfig(pluginConfig, fileConfig, env)
+  };
+  return {
+    ...api,
+    env,
+    pluginConfig: {
+      ...materializeRuntimeConfig(mergedPluginConfig, runtimeConfig),
+      __parleySurface: "openclaw-adapter",
+      __parleyRuntimeConfig: runtimeConfig
+    }
+  };
+}
+
+function runtimeConfig(api) {
+  return api.pluginConfig?.__parleyRuntimeConfig;
+}
+
+function rawToolResult(details) {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(details, null, 2)
+      }
+    ],
+    details
+  };
+}
+
+function unwrapServiceResponse(response) {
+  if (response?.status === "error") {
+    throw new ParleyConfigError(response.message ?? "Parley service request failed.", response.code ?? "PARLEY_SERVICE_REQUEST_FAILED", response.diagnostics ?? {});
+  }
+  return response?.data;
+}
+
+function clientForTool(api, params) {
+  const config = runtimeConfig(api);
+  const caller = serviceCallerFromTool(api, params);
+  if (config?.mode === "client") {
+    return createParleyRemoteClient({
+      apiUrl: config.apiUrl ?? api.pluginConfig?.parleyApiUrl,
+      authToken: api.pluginConfig?.parleyAuthToken,
+      authTokenFile: api.pluginConfig?.parleyAuthTokenFile,
+      agentId: config.agentId,
+      defaultBoard: config.defaultBoard,
+      fetchImpl: api.fetchImpl ?? api.fetch,
+      ...caller
+    });
+  }
+  return createParleyEmbeddedClient({
+    surface: "openclaw-adapter",
+    pluginConfig: api.pluginConfig,
+    runtimeConfig: config,
+    env: api.env,
+    caller
+  });
+}
+
+async function executeQuery(api, params, queryName, input) {
+  const response = await clientForTool(api, params).query(queryName, input, { caller: serviceCallerFromTool(api, params) });
+  return unwrapServiceResponse(response);
+}
+
+async function executeCommand(api, params, commandName, input) {
+  const response = await clientForTool(api, params).command(commandName, input, { caller: serviceCallerFromTool(api, params) });
+  return unwrapServiceResponse(response);
+}
+
+function commandInputForAction(action, params = {}) {
+  const { callerRuntimeRef: _callerRuntimeRef, boardId, ...input } = params ?? {};
+  return compactObject({
+    action,
+    boardId,
+    input
+  });
+}
+
+function normalizeFacadeInput(input) {
+  if (input == null) return {};
+  if (typeof input !== "object" || Array.isArray(input)) throw new Error("input must be an object");
+  return input;
+}
+
+async function executeQueryFacade(api, params = {}) {
+  if (!QUERY_ACTION_SET.has(params?.action)) {
+    throw createValidationError(`unsupported parley_query action: ${params?.action}`, {
+      code: "INVALID_PARLEY_QUERY_ACTION",
+      validValues: QUERY_ACTIONS,
+      describeTopic: "query"
+    });
+  }
+
+  let delegatedDetails;
+  if (params.action === "where_am_i") {
+    delegatedDetails = await executeQuery(api, params, "whereAmI", {
+      boardId: params?.boardId,
+      includeTerminal: params?.includeTerminal,
+      verbosity: params?.verbosity
+    });
+  } else if (params.action === "my_boards") {
+    const data = await executeQuery(api, params, "myBoards", {});
+    delegatedDetails = boardResult({ tool: "parley_my_boards", result: data }).details;
+  } else if (params.action === "validate_plan") {
+    const data = await executeQuery(api, params, "validatePlan", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult({ tool: "parley_validate_plan", identity: data.identity, validation: data.validation, setupState: data.setupState, resolved_path: data.resolved_path }).details;
+  } else if (params.action === "plan_setup_status") {
+    const data = await executeQuery(api, params, "getPlanSetupStatus", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }).details;
+  } else if (params.action === "validate_state") {
+    const data = await executeQuery(api, params, "validateState", { boardId: params?.boardId });
+    delegatedDetails = boardResult({ tool: "parley_validate_state", identity: data.identity, validation: data.validation }).details;
+  } else if (params.action === "runtime_obligations") {
+    if (params?.boardId != null) {
+      throw createValidationError("runtime_obligations is runtime-scoped and does not accept boardId", {
+        code: "RUNTIME_OBLIGATIONS_BOARD_ID_NOT_ALLOWED",
+        validValues: ["runtime_obligations", "board_obligations"],
+        describeTopic: "query.runtime_obligations"
+      });
+    }
+    const data = await executeQuery(api, params, "listRuntimeObligations", normalizeFacadeInput(params?.input));
+    delegatedDetails = boardResult(data).details;
+  } else if (params.action === "board_obligations") {
+    const data = await executeQuery(api, params, "listBoardObligations", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
+  } else if (params.action === "search") {
+    const data = await executeQuery(api, params, "searchReferences", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
+  } else {
+    const data = await executeQuery(api, params, "getBoardProjection", {
+      boardId: params?.boardId,
+      includeRecords: params?.includeRecords,
+      recordLimit: params?.recordLimit
+    });
+    delegatedDetails = boardResult({ tool: "parley_board_projection", identity: data.identity, projection: data.projection }).details;
+  }
+
+  return boardResult({
+    tool: "parley_query",
+    action: params.action,
+    result: delegatedDetails
+  }, { summarize: params.action !== "where_am_i" || params?.verbosity !== "full" });
+}
+
+async function executeRuntimeSplitTool(api, tool, params = {}) {
+  if (tool.name === "parley_query") return executeQueryFacade(api, params);
+  if (tool.name === "parley_mutate") {
+    const data = await executeCommand(api, params, "mutate", params ?? {});
+    return boardResult({ tool: "parley_mutate", action: params.action, result: data });
+  }
+
+  const querySpec = SERVICE_QUERY_TOOL_SPECS[tool.name];
+  if (querySpec != null) {
+    const data = await executeQuery(api, params, querySpec.query, querySpec.input(params));
+    return querySpec.result(data, params);
+  }
+
+  const mutateAction = MUTATE_TOOL_ACTIONS[tool.name];
+  if (mutateAction != null) {
+    const data = await executeCommand(api, params, "mutate", commandInputForAction(mutateAction, params));
+    return rawToolResult(data);
+  }
+
+  throw new ParleyConfigError(
+    `${tool.name} is not available in OpenClaw adapter client mode until the Parley service exposes its runtime transport command boundary.`,
+    "PARLEY_OPENCLAW_CLIENT_TOOL_UNSUPPORTED",
+    { tool: tool.name, mode: runtimeConfig(api)?.mode }
+  );
+}
+
+export function wrapOpenClawToolForRuntime(api, tool) {
+  const config = runtimeConfig(api);
+  if (!["client", "standalone"].includes(config?.mode)) return tool;
+  const shouldWrap = config.mode === "client"
+    || tool.name === "parley_query"
+    || tool.name === "parley_mutate"
+    || SERVICE_QUERY_TOOL_SPECS[tool.name] != null
+    || MUTATE_TOOL_ACTIONS[tool.name] != null;
+  if (!shouldWrap) return tool;
+  return {
+    ...tool,
+    async execute(toolCallId, params) {
+      return executeRuntimeSplitTool(api, tool, params ?? {});
+    }
+  };
+}
