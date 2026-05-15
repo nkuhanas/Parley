@@ -69,5 +69,8 @@
   },
   "bin": {
     "parley": "./src/cli/parley.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   }
 }

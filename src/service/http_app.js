@@ -19,6 +19,7 @@ import {
   whereAmI
 } from "./queries/index.js";
 import { mutate } from "./commands/index.js";
+import { resolveParleyRuntimeConfig } from "../core/config.js";
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
@@ -174,6 +175,28 @@ function depsForOptions(options = {}) {
   return { pluginConfig: options.pluginConfig ?? {} };
 }
 
+function normalizeHttpServiceOptions(options = {}) {
+  const runtimeConfig = options.runtimeConfig ?? resolveParleyRuntimeConfig({
+    surface: "service",
+    pluginConfig: options.pluginConfig ?? {},
+    config: options.config,
+    env: options.env
+  });
+  return {
+    ...options,
+    runtimeConfig,
+    pluginConfig: {
+      ...(options.pluginConfig ?? {}),
+      __parleySurface: "service",
+      parleyMode: runtimeConfig.mode,
+      repoRoot: runtimeConfig.repoRoot,
+      parleyDbPath: runtimeConfig.dbPath,
+      ...(runtimeConfig.agentId != null ? { parleyAgentId: runtimeConfig.agentId } : {}),
+      ...(runtimeConfig.defaultBoard != null ? { parleyDefaultBoard: runtimeConfig.defaultBoard } : {})
+    }
+  };
+}
+
 export async function handleQuery(queryName, requestEnvelope = {}, options = {}) {
   const handler = HTTP_QUERY_HANDLERS[queryName];
   if (handler == null) return unsupportedAction("query", queryName);
@@ -214,9 +237,10 @@ async function protectedRoute(req, res, options, required) {
 }
 
 export function createParleyHttpHandler(options = {}) {
-  const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
-  const requireQueryAuth = options.requireQueryAuth ?? true;
-  const requireMetaAuth = options.requireMetaAuth ?? true;
+  const serviceOptions = normalizeHttpServiceOptions(options);
+  const maxBodyBytes = serviceOptions.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+  const requireQueryAuth = serviceOptions.requireQueryAuth ?? true;
+  const requireMetaAuth = serviceOptions.requireMetaAuth ?? true;
 
   return async function parleyHttpHandler(req, res) {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -224,30 +248,30 @@ export function createParleyHttpHandler(options = {}) {
 
     try {
       if (req.method === "GET" && pathname === "/health") {
-        sendJson(res, 200, serviceResponse({ data: { service: "parley", status: "ok" } }));
+        sendJson(res, 200, serviceResponse({ data: { service: "parley", status: "ok", mode: serviceOptions.runtimeConfig.mode, storageMode: serviceOptions.runtimeConfig.storageMode } }));
         return;
       }
 
       if (req.method === "GET" && pathname === "/v1/meta") {
-        if (await protectedRoute(req, res, options, requireMetaAuth)) return;
-        sendJson(res, 200, metaEnvelope(options));
+        if (await protectedRoute(req, res, serviceOptions, requireMetaAuth)) return;
+        sendJson(res, 200, metaEnvelope(serviceOptions));
         return;
       }
 
       const queryMatch = pathname.match(/^\/v1\/queries\/([^/]+)$/);
       if (req.method === "POST" && queryMatch) {
-        if (await protectedRoute(req, res, options, requireQueryAuth)) return;
+        if (await protectedRoute(req, res, serviceOptions, requireQueryAuth)) return;
         const body = await readJsonBody(req, maxBodyBytes);
-        const envelope = await handleQuery(decodeURIComponent(queryMatch[1]), body, options);
+        const envelope = await handleQuery(decodeURIComponent(queryMatch[1]), body, serviceOptions);
         sendJson(res, responseStatusForEnvelope(envelope), envelope);
         return;
       }
 
       const commandMatch = pathname.match(/^\/v1\/commands\/([^/]+)$/);
       if (req.method === "POST" && commandMatch) {
-        if (await protectedRoute(req, res, options, true)) return;
+        if (await protectedRoute(req, res, serviceOptions, true)) return;
         const body = await readJsonBody(req, maxBodyBytes);
-        const envelope = await handleCommand(decodeURIComponent(commandMatch[1]), body, options);
+        const envelope = await handleCommand(decodeURIComponent(commandMatch[1]), body, serviceOptions);
         sendJson(res, responseStatusForEnvelope(envelope), envelope);
         return;
       }

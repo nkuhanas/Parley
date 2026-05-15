@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createParleyRemoteClient } from "../src/client/index.js";
+import { closeAllParleySqliteLedgers, migrateParleySqliteLedger } from "../src/core/storage/sqlite_ledger.js";
 import { createParleyHttpServer, SERVICE_ERROR_CODES } from "../src/service/index.js";
 
 const AUTH_TOKEN = "test-token";
@@ -14,6 +15,7 @@ async function withTempRoot(callback) {
   try {
     await callback(tempRoot);
   } finally {
+    closeAllParleySqliteLedgers();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 }
@@ -60,8 +62,9 @@ function createProjectBoardConfig(pluginConfig = {}) {
 
 function makePluginConfig(tempRoot) {
   const baseConfig = {
+    parleyMode: "service",
     repoRoot: path.join(tempRoot, "repo"),
-    parleyRuntimeRoot: path.join(tempRoot, "thread-runtime"),
+    parleyDbPath: path.join(tempRoot, "db", "parley.sqlite"),
     parleyRoot: path.join(tempRoot, "board-runtime"),
     parleyProjectDefaultPlanLandingRoot: path.join(tempRoot, "repo", "plans"),
     parleyProjectAllowedReferenceRoots: [path.join(tempRoot, "repo", "plans")],
@@ -77,6 +80,9 @@ function makePluginConfig(tempRoot) {
 }
 
 async function withHttpService(options, callback) {
+  if (options.pluginConfig?.parleyMode === "service") {
+    await migrateParleySqliteLedger(options.pluginConfig, { surface: "service" });
+  }
   const server = createParleyHttpServer(options);
   await new Promise((resolve, reject) => {
     server.once("error", reject);

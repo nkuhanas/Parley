@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { withFileLock } from "./file_locks.js";
+import { getParleySqliteLedger } from "./sqlite_ledger.js";
 import { resolveParleyPaths } from "../config.js";
 import { createMessageId, createThreadId } from "../ids.js";
 import { assertMessageRecord, assertThreadRecord } from "../protocol/schema.js";
@@ -69,7 +70,17 @@ function getIndexPath(pluginConfig, indexName) {
   return path.join(indexDir, `${assertFileToken(indexName, "index_name")}.json`);
 }
 
+function runtimeLedger(pluginConfig) {
+  return getParleySqliteLedger(pluginConfig);
+}
+
+function runtimeMessageCollection(threadId) {
+  return `messages:${assertFileToken(threadId, "thread_id")}`;
+}
+
 export async function ensureParleyRuntimeLayout(pluginConfig = {}) {
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) return { mode: "service", dbPath: ledger.dbPath };
   const paths = resolveParleyPaths(pluginConfig);
   await Promise.all([ensureDir(paths.runtimeRoot), ensureDir(paths.threadsDir), ensureDir(paths.messagesDir), ensureDir(paths.indexDir)]);
   return paths;
@@ -135,17 +146,28 @@ export function createMessageRecord(input) {
 
 export async function saveThreadRecord(pluginConfig = {}, record) {
   const validated = assertThreadRecord(record);
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) return ledger.put("runtime", "", "threads", validated.thread_id, validated);
   await ensureParleyRuntimeLayout(pluginConfig);
   await writeJsonAtomic(getThreadPath(pluginConfig, validated.thread_id), validated);
   return validated;
 }
 
 export async function loadThreadRecord(pluginConfig = {}, threadId) {
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) {
+    const raw = ledger.get("runtime", "", "threads", assertFileToken(threadId, "thread_id"));
+    return raw == null ? null : assertThreadRecord(raw);
+  }
   const raw = await readJsonFile(getThreadPath(pluginConfig, threadId));
   return raw == null ? null : assertThreadRecord(raw);
 }
 
 export async function listThreadRecords(pluginConfig = {}) {
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) {
+    return ledger.list("runtime", "", "threads").map(assertThreadRecord).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
   const { threadsDir } = resolveParleyPaths(pluginConfig);
   try {
     const entries = await fs.readdir(threadsDir, { withFileTypes: true });
@@ -164,12 +186,19 @@ export async function listThreadRecords(pluginConfig = {}) {
 
 export async function saveMessageRecord(pluginConfig = {}, record) {
   const validated = assertMessageRecord(record);
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) return ledger.put("runtime", "", runtimeMessageCollection(validated.thread_id), validated.message_id, validated);
   await ensureParleyRuntimeLayout(pluginConfig);
   await writeJsonAtomic(getMessagePath(pluginConfig, validated.thread_id, validated.message_id), validated);
   return validated;
 }
 
 export async function loadMessageRecord(pluginConfig = {}, threadId, messageId) {
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) {
+    const raw = ledger.get("runtime", "", runtimeMessageCollection(threadId), assertFileToken(messageId, "message_id"));
+    return raw == null ? null : assertMessageRecord(raw);
+  }
   const raw = await readJsonFile(getMessagePath(pluginConfig, threadId, messageId));
   return raw == null ? null : assertMessageRecord(raw);
 }
@@ -186,6 +215,10 @@ export async function updateMessageTransport(pluginConfig = {}, threadId, messag
 }
 
 export async function listThreadMessages(pluginConfig = {}, threadId) {
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) {
+    return ledger.list("runtime", "", runtimeMessageCollection(threadId)).map(assertMessageRecord).sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
   const { messagesDir } = resolveParleyPaths(pluginConfig);
   const threadDir = path.join(messagesDir, assertFileToken(threadId, "thread_id"));
   try {
@@ -205,6 +238,8 @@ export async function listThreadMessages(pluginConfig = {}, threadId) {
 }
 
 export async function loadIndex(pluginConfig = {}, indexName) {
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) return ledger.get("runtime", "", "index", assertFileToken(indexName, "index_name")) ?? {};
   return (await readJsonFile(getIndexPath(pluginConfig, indexName), {})) ?? {};
 }
 
@@ -212,6 +247,8 @@ export async function saveIndex(pluginConfig = {}, indexName, value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("index value must be an object");
   }
+  const ledger = runtimeLedger(pluginConfig);
+  if (ledger != null) return ledger.put("runtime", "", "index", assertFileToken(indexName, "index_name"), value);
   await ensureParleyRuntimeLayout(pluginConfig);
   await writeJsonAtomic(getIndexPath(pluginConfig, indexName), value);
   return value;

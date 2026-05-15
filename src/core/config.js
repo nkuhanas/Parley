@@ -8,6 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, "../..");
 const DEFAULT_STANDALONE_STATE_ROOT = path.join(os.homedir(), ".local", "share", "parley");
+const DEFAULT_OPENCLAW_WORKSPACES_ROOT = path.join(os.homedir(), ".openclaw", "workspaces");
 export const PARLEY_RUNTIME_MODES = Object.freeze(["standalone", "service", "client", "test"]);
 export const PARLEY_RUNTIME_SURFACES = Object.freeze(["core", "cli", "sdk", "openclaw-adapter", "service", "test"]);
 
@@ -144,16 +145,22 @@ function assertServiceDbPathAllowed(dbPath, forbiddenRoots) {
 }
 
 function collectForbiddenDbRoots(context, repoRoot) {
-  const roots = [
+  const configuredRoots = [
     ...(Array.isArray(context.pluginConfig?.parleyForbiddenDbRoots) ? context.pluginConfig.parleyForbiddenDbRoots : []),
     ...(Array.isArray(context.pluginConfig?.forbiddenDbRoots) ? context.pluginConfig.forbiddenDbRoots : []),
     ...(Array.isArray(context.config?.parleyForbiddenDbRoots) ? context.config.parleyForbiddenDbRoots : []),
     ...(Array.isArray(context.config?.forbiddenDbRoots) ? context.config.forbiddenDbRoots : [])
   ];
-  return [
+  const envWorkspaceRoots = [
+    pickEnvString(context.env, ["OPENCLAW_WORKSPACE", "OPENCLAW_WORKSPACE_ROOT", "OPENCLAW_WORKSPACES_ROOT"])
+  ].filter(Boolean);
+  const roots = [
     repoRoot,
-    ...roots.map((root, index) => ensureAbsoluteConfigPath(root, `parleyForbiddenDbRoots[${index}]`))
-  ];
+    DEFAULT_OPENCLAW_WORKSPACES_ROOT,
+    ...envWorkspaceRoots,
+    ...configuredRoots
+  ].map((root, index) => ensureAbsoluteConfigPath(root, `parleyForbiddenDbRoots[${index}]`));
+  return [...new Set(roots)];
 }
 
 function localStateInputFields(context) {

@@ -1,6 +1,6 @@
 import { resolveCallerIdentity } from "../../../core/board/board.js";
 import { requireBoardAgent } from "../../../core/board/board.js";
-import { assertParleyLocalStateAvailable } from "../../../core/config.js";
+import { ParleyConfigError, resolveParleyRuntimeConfig } from "../../../core/config.js";
 import { enrichToolDetails } from "../guidance/envelope.js";
 
 function summarizeIdentity(identity) {
@@ -251,8 +251,21 @@ export function callerRuntimeAliasesFromToolContext(toolContext) {
   return aliases;
 }
 
+function assertParleyBoardStorageAvailable(pluginConfig = {}, options = {}) {
+  const runtimeConfig = resolveParleyRuntimeConfig({
+    pluginConfig,
+    surface: options.surface ?? pluginConfig.__parleySurface ?? "core"
+  });
+  if (["standalone-file", "test-file", "service-db"].includes(runtimeConfig.storageMode)) return runtimeConfig;
+  throw new ParleyConfigError(
+    `${options.operation ?? "Parley board storage"} is not available in ${runtimeConfig.mode} mode`,
+    "PARLEY_LOCAL_STATE_FORBIDDEN",
+    { mode: runtimeConfig.mode, surface: runtimeConfig.surface, storageMode: runtimeConfig.storageMode }
+  );
+}
+
 export function resolveToolCaller(api, params) {
-  assertParleyLocalStateAvailable(api.pluginConfig, { operation: "OpenClaw adapter local board access" });
+  assertParleyBoardStorageAvailable(api.pluginConfig, { operation: "OpenClaw adapter board storage" });
   return resolveCallerIdentity(api.pluginConfig, {
     callerRuntimeRef: params?.callerRuntimeRef ?? callerRuntimeRefFromToolContext(api.toolContext),
     runtimeAliases: callerRuntimeAliasesFromToolContext(api.toolContext),

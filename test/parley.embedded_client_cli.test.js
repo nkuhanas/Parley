@@ -8,6 +8,7 @@ import test from "node:test";
 
 import { createParleyEmbeddedClient } from "../src/client/index.js";
 import { runParleyCli } from "../src/cli/parley.js";
+import { closeAllParleySqliteLedgers } from "../src/core/storage/sqlite_ledger.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +27,7 @@ async function withTempRoot(callback) {
   try {
     await callback(tempRoot);
   } finally {
+    closeAllParleySqliteLedgers();
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 }
@@ -173,6 +175,37 @@ test("CLI standalone my-boards and where-am-i use JSON config", async () => {
     assert.equal(recovery.ok, true);
     assert.equal(recovery.command, "where-am-i");
     assert.equal(recovery.response.data.projection.board_id, "project");
+  });
+});
+
+
+test("CLI migrate runs idempotent service SQLite migrations", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const configPath = await writeConfig(tempRoot, projectConfig(tempRoot, {
+      parleyMode: "service",
+      parleyStateRoot: undefined,
+      parleyRuntimeRoot: undefined,
+      parleyDbPath: path.join(tempRoot, "db", "cli.sqlite")
+    }));
+
+    const firstOut = memoryStream();
+    const firstErr = memoryStream();
+    const firstExit = await runParleyCli(["--config", configPath, "migrate"], { env: cliEnv(tempRoot), stdout: firstOut, stderr: firstErr });
+    const first = JSON.parse(firstOut.text());
+    assert.equal(firstExit, 0);
+    assert.equal(firstErr.text(), "");
+    assert.equal(first.runtime.mode, "service");
+    assert.equal(first.runtime.storageMode, "service-db");
+    assert.deepEqual(first.migration.applied, [1]);
+
+    const secondOut = memoryStream();
+    const secondErr = memoryStream();
+    const secondExit = await runParleyCli(["--config", configPath, "migrate"], { env: cliEnv(tempRoot), stdout: secondOut, stderr: secondErr });
+    const second = JSON.parse(secondOut.text());
+    assert.equal(secondExit, 0);
+    assert.equal(secondErr.text(), "");
+    assert.deepEqual(second.migration.applied, []);
+    assert.deepEqual(second.migration.skipped, [1]);
   });
 });
 

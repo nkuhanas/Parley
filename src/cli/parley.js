@@ -5,9 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveParleyRuntimeConfig } from "../core/config.js";
+import { migrateParleySqliteLedger } from "../core/storage/sqlite_ledger.js";
 import { createParleyEmbeddedClient, createParleyRemoteClient } from "../client/index.js";
 
-const COMMANDS = new Set(["mode", "health", "describe", "my-boards", "where-am-i"]);
+const COMMANDS = new Set(["mode", "migrate", "health", "describe", "my-boards", "where-am-i"]);
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -25,6 +26,7 @@ function usage() {
 
 Commands:
   mode                         Show resolved runtime mode/config summary.
+  migrate                      Run idempotent service-mode SQLite ledger migrations.
   health                       Check remote service or embedded client health.
   describe [--topic <topic>] [--board <board>]
   my-boards                    List boards visible to the caller.
@@ -77,6 +79,7 @@ function cliOverrides(options) {
     parleyMode: nonEmptyString(options.mode),
     parleyStateRoot: nonEmptyString(options["state-root"]),
     parleyRuntimeRoot: nonEmptyString(options["runtime-root"]),
+    parleyDbPath: nonEmptyString(options["db-path"]),
     parleyApiUrl: nonEmptyString(options["api-url"]),
     parleyAuthToken: nonEmptyString(options["auth-token"]),
     parleyAuthTokenFile: nonEmptyString(options["auth-token-file"]),
@@ -203,6 +206,12 @@ export async function runParleyCli(argv = process.argv.slice(2), io = {}) {
 
   if (command === "mode") {
     printJson({ ok: true, command, runtime: runtimeSummary(runtimeConfig) }, stdout);
+    return 0;
+  }
+
+  if (command === "migrate") {
+    const migration = await migrateParleySqliteLedger(pluginConfig, { surface: "cli", env });
+    printJson({ ok: true, command, runtime: runtimeSummary(runtimeConfig), migration }, stdout);
     return 0;
   }
 

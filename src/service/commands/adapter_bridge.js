@@ -23,6 +23,7 @@ import { createRegisterArtifactTool } from "../../adapters/openclaw/tools/regist
 import { createValidationError, MUTATE_ACTIONS } from "../../adapters/openclaw/tools/descriptors.js";
 import { explicitBoardId, normalizeServiceRequest } from "../context.js";
 import { callerRuntimeRefFromServiceCaller } from "../identity.js";
+import { withParleyServiceLedgerTransaction } from "../../core/storage/sqlite_ledger.js";
 import { serviceResponse } from "../responses.js";
 
 const MUTATE_TOOL_FACTORIES = {
@@ -96,6 +97,6 @@ export async function mutate(request = {}, deps = {}) {
     ...normalizeInput(value(input, "input"))
   };
   assertDelegatedParams(delegatedTool, delegatedParams);
-  const delegated = await delegatedTool.execute(null, delegatedParams);
+  const delegated = await withParleyServiceLedgerTransaction(deps.pluginConfig, () => delegatedTool.execute(null, delegatedParams));
   return serviceResponse({ data: delegated.details });
 }

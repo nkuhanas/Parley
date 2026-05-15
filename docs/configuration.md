@@ -19,11 +19,26 @@ Surface-aware defaulting is intentionally narrow: direct human CLI may default t
 - `parleyStateRoot`: base state root for intentional standalone local usage.
 - `parleyRuntimeRoot`: directory for thread/message runtime state in standalone/test usage.
 - `parleyApiUrl`: remote service URL for client mode.
-- `parleyDbPath`: service-mode DB path; must not live inside the repo/workspace.
+- `parleyDbPath`: service-mode SQLite DB path; must not live inside the repo checkout, the default OpenClaw workspaces root, or configured forbidden roots.
 - `parleyRoot`: base directory for board data in standalone/local board usage.
 - `parleyRegistry`: global agent registry.
 - `parleyBoards`: explicitly configured boards.
 - `parleyDefaultBoards`: optional host-provided default boards.
+
+
+## Service SQLite ledger
+
+Service mode uses a boring SQLite ledger for MVP durability: records are stored by scope, board id, collection, record id, JSON body, and metadata/version. The DB is a ledger boundary, not the Parley domain model; plans, obligations, artifacts, relationships, and effects remain canonical JSON records at this layer.
+
+Before starting a service process against a new or upgraded DB, run the idempotent migration command:
+
+```sh
+PARLEY_MODE=service PARLEY_DB_PATH=/var/lib/parley/parley.sqlite parley migrate
+```
+
+For deploys, stop or quiesce the service and take a filesystem/volume backup of the SQLite DB path before running migrations. Migrations are designed to be safe to rerun, but backup-before-migrate is the deployment contract until production orchestration is added.
+
+Keep `PARLEY_DB_PATH` outside the repo checkout and outside OpenClaw workspaces. Use `parleyForbiddenDbRoots`/`forbiddenDbRoots` to add site-specific forbidden locations.
 
 ## Agent registry
 

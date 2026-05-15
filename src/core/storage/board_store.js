@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { withFileLock } from "./file_locks.js";
+import { getParleySqliteLedger } from "./sqlite_ledger.js";
 import { assertParleyLocalStateAvailable, resolveParleyBoardRegistry } from "../config.js";
 import { compareEffectRecords } from "../effect_ordering.js";
 import { createArtifactId, createEffectId, createObjectId, createObligationId, createRelationshipId, createTriggerId } from "../ids.js";
@@ -95,7 +96,21 @@ function compareRecords(a, b) {
   return String(recordSortKey(a)).localeCompare(String(recordSortKey(b)));
 }
 
-async function listRecords(board, collectionName, validator) {
+function boardLedger(pluginConfig) {
+  return getParleySqliteLedger(pluginConfig);
+}
+
+function boardRecordKey(boardAgentId, projectionType) {
+  const agentId = assertBoardAgentId(boardAgentId);
+  const normalizedProjectionType = assertEnum(projectionType, PROJECTION_TYPES, "projection_type");
+  return `${agentId}__${normalizedProjectionType}`;
+}
+
+async function listRecords(pluginConfig, board, collectionName, validator) {
+  const ledger = boardLedger(pluginConfig);
+  if (ledger != null) {
+    return ledger.list("board", board.board_id, collectionName).map(validator).sort(compareRecords);
+  }
   const dirPath = path.join(board.state_root, collectionName);
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -258,8 +273,10 @@ export function createProjectionCheckpointRecord(input) {
 }
 
 async function saveRecord(pluginConfig, board, collectionName, recordId, record, validator, options = {}) {
-  const targetBoard = await ensureParleyBoardLayout(pluginConfig, board);
   const validated = validator(record);
+  const ledger = boardLedger(pluginConfig);
+  if (ledger != null) return ledger.put("board", board.board_id, collectionName, recordId, validated, options);
+  const targetBoard = await ensureParleyBoardLayout(pluginConfig, board);
   const filePath = recordPath(targetBoard, collectionName, recordId);
   if (options.appendOnly === true) {
     return withFileLock(filePath, async () => {
@@ -271,6 +288,16 @@ async function saveRecord(pluginConfig, board, collectionName, recordId, record,
   }
   await writeJsonAtomic(filePath, validated);
   return validated;
+}
+
+async function loadRecord(pluginConfig, board, collectionName, recordId, validator) {
+  const ledger = boardLedger(pluginConfig);
+  if (ledger != null) {
+    const raw = ledger.get("board", board.board_id, collectionName, recordId);
+    return raw == null ? null : validator(raw);
+  }
+  const raw = await readJsonFile(recordPath(board, collectionName, recordId));
+  return raw == null ? null : validator(raw);
 }
 
 export async function saveArtifactRecord(pluginConfig, board, record) {
@@ -304,8 +331,12 @@ export async function saveRelationshipRecord(pluginConfig, board, record) {
 }
 
 export async function saveProjectionCheckpointRecord(pluginConfig, board, record) {
-  const targetBoard = await ensureParleyBoardLayout(pluginConfig, board);
   const validated = assertProjectionCheckpointRecord(record);
+  const ledger = boardLedger(pluginConfig);
+  if (ledger != null) {
+    return ledger.put("board", board.board_id, "checkpoints", boardRecordKey(validated.board_agent_id, validated.projection_type), validated);
+  }
+  const targetBoard = await ensureParleyBoardLayout(pluginConfig, board);
   await writeJsonAtomic(checkpointPath(targetBoard, validated.board_agent_id, validated.projection_type), validated);
   return validated;
 }
@@ -315,76 +346,74 @@ export async function savePlanSetupRecord(pluginConfig, board, record) {
   return saveRecord(pluginConfig, board, "plans", validated.plan_id, validated, assertPlanSetupRecord);
 }
 
-export async function loadArtifactRecord(_pluginConfig, board, artifactId) {
-  const raw = await readJsonFile(recordPath(board, "artifacts", artifactId));
-  return raw == null ? null : assertArtifactRecord(raw);
+export async function loadArtifactRecord(pluginConfig, board, artifactId) {
+  return loadRecord(pluginConfig, board, "artifacts", artifactId, assertArtifactRecord);
 }
 
-export async function loadCoordinationObjectRecord(_pluginConfig, board, objectId) {
-  const raw = await readJsonFile(recordPath(board, "objects", objectId));
-  return raw == null ? null : assertCoordinationObjectRecord(raw);
+export async function loadCoordinationObjectRecord(pluginConfig, board, objectId) {
+  return loadRecord(pluginConfig, board, "objects", objectId, assertCoordinationObjectRecord);
 }
 
-export async function loadEffectRecord(_pluginConfig, board, effectId) {
-  const raw = await readJsonFile(recordPath(board, "effects", effectId));
-  return raw == null ? null : assertEffectRecord(raw);
+export async function loadEffectRecord(pluginConfig, board, effectId) {
+  return loadRecord(pluginConfig, board, "effects", effectId, assertEffectRecord);
 }
 
-export async function loadObligationRecord(_pluginConfig, board, obligationId) {
-  const raw = await readJsonFile(recordPath(board, "obligations", obligationId));
-  return raw == null ? null : assertObligationRecord(raw);
+export async function loadObligationRecord(pluginConfig, board, obligationId) {
+  return loadRecord(pluginConfig, board, "obligations", obligationId, assertObligationRecord);
 }
 
-export async function loadTriggerRecord(_pluginConfig, board, triggerId) {
-  const raw = await readJsonFile(recordPath(board, "triggers", triggerId));
-  return raw == null ? null : assertTriggerRecord(raw);
+export async function loadTriggerRecord(pluginConfig, board, triggerId) {
+  return loadRecord(pluginConfig, board, "triggers", triggerId, assertTriggerRecord);
 }
 
-export async function loadRelationshipRecord(_pluginConfig, board, relationshipId) {
-  const raw = await readJsonFile(recordPath(board, "relationships", relationshipId));
-  return raw == null ? null : assertRelationshipRecord(raw);
+export async function loadRelationshipRecord(pluginConfig, board, relationshipId) {
+  return loadRecord(pluginConfig, board, "relationships", relationshipId, assertRelationshipRecord);
 }
 
-export async function loadProjectionCheckpointRecord(_pluginConfig, board, boardAgentId, projectionType) {
+export async function loadProjectionCheckpointRecord(pluginConfig, board, boardAgentId, projectionType) {
+  const ledger = boardLedger(pluginConfig);
+  if (ledger != null) {
+    const raw = ledger.get("board", board.board_id, "checkpoints", boardRecordKey(boardAgentId, projectionType));
+    return raw == null ? null : assertProjectionCheckpointRecord(raw);
+  }
   const raw = await readJsonFile(checkpointPath(board, boardAgentId, projectionType));
   return raw == null ? null : assertProjectionCheckpointRecord(raw);
 }
 
-export async function loadPlanSetupRecord(_pluginConfig, board, planId) {
-  const raw = await readJsonFile(recordPath(board, "plans", planId));
-  return raw == null ? null : assertPlanSetupRecord(raw);
+export async function loadPlanSetupRecord(pluginConfig, board, planId) {
+  return loadRecord(pluginConfig, board, "plans", planId, assertPlanSetupRecord);
 }
 
-export async function listArtifactRecords(_pluginConfig, board) {
-  return listRecords(board, "artifacts", assertArtifactRecord);
+export async function listArtifactRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "artifacts", assertArtifactRecord);
 }
 
-export async function listCoordinationObjectRecords(_pluginConfig, board) {
-  return listRecords(board, "objects", assertCoordinationObjectRecord);
+export async function listCoordinationObjectRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "objects", assertCoordinationObjectRecord);
 }
 
-export async function listEffectRecords(_pluginConfig, board) {
-  return listRecords(board, "effects", assertEffectRecord);
+export async function listEffectRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "effects", assertEffectRecord);
 }
 
-export async function listObligationRecords(_pluginConfig, board) {
-  return listRecords(board, "obligations", assertObligationRecord);
+export async function listObligationRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "obligations", assertObligationRecord);
 }
 
-export async function listTriggerRecords(_pluginConfig, board) {
-  return listRecords(board, "triggers", assertTriggerRecord);
+export async function listTriggerRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "triggers", assertTriggerRecord);
 }
 
-export async function listRelationshipRecords(_pluginConfig, board) {
-  return listRecords(board, "relationships", assertRelationshipRecord);
+export async function listRelationshipRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "relationships", assertRelationshipRecord);
 }
 
-export async function listProjectionCheckpointRecords(_pluginConfig, board) {
-  return listRecords(board, "checkpoints", assertProjectionCheckpointRecord);
+export async function listProjectionCheckpointRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "checkpoints", assertProjectionCheckpointRecord);
 }
 
-export async function listPlanSetupRecords(_pluginConfig, board) {
-  return listRecords(board, "plans", assertPlanSetupRecord);
+export async function listPlanSetupRecords(pluginConfig, board) {
+  return listRecords(pluginConfig, board, "plans", assertPlanSetupRecord);
 }
 
 export function normalizeArtifactRef(artifact, version = null) {
