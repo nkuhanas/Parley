@@ -182,8 +182,8 @@ test("service mode requires explicit DB path outside the repo", () => {
       env: {},
       pluginConfig: {
         parleyMode: "service",
-        repoRoot: "/srv/Parley",
-        parleyDbPath: "/srv/Parley/parley.db"
+        repoRoot: "/srv/workspaces/Parley",
+        parleyDbPath: "/srv/workspaces/Parley/parley.db"
       }
     }),
     (error) => error?.code === "PARLEY_SERVICE_DB_PATH_FORBIDDEN"

@@ -263,7 +263,7 @@ test("service DB path rejects the default OpenClaw workspaces root", () => {
       env: {},
       pluginConfig: {
         parleyMode: "service",
-        repoRoot: "/srv/Parley",
+        repoRoot: "/srv/workspaces/Parley",
         parleyDbPath: workspaceDbPath
       }
     }),

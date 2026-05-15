@@ -103,7 +103,7 @@ function memoryStream() {
 
 async function runCli(args, options = {}) {
   return execFileAsync(process.execPath, ["src/cli/parley.js", ...args], {
-    cwd: path.resolve("/srv/Parley"),
+    cwd: path.resolve("/srv/workspaces/Parley"),
     env: options.env,
     maxBuffer: 1024 * 1024
   });
