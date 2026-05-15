@@ -1,0 +1,200 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import test from "node:test";
+
+import { createParleyEmbeddedClient } from "../src/client/index.js";
+
+const execFileAsync = promisify(execFile);
+
+async function exists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function withTempRoot(callback) {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "parley-embedded-cli-test-"));
+  try {
+    await callback(tempRoot);
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
+function projectConfig(tempRoot, overrides = {}) {
+  const boardRoot = path.join(tempRoot, "boards", "project");
+  return {
+    parleyMode: "standalone",
+    parleyStateRoot: path.join(tempRoot, "state"),
+    parleyRuntimeRoot: path.join(tempRoot, "runtime"),
+    parleyAgentId: "parley-agent",
+    parleyDefaultBoard: "project",
+    parleyDefaultBoards: {
+      project: {
+        board_id: "project",
+        display_name: "Project",
+        status: "active",
+        board_root: boardRoot,
+        state_root: path.join(boardRoot, "state"),
+        managed_artifact_root: path.join(boardRoot, "artifacts"),
+        plan_extension: ".md",
+        artifact_namespaces: [
+          {
+            id: "project_plans",
+            roles: ["plan_landing", "explicit_landing", "reference"],
+            default_for: ["plan_landing"],
+            uri_prefix: "repo://plans/",
+            resolved_root: path.join(tempRoot, "repo", "plans"),
+            allowed_subpaths: []
+          }
+        ],
+        allowed_reference_namespaces: ["project_plans"],
+        members: [
+          {
+            agent_id: "parley-agent",
+            board_agent_id: "parley-agent",
+            display_name: "Parley Agent",
+            kind: "agent",
+            runtime_refs: [{ scheme: "cli", type: "agent", id: "parley-agent" }],
+            roles: ["implementation"],
+            permissions: { preset: "board_admin" }
+          }
+        ],
+        permission_model: { mode: "board_wide_all_tools", future_agent_scoping: true }
+      }
+    },
+    ...overrides
+  };
+}
+
+async function writeConfig(tempRoot, config = projectConfig(tempRoot)) {
+  const configPath = path.join(tempRoot, "parley.config.json");
+  await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  return configPath;
+}
+
+function cliEnv(tempRoot, overrides = {}) {
+  return {
+    PATH: process.env.PATH,
+    HOME: tempRoot,
+    USER: "parley-agent",
+    ...overrides
+  };
+}
+
+async function runCli(args, options = {}) {
+  return execFileAsync(process.execPath, ["src/cli/parley.js", ...args], {
+    cwd: path.resolve("/srv/Parley"),
+    env: options.env,
+    maxBuffer: 1024 * 1024
+  });
+}
+
+test("embedded standalone client calls service queries in-process", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const client = createParleyEmbeddedClient({
+      surface: "cli",
+      pluginConfig: projectConfig(tempRoot),
+      env: {}
+    });
+
+    const boards = await client.myBoards();
+    assert.equal(boards.status, "ok");
+    assert.equal(boards.data.global_agent_id, "parley-agent");
+    assert.equal(boards.data.boards[0].board_id, "project");
+
+    const recovery = await client.whereAmI({ boardId: "project", verbosity: "compact" });
+    assert.equal(recovery.status, "ok");
+    assert.equal(recovery.data.projection.board_id, "project");
+  });
+});
+
+test("embedded client preserves client-mode fail-closed behavior", async () => {
+  assert.throws(
+    () => createParleyEmbeddedClient({ surface: "cli", pluginConfig: { parleyMode: "client" }, env: {} }),
+    (error) => error?.code === "PARLEY_API_URL_REQUIRED"
+  );
+
+  assert.throws(
+    () => createParleyEmbeddedClient({
+      surface: "cli",
+      pluginConfig: { parleyMode: "client", parleyApiUrl: "http://127.0.0.1:7331" },
+      env: {}
+    }),
+    (error) => error?.code === "PARLEY_EMBEDDED_MODE_UNSUPPORTED"
+  );
+});
+
+test("CLI mode defaults direct human usage to standalone and reports state root", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const runtimeRoot = path.join(tempRoot, ".local", "share", "parley", "runtime");
+    const { stdout, stderr } = await runCli(["mode"], { env: cliEnv(tempRoot) });
+    const parsed = JSON.parse(stdout);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.runtime.mode, "standalone");
+    assert.equal(parsed.runtime.modeSource, "cli_default_standalone");
+    assert.equal(parsed.runtime.runtimeRoot, runtimeRoot);
+    assert.match(stderr, /implicit PARLEY_STATE_ROOT/);
+    assert.equal(await exists(runtimeRoot), false);
+  });
+});
+
+test("CLI standalone my-boards and where-am-i use JSON config", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const configPath = await writeConfig(tempRoot);
+
+    const boardsRun = await runCli(["--config", configPath, "my-boards"], { env: cliEnv(tempRoot) });
+    const boards = JSON.parse(boardsRun.stdout);
+    assert.equal(boards.ok, true);
+    assert.equal(boards.runtime.mode, "standalone");
+    assert.equal(boards.runtime.stateRoot, path.join(tempRoot, "state"));
+    assert.equal(boards.response.data.boards[0].board_id, "project");
+
+    const recoveryRun = await runCli(["--config", configPath, "where-am-i", "--board", "project"], { env: cliEnv(tempRoot) });
+    const recovery = JSON.parse(recoveryRun.stdout);
+    assert.equal(recovery.ok, true);
+    assert.equal(recovery.command, "where-am-i");
+    assert.equal(recovery.response.data.projection.board_id, "project");
+  });
+});
+
+test("CLI client mode still refuses missing API URL", async () => {
+  await withTempRoot(async (tempRoot) => {
+    await assert.rejects(
+      () => runCli(["mode"], { env: cliEnv(tempRoot, { PARLEY_MODE: "client" }) }),
+      (error) => {
+        const parsed = JSON.parse(error.stderr);
+        assert.equal(parsed.ok, false);
+        assert.equal(parsed.error.code, "PARLEY_API_URL_REQUIRED");
+        return true;
+      }
+    );
+  });
+});
+
+
+test("CLI client mode with API URL reports remote transport unsupported without local state", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const stateRoot = path.join(tempRoot, ".local", "share", "parley");
+    try {
+      await runCli(["my-boards"], {
+        env: cliEnv(tempRoot, { PARLEY_MODE: "client", PARLEY_API_URL: "http://127.0.0.1:7331" })
+      });
+      assert.fail("client mode CLI command should fail until remote transport exists");
+    } catch (error) {
+      const parsed = JSON.parse(error.stderr);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "PARLEY_REMOTE_TRANSPORT_UNIMPLEMENTED");
+      assert.equal(await exists(stateRoot), false);
+    }
+  });
+});

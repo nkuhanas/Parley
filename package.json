@@ -8,6 +8,7 @@
     ".": "./index.js",
     "./plugin": "./plugin.js",
     "./openclaw": "./src/adapters/openclaw/index.js",
+    "./client": "./src/client/index.js",
     "./core/*": "./src/core/*",
     "./schemas": "./src/schemas/index.js",
     "./schemas/*": "./src/schemas/*",
@@ -17,7 +18,8 @@
     "./src/*": "./src/*"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "cli": "node ./src/cli/parley.js"
   },
   "license": "Apache-2.0",
   "repository": {
@@ -63,5 +65,8 @@
       "openclawVersion": "2026.4.27",
       "pluginSdkVersion": "2026.4.27"
     }
+  },
+  "bin": {
+    "parley": "./src/cli/parley.js"
   }
 }
