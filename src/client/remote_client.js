@@ -177,6 +177,10 @@ export function createParleyRemoteClient(options = {}) {
     return request(["health"], { method: "GET", requestId: options.requestId ?? options.request_id });
   }
 
+  async function meta(options = {}) {
+    return request(["v1", "meta"], { method: "GET", requestId: options.requestId ?? options.request_id });
+  }
+
   async function query(name, input = {}, options = {}) {
     const queryName = nonEmptyString(name);
     if (queryName == null) {
@@ -206,6 +210,7 @@ export function createParleyRemoteClient(options = {}) {
     apiUrl,
     caller: defaultCaller,
     health,
+    meta,
     query,
     command,
     describe: (input = {}, options = {}) => query("describe", input, options),

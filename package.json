@@ -9,6 +9,7 @@
     "./plugin": "./plugin.js",
     "./openclaw": "./src/adapters/openclaw/index.js",
     "./client": "./src/client/index.js",
+    "./service": "./src/service/index.js",
     "./core/*": "./src/core/*",
     "./schemas": "./src/schemas/index.js",
     "./schemas/*": "./src/schemas/*",
