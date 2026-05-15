@@ -1,3 +1,4 @@
+import { resolveParleyRuntimeConfig } from "../../core/config.js";
 import { createOpenThreadTool } from "./tools/open_thread.js";
 import { createProbeThreadTool } from "./tools/probe.js";
 import { createClaimTurnTool } from "./tools/claim_turn.js";
@@ -37,47 +38,64 @@ function withRuntimeContext(api, createTool) {
   return (toolContext) => createTool({ ...api, toolContext });
 }
 
+function withOpenClawRuntimeConfig(api) {
+  const runtimeConfig = resolveParleyRuntimeConfig({
+    surface: "openclaw-adapter",
+    pluginConfig: api.pluginConfig ?? {},
+    env: api.env ?? process.env
+  });
+  return {
+    ...api,
+    pluginConfig: {
+      ...(api.pluginConfig ?? {}),
+      __parleySurface: "openclaw-adapter",
+      __parleyRuntimeConfig: runtimeConfig
+    }
+  };
+}
+
 export function registerParleyTools(api) {
-  api.registerTool(withRuntimeContext(api, createDescribeTool));
-  api.registerTool(createOpenThreadTool(api));
-  api.registerTool(createClaimTurnTool(api));
-  api.registerTool(createReplyThreadTool(api));
-  api.registerTool(createProbeThreadTool(api));
-  api.registerTool(createSettleTurnTool(api));
-  api.registerTool(createConcludeThreadTool(api));
-  api.registerTool(createRecordTransportResultTool(api));
-  api.registerTool(createDispatchTransportRequestTool(api));
-  api.registerTool(createRecordHumanSummaryAnchorTool(api));
-  api.registerTool(withRuntimeContext(api, createRegisterArtifactTool));
-  api.registerTool(withRuntimeContext(api, createCreateObjectTool));
-  api.registerTool(withRuntimeContext(api, createRecordEffectTool));
-  api.registerTool(withRuntimeContext(api, createCreateObligationTool));
-  api.registerTool(withRuntimeContext(api, createCreateTriggerTool));
-  api.registerTool(withRuntimeContext(api, createResolveObligationTool));
-  api.registerTool(withRuntimeContext(api, createWhereAmITool));
-  api.registerTool(withRuntimeContext(api, createMyBoardsTool));
-  api.registerTool(withRuntimeContext(api, createBoardProjectionTool));
-  api.registerTool(withRuntimeContext(api, createRecordRelationshipTool));
-  api.registerTool(withRuntimeContext(api, createRemoveRelationshipTool));
-  api.registerTool(withRuntimeContext(api, createCheckpointProjectionTool));
-  api.registerTool(withRuntimeContext(api, createValidatePlanAction));
-  api.registerTool(withRuntimeContext(api, createValidateStateAction));
-  api.registerTool(withRuntimeContext(api, createCreatePlanAction));
-  api.registerTool(withRuntimeContext(api, createWritePlanOverviewAction));
-  api.registerTool(withRuntimeContext(api, createAddPlanPhaseAction));
-  api.registerTool(withRuntimeContext(api, createAddPlanCheckpointAction));
-  api.registerTool(withRuntimeContext(api, createGetPlanSetupStatusAction));
-  api.registerTool(withRuntimeContext(api, createRequestPlanReviewAction));
-  api.registerTool(withRuntimeContext(api, createMarkPlanReadyAction));
-  api.registerTool(withRuntimeContext(api, createRecordReviewDecisionAction));
-  api.registerTool(withRuntimeContext(api, createActivatePlanAction));
-  api.registerTool(withRuntimeContext(api, createPausePlanAction));
-  api.registerTool(withRuntimeContext(api, createResumePlanAction));
-  api.registerTool(withRuntimeContext(api, createRecordPlanDispositionAction));
-  api.registerTool(withRuntimeContext(api, createRecordPhaseOutcomeAction));
-  api.registerTool(withRuntimeContext(api, createRuntimeObligationsQueryAction));
-  api.registerTool(withRuntimeContext(api, createBoardObligationsQueryAction));
-  api.registerTool(withRuntimeContext(api, createNamespaceSearchAction));
-  api.registerTool(withRuntimeContext(api, createQueryTool));
-  api.registerTool(withRuntimeContext(api, createMutateTool));
+  const runtimeApi = withOpenClawRuntimeConfig(api);
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createDescribeTool));
+  runtimeApi.registerTool(createOpenThreadTool(runtimeApi));
+  runtimeApi.registerTool(createClaimTurnTool(runtimeApi));
+  runtimeApi.registerTool(createReplyThreadTool(runtimeApi));
+  runtimeApi.registerTool(createProbeThreadTool(runtimeApi));
+  runtimeApi.registerTool(createSettleTurnTool(runtimeApi));
+  runtimeApi.registerTool(createConcludeThreadTool(runtimeApi));
+  runtimeApi.registerTool(createRecordTransportResultTool(runtimeApi));
+  runtimeApi.registerTool(createDispatchTransportRequestTool(runtimeApi));
+  runtimeApi.registerTool(createRecordHumanSummaryAnchorTool(runtimeApi));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRegisterArtifactTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createCreateObjectTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRecordEffectTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createCreateObligationTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createCreateTriggerTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createResolveObligationTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createWhereAmITool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createMyBoardsTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createBoardProjectionTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRecordRelationshipTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRemoveRelationshipTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createCheckpointProjectionTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createValidatePlanAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createValidateStateAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createCreatePlanAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createWritePlanOverviewAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createAddPlanPhaseAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createAddPlanCheckpointAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createGetPlanSetupStatusAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRequestPlanReviewAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createMarkPlanReadyAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRecordReviewDecisionAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createActivatePlanAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createPausePlanAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createResumePlanAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRecordPlanDispositionAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRecordPhaseOutcomeAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createRuntimeObligationsQueryAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createBoardObligationsQueryAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createNamespaceSearchAction));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createQueryTool));
+  runtimeApi.registerTool(withRuntimeContext(runtimeApi, createMutateTool));
 }

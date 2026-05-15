@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { withFileLock } from "./file_locks.js";
-import { resolveParleyBoardRegistry } from "../config.js";
+import { assertParleyLocalStateAvailable, resolveParleyBoardRegistry } from "../config.js";
 import { compareEffectRecords } from "../effect_ordering.js";
 import { createArtifactId, createEffectId, createObjectId, createObligationId, createRelationshipId, createTriggerId } from "../ids.js";
 import { assertPlanSetupRecord } from "../plan/plan_state.js";
@@ -113,6 +113,7 @@ async function listRecords(board, collectionName, validator) {
 }
 
 export async function ensureParleyBoardLayout(pluginConfig = {}, board) {
+  assertParleyLocalStateAvailable(pluginConfig, { operation: "Parley board file state" });
   const registry = resolveParleyBoardRegistry(pluginConfig);
   const targetBoard = board ?? Object.values(registry.boards)[0];
   if (!targetBoard) throw new Error("Parley requires at least one configured board");

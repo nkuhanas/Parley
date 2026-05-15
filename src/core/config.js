@@ -7,7 +7,22 @@ import { assertBoardAgentRecord, assertBoardId, assertRuntimeRef } from "./board
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, "../..");
-const DEFAULT_RUNTIME_ROOT = path.join(os.homedir(), ".local", "share", "parley", "runtime");
+const DEFAULT_STANDALONE_STATE_ROOT = path.join(os.homedir(), ".local", "share", "parley");
+export const PARLEY_RUNTIME_MODES = Object.freeze(["standalone", "service", "client", "test"]);
+export const PARLEY_RUNTIME_SURFACES = Object.freeze(["core", "cli", "sdk", "openclaw-adapter", "service", "test"]);
+
+export class ParleyConfigError extends Error {
+  constructor(message, code = "PARLEY_CONFIG_ERROR", details = {}) {
+    super(message);
+    this.name = "ParleyConfigError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+function configError(code, message, details = {}) {
+  return new ParleyConfigError(message, code, details);
+}
 
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -26,6 +41,292 @@ function ensureAbsolutePath(value, fieldName) {
     throw new Error(`${fieldName} must be an absolute path`);
   }
   return path.normalize(expanded);
+}
+
+function ensureAbsoluteConfigPath(value, fieldName) {
+  try {
+    return ensureAbsolutePath(value, fieldName);
+  } catch (error) {
+    throw configError("PARLEY_CONFIG_INVALID_PATH", error.message, { field: fieldName });
+  }
+}
+
+function configObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function pickObjectString(object, keys) {
+  const source = configObject(object);
+  for (const key of keys) {
+    const normalized = nonEmptyString(source[key]);
+    if (normalized != null) return normalized;
+  }
+  return undefined;
+}
+
+function pickEnvString(env, keys) {
+  const source = configObject(env);
+  for (const key of keys) {
+    const normalized = nonEmptyString(source[key]);
+    if (normalized != null) return normalized;
+  }
+  return undefined;
+}
+
+function pickRuntimeString({ pluginConfig, config, env }, objectKeys, envKeys = []) {
+  return pickObjectString(pluginConfig, objectKeys)
+    ?? pickObjectString(config, objectKeys)
+    ?? pickEnvString(env, envKeys);
+}
+
+function configuredRuntimeFields({ pluginConfig, config, env }, objectKeys, envKeys = []) {
+  const fields = [];
+  for (const [sourceName, source, keys] of [
+    ["pluginConfig", configObject(pluginConfig), objectKeys],
+    ["config", configObject(config), objectKeys],
+    ["env", configObject(env), envKeys]
+  ]) {
+    for (const key of keys) {
+      if (nonEmptyString(source[key]) != null) fields.push(`${sourceName}.${key}`);
+    }
+  }
+  return fields;
+}
+
+function normalizeMode(value) {
+  const mode = nonEmptyString(value);
+  if (!mode) return undefined;
+  if (!PARLEY_RUNTIME_MODES.includes(mode)) {
+    throw configError("PARLEY_MODE_INVALID", `PARLEY_MODE must be one of ${PARLEY_RUNTIME_MODES.join("|")}`, { mode });
+  }
+  return mode;
+}
+
+function normalizeSurface(value) {
+  const surface = nonEmptyString(value) ?? "core";
+  if (!PARLEY_RUNTIME_SURFACES.includes(surface)) {
+    throw configError("PARLEY_SURFACE_INVALID", `Parley config surface must be one of ${PARLEY_RUNTIME_SURFACES.join("|")}`, { surface });
+  }
+  return surface;
+}
+
+function normalizeApiUrl(value) {
+  const apiUrl = nonEmptyString(value);
+  if (!apiUrl) return undefined;
+  let parsed;
+  try {
+    parsed = new URL(apiUrl);
+  } catch (_error) {
+    throw configError("PARLEY_API_URL_INVALID", "PARLEY_API_URL must be a valid HTTP(S) URL", { apiUrl });
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw configError("PARLEY_API_URL_INVALID", "PARLEY_API_URL must use http or https", { apiUrl });
+  }
+  return parsed.toString().replace(/\/$/, "");
+}
+
+function isPathInside(candidatePath, parentPath) {
+  const candidate = path.resolve(candidatePath);
+  const parent = path.resolve(parentPath);
+  const relative = path.relative(parent, candidate);
+  return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function assertServiceDbPathAllowed(dbPath, forbiddenRoots) {
+  for (const forbiddenRoot of forbiddenRoots) {
+    if (isPathInside(dbPath, forbiddenRoot)) {
+      throw configError("PARLEY_SERVICE_DB_PATH_FORBIDDEN", "PARLEY_DB_PATH must not be inside a repo, workspace, or configured forbidden root", {
+        dbPath,
+        forbiddenRoot
+      });
+    }
+  }
+}
+
+function collectForbiddenDbRoots(context, repoRoot) {
+  const roots = [
+    ...(Array.isArray(context.pluginConfig?.parleyForbiddenDbRoots) ? context.pluginConfig.parleyForbiddenDbRoots : []),
+    ...(Array.isArray(context.pluginConfig?.forbiddenDbRoots) ? context.pluginConfig.forbiddenDbRoots : []),
+    ...(Array.isArray(context.config?.parleyForbiddenDbRoots) ? context.config.parleyForbiddenDbRoots : []),
+    ...(Array.isArray(context.config?.forbiddenDbRoots) ? context.config.forbiddenDbRoots : [])
+  ];
+  return [
+    repoRoot,
+    ...roots.map((root, index) => ensureAbsoluteConfigPath(root, `parleyForbiddenDbRoots[${index}]`))
+  ];
+}
+
+function localStateInputFields(context) {
+  return configuredRuntimeFields(
+    context,
+    ["parleyStateRoot", "stateRoot", "parleyRuntimeRoot", "runtimeRoot", "parleyDbPath", "dbPath"],
+    ["PARLEY_STATE_ROOT", "PARLEY_RUNTIME_ROOT", "PARLEY_DB_PATH"]
+  );
+}
+
+function resolveCommonRuntimeInputs(options = {}) {
+  const context = {
+    pluginConfig: configObject(options.pluginConfig),
+    config: configObject(options.config),
+    env: options.env ?? process.env
+  };
+  const surface = normalizeSurface(options.surface ?? context.pluginConfig.__parleySurface);
+  const repoRoot = ensureAbsoluteConfigPath(
+    pickRuntimeString(context, ["repoRoot", "parleyRepoRoot"], ["PARLEY_REPO_ROOT"]) ?? DEFAULT_REPO_ROOT,
+    "repoRoot"
+  );
+  const rawMode = pickRuntimeString(context, ["parleyMode", "mode"], ["PARLEY_MODE"]);
+  const apiUrl = normalizeApiUrl(pickRuntimeString(context, ["parleyApiUrl", "apiUrl"], ["PARLEY_API_URL"]));
+  const agentId = pickRuntimeString(context, ["parleyAgentId", "agentId", "parleyDefaultAgentId"], ["PARLEY_AGENT_ID"]);
+  const defaultBoard = pickRuntimeString(context, ["parleyDefaultBoard", "defaultBoard"], ["PARLEY_DEFAULT_BOARD"]);
+  const mode = normalizeMode(rawMode);
+  return { context, surface, repoRoot, rawMode, mode, apiUrl, agentId, defaultBoard };
+}
+
+export function resolveParleyRuntimeConfig(options = {}) {
+  const inputs = resolveCommonRuntimeInputs(options);
+  const { context, surface, repoRoot, rawMode, apiUrl, agentId, defaultBoard } = inputs;
+  let mode = inputs.mode;
+  const warnings = [];
+  let modeSource = rawMode == null ? "default" : "explicit";
+
+  if (mode == null) {
+    if (surface === "cli") {
+      mode = apiUrl == null ? "standalone" : "client";
+      modeSource = apiUrl == null ? "cli_default_standalone" : "cli_default_client_from_api_url";
+    } else if (surface === "test") {
+      mode = "test";
+      modeSource = "test_surface";
+    } else if (surface === "core") {
+      mode = "standalone";
+      modeSource = "core_legacy_default_standalone";
+    } else {
+      throw configError("PARLEY_MODE_REQUIRED", `${surface} requires explicit PARLEY_MODE or parleyMode`, { surface });
+    }
+  }
+
+  if (surface === "openclaw-adapter" && rawMode == null) {
+    throw configError("PARLEY_MODE_REQUIRED", "OpenClaw adapter requires explicit PARLEY_MODE or plugin parleyMode", { surface });
+  }
+  if (surface === "sdk" && rawMode == null) {
+    throw configError("PARLEY_MODE_REQUIRED", "SDK usage requires explicit PARLEY_MODE or constructor/config mode", { surface });
+  }
+  if (surface === "service" && mode !== "service") {
+    throw configError("PARLEY_MODE_REQUIRED", "service surface requires PARLEY_MODE=service", { surface, mode });
+  }
+
+  const stateRootInput = pickRuntimeString(context, ["parleyStateRoot", "stateRoot"], ["PARLEY_STATE_ROOT"]);
+  const runtimeRootInput = pickRuntimeString(context, ["parleyRuntimeRoot", "runtimeRoot"], ["PARLEY_RUNTIME_ROOT"]);
+  const dbPathInput = pickRuntimeString(context, ["parleyDbPath", "dbPath"], ["PARLEY_DB_PATH"]);
+  const testRootInput = pickRuntimeString(context, ["parleyTestRoot", "testRoot"], ["PARLEY_TEST_ROOT"]);
+
+  if (mode === "client") {
+    if (apiUrl == null) {
+      throw configError("PARLEY_API_URL_REQUIRED", "client mode requires PARLEY_API_URL or parleyApiUrl", { surface });
+    }
+    const localInputs = localStateInputFields(context);
+    if (localInputs.length > 0) {
+      throw configError("PARLEY_CLIENT_LOCAL_STATE_FORBIDDEN", "client mode must not configure local Parley state or DB paths", {
+        surface,
+        localInputs
+      });
+    }
+    return {
+      mode,
+      modeSource,
+      surface,
+      repoRoot,
+      apiUrl,
+      agentId,
+      defaultBoard,
+      storageMode: "remote-service",
+      localStateAllowed: false,
+      warnings
+    };
+  }
+
+  if (mode === "service") {
+    if (dbPathInput == null) {
+      throw configError("PARLEY_DB_PATH_REQUIRED", "service mode requires PARLEY_DB_PATH or parleyDbPath", { surface });
+    }
+    const dbPath = ensureAbsoluteConfigPath(dbPathInput, "parleyDbPath");
+    assertServiceDbPathAllowed(dbPath, collectForbiddenDbRoots(context, repoRoot));
+    return {
+      mode,
+      modeSource,
+      surface,
+      repoRoot,
+      dbPath,
+      agentId,
+      defaultBoard,
+      storageMode: "service-db",
+      localStateAllowed: false,
+      warnings
+    };
+  }
+
+  if (mode === "test") {
+    const runtimeRoot = runtimeRootInput != null
+      ? ensureAbsoluteConfigPath(runtimeRootInput, "parleyRuntimeRoot")
+      : testRootInput != null
+        ? path.join(ensureAbsoluteConfigPath(testRootInput, "parleyTestRoot"), "runtime")
+        : null;
+    if (runtimeRoot == null) {
+      throw configError("PARLEY_TEST_ROOT_REQUIRED", "test mode requires PARLEY_TEST_ROOT, parleyTestRoot, or parleyRuntimeRoot", { surface });
+    }
+    return {
+      mode,
+      modeSource,
+      surface,
+      repoRoot,
+      testRoot: testRootInput == null ? null : ensureAbsoluteConfigPath(testRootInput, "parleyTestRoot"),
+      runtimeRoot,
+      agentId,
+      defaultBoard,
+      storageMode: "test-file",
+      localStateAllowed: true,
+      warnings
+    };
+  }
+
+  const runtimeRoot = runtimeRootInput == null ? null : ensureAbsoluteConfigPath(runtimeRootInput, "parleyRuntimeRoot");
+  const stateRoot = stateRootInput == null
+    ? (runtimeRoot == null ? DEFAULT_STANDALONE_STATE_ROOT : path.dirname(runtimeRoot))
+    : ensureAbsoluteConfigPath(stateRootInput, "parleyStateRoot");
+  const resolvedRuntimeRoot = runtimeRoot ?? path.join(stateRoot, "runtime");
+  const implicitStateRoot = stateRootInput == null && runtimeRootInput == null;
+  if (implicitStateRoot) {
+    warnings.push(`standalone mode using implicit PARLEY_STATE_ROOT=${stateRoot}`);
+  }
+  return {
+    mode: "standalone",
+    modeSource,
+    surface,
+    repoRoot,
+    stateRoot,
+    runtimeRoot: resolvedRuntimeRoot,
+    implicitStateRoot,
+    agentId,
+    defaultBoard,
+    storageMode: "standalone-file",
+    localStateAllowed: true,
+    warnings
+  };
+}
+
+export function assertParleyLocalStateAvailable(pluginConfig = {}, options = {}) {
+  const runtimeConfig = resolveParleyRuntimeConfig({
+    ...options,
+    pluginConfig,
+    surface: options.surface ?? pluginConfig?.__parleySurface ?? "core"
+  });
+  if (runtimeConfig.localStateAllowed !== true || runtimeConfig.runtimeRoot == null) {
+    throw configError("PARLEY_LOCAL_STATE_FORBIDDEN", `${options.operation ?? "local Parley state"} is not available in ${runtimeConfig.mode} mode`, {
+      mode: runtimeConfig.mode,
+      surface: runtimeConfig.surface
+    });
+  }
+  return runtimeConfig;
 }
 
 function normalizePathArray(value, fieldName) {
@@ -117,21 +418,21 @@ function normalizeArtifactNamespaces(rawBoard, normalizedBoardId, legacy) {
   return namespaces;
 }
 
-export function resolveParleyConfig(pluginConfig = {}) {
-  const repoRoot = ensureAbsolutePath(nonEmptyString(pluginConfig.repoRoot) ?? DEFAULT_REPO_ROOT, "repoRoot");
-  const runtimeRoot = ensureAbsolutePath(
-    nonEmptyString(pluginConfig.parleyRuntimeRoot) ?? DEFAULT_RUNTIME_ROOT,
-    "parleyRuntimeRoot"
-  );
-
+export function resolveParleyConfig(pluginConfig = {}, options = {}) {
+  const runtimeConfig = assertParleyLocalStateAvailable(pluginConfig, options);
   return {
-    repoRoot,
-    runtimeRoot
+    repoRoot: runtimeConfig.repoRoot,
+    runtimeRoot: runtimeConfig.runtimeRoot,
+    mode: runtimeConfig.mode,
+    stateRoot: runtimeConfig.stateRoot ?? null,
+    testRoot: runtimeConfig.testRoot ?? null,
+    warnings: runtimeConfig.warnings,
+    runtimeConfig
   };
 }
 
-export function resolveParleyPaths(pluginConfig = {}) {
-  const config = resolveParleyConfig(pluginConfig);
+export function resolveParleyPaths(pluginConfig = {}, options = {}) {
+  const config = resolveParleyConfig(pluginConfig, options);
   return {
     ...config,
     threadsDir: path.join(config.runtimeRoot, "threads"),

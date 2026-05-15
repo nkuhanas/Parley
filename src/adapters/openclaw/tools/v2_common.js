@@ -1,5 +1,6 @@
 import { resolveCallerIdentity } from "../../../core/board/board.js";
 import { requireBoardAgent } from "../../../core/board/board.js";
+import { assertParleyLocalStateAvailable } from "../../../core/config.js";
 import { enrichToolDetails } from "../guidance/envelope.js";
 
 function summarizeIdentity(identity) {
@@ -251,6 +252,7 @@ export function callerRuntimeAliasesFromToolContext(toolContext) {
 }
 
 export function resolveToolCaller(api, params) {
+  assertParleyLocalStateAvailable(api.pluginConfig, { operation: "OpenClaw adapter local board access" });
   return resolveCallerIdentity(api.pluginConfig, {
     callerRuntimeRef: params?.callerRuntimeRef ?? callerRuntimeRefFromToolContext(api.toolContext),
     runtimeAliases: callerRuntimeAliasesFromToolContext(api.toolContext),

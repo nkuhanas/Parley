@@ -1,11 +1,26 @@
 # Configuration
 
-Parley reads configuration from the OpenClaw plugin config passed to its tools.
+Parley resolves runtime configuration through an explicit mode contract before any local state writes.
+
+## Runtime mode
+
+Set `PARLEY_MODE` or plugin/config `parleyMode` to one of:
+
+- `standalone`: intentional local file-backed Parley state.
+- `service`: authoritative service process with an explicit DB path.
+- `client`: remote-only client; requires `PARLEY_API_URL`/`parleyApiUrl` and must not configure local state paths.
+- `test`: isolated temp/test state only.
+
+Surface-aware defaulting is intentionally narrow: direct human CLI may default to `standalone` and report its state root, but the OpenClaw adapter must receive an explicit mode. Client mode and unset OpenClaw adapter mode fail before creating local state.
 
 ## Common fields
 
-- `parleyRoot`: base directory for board data.
-- `parleyRuntimeRoot`: directory for thread/message runtime state.
+- `parleyMode`: explicit runtime mode for adapter/configured use.
+- `parleyStateRoot`: base state root for intentional standalone local usage.
+- `parleyRuntimeRoot`: directory for thread/message runtime state in standalone/test usage.
+- `parleyApiUrl`: remote service URL for client mode.
+- `parleyDbPath`: service-mode DB path; must not live inside the repo/workspace.
+- `parleyRoot`: base directory for board data in standalone/local board usage.
 - `parleyRegistry`: global agent registry.
 - `parleyBoards`: explicitly configured boards.
 - `parleyDefaultBoards`: optional host-provided default boards.
