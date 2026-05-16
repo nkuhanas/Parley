@@ -10,14 +10,141 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "repoRoot": { "type": "string" },
-      "parleyRoot": { "type": "string" },
-      "parleyRuntimeRoot": { "type": "string" },
-      "parleyRegistry": { "type": "object", "additionalProperties": true },
-      "parleyBoards": { "type": "object", "additionalProperties": true },
-      "parleyDefaultBoards": { "type": "object", "additionalProperties": true },
-      "parleyAgents": { "type": "object", "additionalProperties": true },
-      "parleyCallerRuntimeRef": { "type": "object", "additionalProperties": true }
+      "repoRoot": {
+        "type": "string"
+      },
+      "parleyRepoRoot": {
+        "type": "string"
+      },
+      "parleyRoot": {
+        "type": "string"
+      },
+      "parleyMode": {
+        "type": "string",
+        "enum": [
+          "standalone",
+          "service",
+          "client",
+          "test"
+        ]
+      },
+      "parleyApiUrl": {
+        "type": "string"
+      },
+      "parleyAuthTokenFile": {
+        "type": "string"
+      },
+      "parleyAuthToken": {
+        "type": "string"
+      },
+      "parleyAgentId": {
+        "type": "string"
+      },
+      "parleyDefaultAgentId": {
+        "type": "string"
+      },
+      "parleyDefaultAgentDisplayName": {
+        "type": "string"
+      },
+      "parleyDefaultBoard": {
+        "type": "string"
+      },
+      "parleyStateRoot": {
+        "type": "string"
+      },
+      "parleyRuntimeRoot": {
+        "type": "string"
+      },
+      "parleyTestRoot": {
+        "type": "string"
+      },
+      "parleyDbPath": {
+        "type": "string"
+      },
+      "parleyForbiddenDbRoots": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "parleyRegistry": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "parleyBoards": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "parleyDefaultBoards": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "parleyAgents": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "parleyCallerRuntimeRef": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "parleyParleyBoardRoot": {
+        "type": "string"
+      },
+      "parleyParleyStateRoot": {
+        "type": "string"
+      },
+      "parleyParleyManagedArtifactRoot": {
+        "type": "string"
+      },
+      "parleyParleyPlanExtension": {
+        "type": "string"
+      }
     }
+  },
+  "contracts": {
+    "tools": [
+      "parley_describe",
+      "parley_open_thread",
+      "parley_claim_turn",
+      "parley_reply_thread",
+      "parley_probe_thread",
+      "parley_settle_turn",
+      "parley_conclude_thread",
+      "parley_record_transport_result",
+      "parley_dispatch_transport_request",
+      "parley_record_human_summary_anchor",
+      "parley_register_artifact",
+      "parley_create_object",
+      "parley_record_effect",
+      "parley_create_obligation",
+      "parley_create_trigger",
+      "parley_resolve_obligation",
+      "parley_where_am_i",
+      "parley_my_boards",
+      "parley_board_projection",
+      "parley_record_relationship",
+      "parley_remove_relationship",
+      "parley_checkpoint_projection",
+      "parley_validate_plan",
+      "parley_validate_state",
+      "parley_create_plan",
+      "parley_write_plan_overview",
+      "parley_add_plan_phase",
+      "parley_add_plan_checkpoint",
+      "parley_get_plan_setup_status",
+      "parley_request_plan_review",
+      "parley_mark_plan_ready",
+      "parley_record_review_decision",
+      "parley_activate_plan",
+      "parley_pause_plan",
+      "parley_resume_plan",
+      "parley_record_plan_disposition",
+      "parley_record_phase_outcome",
+      "parley_query_runtime_obligations",
+      "parley_query_board_obligations",
+      "parley_query_search",
+      "parley_query",
+      "parley_mutate"
+    ]
   }
 }
