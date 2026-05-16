@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-rc.1
+
+- Normalize release tagging to SemVer release-candidate tags for repo-backed ClawHub distribution.
+- Publish Parley as a standalone OpenClaw plugin from the GitHub repository source instead of npm-backed release handling.
+- Keep OpenClaw compatibility metadata aligned with tested target 2026.5.4 and package readiness checks.
+
 ## 0.1.0-alpha.4
 
 - Restore the ClawHub release artifact to the canonical ClawPack/npm-pack format.
