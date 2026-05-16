@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-rc.3
+
+- Replace escaped NUL key separators with JSON-encoded tuple keys to avoid ClawHub unicode-control scan review triggers.
+
 ## 0.1.0-rc.2
 
 - Reduce ClawHub/OpenClaw scanner findings by keeping package-only publish tooling out of the shipped artifact.

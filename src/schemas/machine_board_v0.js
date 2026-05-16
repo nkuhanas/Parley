@@ -260,7 +260,7 @@ export function createMachineBoardEffectId({ board_id, effect_kind, idempotency_
   const boardId = assertNonEmptyString(board_id, "board_id");
   const effectKind = assertEnum(effect_kind, MACHINE_BOARD_DOMAIN_EFFECT_KINDS, "effect_kind");
   const key = assertNonEmptyString(idempotency_key, "idempotency_key");
-  const digest = createHash("sha256").update(`${boardId}\u0000${effectKind}\u0000${key}`).digest("hex").slice(0, 32);
+  const digest = createHash("sha256").update(JSON.stringify([boardId, effectKind, key])).digest("hex").slice(0, 32);
   return `effect_machine_board_${digest}`;
 }
 

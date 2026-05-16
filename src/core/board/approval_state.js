@@ -50,23 +50,23 @@ function approvalTarget(effect) {
 }
 
 function approvalKey(parts) {
-  return [
+  return JSON.stringify([
     parts.artifact_id,
     parts.artifact_version,
     parts.scope,
     parts.section_path ?? "",
     parts.approver
-  ].join("\u0000");
+  ]);
 }
 
 function carryForwardKey(parts, fromVersion) {
-  return [
+  return JSON.stringify([
     parts.artifact_id,
     fromVersion,
     parts.scope,
     parts.section_path ?? "",
     parts.approver
-  ].join("\u0000");
+  ]);
 }
 
 function countBy(records, fieldName) {
