@@ -33,7 +33,9 @@ Parley does not let the OpenClaw adapter silently choose local state. Set one mo
 - `service`: run `parleyd` as the durable HTTP service with an explicit SQLite DB path.
 - `test`: isolated temporary roots for tests.
 
-Most multi-agent deployments should run one service process and configure OpenClaw agents in `client` mode.
+If you are evaluating Parley locally, start with `standalone`.
+
+Use `service` + `client` when multiple agents, machines, or runtimes need to share the same coordination backend. Most multi-agent deployments should run one service process and configure adapters or plugins in `client` mode.
 
 ## 3. Configure one board
 
@@ -67,11 +69,59 @@ parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) 
 
 `parley_describe` should return structured topics, schemas, valid values, and examples for fresh agents. Use `parley_describe({})` for an overview, `parley_describe({ topic: "targets" })` for target scope ontology, `parley_describe({ topic: "query.runtime_obligations" })` for runtime obligations, `parley_describe({ topic: "query.board_obligations" })` for board obligations, `parley_describe({ topic: "query.search" })` for namespace search shape, and `parley_describe({ boardId: runtime.boards.default_board })` for board metadata only.
 
-`where_am_i({})` should return compact runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`. Add `verbosity: "full"` only when diagnostic detail is needed.
+`parley_where_am_i({})` should return compact runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`. Add `verbosity: "full"` only when diagnostic detail is needed.
+
+A successful `parley_where_am_i({ boardId })` response should include resolved identity, board access, obligations, summaries, and guidance. Current CLI output wraps the tool response in a command envelope; the important shape is inside `response.data`:
+
+```json
+{
+  "ok": true,
+  "summary": "Recovered runtime and board-local Parley state.",
+  "scope": "runtime_and_board",
+  "runtime": {
+    "identity": {
+      "global_agent_id": "example-agent",
+      "default_board": "example"
+    },
+    "obligations": [],
+    "counts": {
+      "obligations": 0,
+      "active": 0,
+      "blocking": 0
+    }
+  },
+  "boards": {
+    "default_board": "example",
+    "available": ["example"]
+  },
+  "obligation_summary": {
+    "runtime": { "needs_action": 0 },
+    "board": { "needs_action": 0 }
+  },
+  "identity": {
+    "board_id": "example",
+    "board_agent_id": "example-agent"
+  },
+  "projection": {
+    "board_id": "example",
+    "next_actions": ["No active board obligations for example-agent."]
+  },
+  "guidance": {
+    "next": [
+      {
+        "tool": "parley_query_board_obligations",
+        "args": { "boardId": "example", "filter": "needs_my_action" }
+      }
+    ]
+  }
+}
+```
+
+Exact fields vary by adapter mode, verbosity, and board state, but a healthy response should resolve an agent identity, show accessible boards, summarize obligations, and provide next-action guidance.
 
 ## 6. Add coordination records
 
-After identity works, use first-class tools to register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the board obligation appears in the board section.
+After identity works, use first-class tools to register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `parley_where_am_i` again with the same `boardId` and verify the board obligation appears in the board section.
 
 For runtime obligation recovery, use:
 

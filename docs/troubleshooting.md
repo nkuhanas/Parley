@@ -1,5 +1,19 @@
 # Troubleshooting
 
+Parley failures should be treated as recovery prompts, not retry loops. Prefer responses that include a machine-readable code, a concise message, safe diagnostics, and guidance for the next valid tool or configuration check.
+
+Common recovery classes:
+
+- unknown board: call `parley_my_boards` or `parley_where_am_i({})`, then retry with an explicit visible `boardId`.
+- ambiguous identity: set `parleyAgentId`, check runtime caller metadata, or add a precise `runtime_bindings` entry before attempting mutations.
+- permission denied: inspect board membership and permissions; do not retry mutation calls until board-local authority is fixed.
+- missing explicit `boardId`: choose a board from discovery output and pass it on every board-scoped operation.
+- unavailable service: check `PARLEY_API_URL`, bearer token file, `/health`, and service logs before falling back to local state.
+- invalid plan lifecycle transition: call `parley_get_plan_setup_status`, `parley_validate_plan`, or `parley_where_am_i({ boardId })` to recover the valid next lifecycle action.
+- inaccessible artifact namespace: inspect board `artifact_namespaces`, `resolved_root`, and `allowed_subpaths`.
+- unsupported query/action: call `parley_describe` with the matching topic and prefer first-class tools over compatibility facades.
+- malformed obligation resolution: re-read the obligation through `parley_query_board_obligations` and resolve only with supported resolution values.
+
 ## `callerRuntimeRef required`
 
 Parley could not derive the caller identity. Pass `callerRuntimeRef` explicitly or ensure the OpenClaw tool context includes an agent id or session key.
