@@ -2,8 +2,6 @@
   <img src="./docs/assets/parley-lockup.png" alt="Parley" width="460" />
 </p>
 
-<h1 align="center">Parley</h1>
-
 <p align="center">
   <strong>Persistent coordination state for AI agents: harness-agnostic, self-describing, and recovery-first.</strong>
 </p>
@@ -26,9 +24,11 @@
   ·
   <a href="#why-parley-exists">Why Parley exists</a>
   ·
-  <a href="#recovery-example">Recovery</a>
+  <a href="#recovery-and-guidance">Recovery</a>
   ·
   <a href="#install">Install</a>
+  ·
+  <a href="#bootstrap-flow">Bootstrap</a>
   ·
   <a href="#core-surfaces">Core surfaces</a>
   ·
@@ -66,9 +66,9 @@ Agents need reliable answers to boring but critical questions:
 
 The goal is simple: when Parley is present, coordination feels routine. When it is missing, the system feels unsafe.
 
-## How Parley works
+## How Parley fits
 
-Parley separates transient agent conversation from durable coordination state.
+Parley separates transient agent execution from durable coordination state.
 
 ```text
 Agent runtime / harness
@@ -84,65 +84,17 @@ Parley service / local store
 Boards, plans, artifacts, effects, obligations, triggers, relationships
 ```
 
-OpenClaw can run the agent. Codex CLI can run the agent. Another system can run the agent.
+OpenClaw, Codex CLI, LangGraph, CrewAI, or a custom runtime can run agents. Parley sits underneath or beside those systems as durable coordination infrastructure: identity recovery, board-scoped authority, obligations, artifacts, effects, relationships, plan lifecycle state, and audit/recovery surfaces.
 
-Parley owns the coordination state those agents need to recover, coordinate, and prove what happened.
+A caller does not gain project authority merely by invoking a tool. Parley resolves the caller, checks board membership, checks board-local permissions, and fails closed when identity or scope is ambiguous.
 
-## Coordination backend, not orchestration framework
+## Recovery and guidance
 
-Parley is not a replacement for OpenClaw, Codex CLI, LangGraph, CrewAI, or other agent runtimes.
+Parley is recovery-first. A cold agent can call `parley_describe`, `parley_where_am_i`, and obligation queries to recover identity, board access, pending work, and valid next actions.
 
-Those systems decide how agents execute, call tools, route tasks, or manage workflows.
+Parley tools return more than raw records. They include `summary`, `guidance`, diagnostics, scoped identifiers, and safe next operations so agents do not need to keep Parley's protocol in context.
 
-Parley sits underneath or beside them as durable coordination infrastructure:
-
-- identity recovery
-- board-scoped authority
-- obligations
-- artifacts
-- effects
-- relationships
-- plan lifecycle state
-- audit and recovery surfaces
-
-## What makes Parley different
-
-### Recovery is first-class
-
-Agents can restart cold, call `parley_where_am_i`, and recover their board access, active obligations, open plan state, and recommended next actions.
-
-### Tool outputs guide agents
-
-Parley tools do not only return raw records. They return summaries, diagnostics, guidance, valid next actions, and scoped identifiers so agents do not need to memorize Parley's protocol in context.
-
-### Authority is scoped
-
-Parley distinguishes read access, mutation access, board scope, runtime identity, and default board hints. Mutations are explicit and board-scoped.
-
-### Coordination state lives outside chat
-
-Important state is recorded as board state: artifacts, effects, obligations, relationships, checkpoints, triggers, and plans. Chat history becomes a working surface, not the source of truth.
-
-## The guidance loop
-
-Parley tools are designed to help agents recover and choose valid next actions.
-
-For example:
-
-1. A cold agent calls `parley_describe`.
-2. Parley explains the available capabilities and safe entry points.
-3. The agent calls `parley_where_am_i`.
-4. Parley returns board access, open obligations, relevant plans, diagnostics, and `needs_my_action` guidance.
-5. The agent performs work and records artifacts, effects, or obligation resolutions.
-6. Parley returns the next valid operations.
-
-This means agents do not need to keep the whole coordination protocol in their prompt context. Parley returns state-specific guidance at the point of use.
-
-## Recovery example
-
-An agent is assigned phase work, writes an artifact, then crashes before reporting completion.
-
-A fresh agent can restart with no chat history and call:
+Example recovery flow:
 
 ```text
 parley_describe
@@ -150,42 +102,18 @@ parley_where_am_i
 parley_query_board_obligations
 ```
 
-Parley can tell it:
+A fresh agent can use those calls to recover:
 
-- which agent identity it resolved as
-- which boards it can access
-- which obligations are still open
-- which plan phase is active
-- which artifacts or effects were already recorded
-- what action is needed next
-
-The agent can resume from durable coordination state instead of reconstructing the project from chat logs.
-
-## Identity and authority model
-
-Parley resolves authority through a predictable hierarchy:
-
-```text
-runtime caller
- -> global agent identity
- -> board membership
- -> board-local permissions
- -> obligations / plans / artifacts / effects
-```
-
-A caller does not gain project authority merely by invoking a tool. Parley resolves the caller, checks board membership, checks board-local permissions, and fails closed when identity or scope is ambiguous.
+- resolved identity
+- accessible boards
+- open obligations
+- active plan phase
+- recorded artifacts/effects
+- next needed action
 
 ## What Parley is not
 
-Parley is not:
-
-- an agent framework
-- a model router
-- a sandbox
-- a prompt library
-- a workflow graph engine
-- a replacement for your harness
-- a system for granting host permissions
+Parley is not an agent framework, model router, sandbox, prompt library, workflow graph engine, replacement for your harness, or system for granting host permissions.
 
 Parley coordinates durable project state. Your harness still runs the agents.
 
@@ -258,101 +186,13 @@ If you are coordinating multiple agents, machines, or runtimes, run a Parley ser
 A typical first interaction is:
 
 1. Install Parley.
-2. Configure an agent identity.
+2. Configure one agent identity and one board.
 3. Call `parley_describe`.
 4. Call `parley_where_am_i`.
 5. Inspect available boards and obligations.
 6. Record or resolve coordination state.
 
-A fresh agent can recover without prior chat context:
-
-```js
-parley_describe({})
-
-const boards = parley_my_boards({})
-
-const status = parley_where_am_i({
-  boardId: boards.default_board
-})
-
-const work = parley_query_board_obligations({
-  boardId: boards.default_board,
-  filter: "needs_my_action",
-  targetKinds: ["plans"]
-})
-```
-
-This lets the agent recover:
-
-- accessible boards
-- board-local identity
-- current runtime and board obligations
-- allowed next actions
-- relevant plans, artifacts, effects, and relationships
-
-## Core surfaces
-
-| Surface | Examples | Purpose |
-|---|---|---|
-| Recovery | `parley_describe`, `parley_where_am_i`, `parley_my_boards` | Help agents recover identity, scope, and next work |
-| Runtime protocol | threads, messages, turns | Coordinate bounded exchanges outside board state |
-| Board records | artifacts, objects, effects, relationships | Persist durable evidence and project context |
-| Obligations | create, query, resolve obligations | Track who needs to do what |
-| Plans | setup, review, activate, advance, validate | Govern lifecycle-managed work |
-| Triggers | create triggers | Bind future coordination events to board state |
-| Validation | validate plan/state | Detect invalid or inconsistent coordination state |
-
-`parley_describe` is the self-describing metadata tool for fresh agents. Omit `topic` for the overview; use topics such as `recovery`, `targets`, `query`, `query.runtime_obligations`, `query.board_obligations`, `query.search`, `mutate`, `mutate.create_plan`, and `boards/identity` for structured schemas, valid values, aliases, and examples.
-
-`parley_where_am_i({})` is boardless runtime recovery plus board discovery hints. All board-scoped reads and writes require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
-
-Prefer first-class tools for normal agent work:
-
-- `parley_query_runtime_obligations`
-- `parley_query_board_obligations`
-- `parley_query_search`
-- `parley_board_projection`
-- `parley_validate_plan`
-- `parley_validate_state`
-- `parley_register_artifact`
-- `parley_create_object`
-- `parley_record_effect`
-- `parley_create_obligation`
-- `parley_record_relationship`
-- `parley_remove_relationship`
-- `parley_create_plan`
-
-`parley_query` and `parley_mutate` remain advanced compatibility facades over those operations.
-
-Parley tool outputs are agent-facing coordination responses. They include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Obligation outputs also include derived `priority` labels (`critical`, `high`, `normal`, `low`), and `needs_my_action` lists sort by priority, then age. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
-
-See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
-
-See `docs/supported-runtimes.md` for the integration contract used by OpenClaw, Codex CLI, custom scripts, and future adapters.
-
-## Use cases
-
-Parley is useful for:
-
-- recovering cold agents after restart or context compaction
-- coordinating multiple agents on one project
-- tracking artifacts and effects across long-running work
-- maintaining plan lifecycle state outside chat
-- separating agent runtime execution from durable project state
-- running OpenClaw agents against a shared coordination backend
-- giving Codex CLI agents a durable coordination layer through CLI or HTTP
-- using custom scripts or non-OpenClaw runtimes against Parley service APIs
-- supporting human review, approvals, and handoffs through obligations
-
-## State synchronization
-
-Parley records coordination state. It does not automatically know about external changes made outside Parley.
-
-If a human, script, or agent changes project files, deployment state, or external systems without recording an artifact, effect, checkpoint, or obligation update in Parley, the board may become stale.
-
-For reliable coordination, significant external changes should be recorded through Parley.
-
-## Minimal board config
+Most Parley workflows need at least one registered board before board-scoped recovery, obligations, artifacts, or plans become useful. For first evaluation, start with one agent, one board, and one artifact namespace. Add more boards, roles, and namespaces only after the identity path works.
 
 <details>
 <summary>Show minimal board config</summary>
@@ -413,7 +253,7 @@ const pluginConfig = {
 | `resolved_root` | Yes if using artifact namespaces | Actual filesystem path backing the namespace |
 | `members` | Yes | Board-local member list and roles |
 
-For first evaluation, start with one agent, one board, and one artifact namespace. Add more boards, roles, and namespaces only after the identity path works.
+</details>
 
 Smoke the identity path:
 
@@ -432,22 +272,89 @@ parley_where_am_i({
 }) // optional diagnostic detail
 ```
 
-</details>
+A fresh agent can recover without prior chat context:
 
-## Roadmap
+```js
+parley_describe({})
 
-Potential future work:
+const boards = parley_my_boards({})
 
-- more end-to-end recovery and handoff examples
-- deeper Codex CLI integration examples
-- event/audit export
-- webhooks for effect, obligation, and plan events
-- richer service deployment docs
-- generated schema/reference documentation
+const status = parley_where_am_i({
+  boardId: boards.default_board
+})
 
-## Current focus
+const work = parley_query_board_obligations({
+  boardId: boards.default_board,
+  filter: "needs_my_action",
+  targetKinds: ["plans"]
+})
+```
 
-Parley is currently focused on:
+This lets the agent recover accessible boards, board-local identity, current runtime and board obligations, allowed next actions, and relevant plans, artifacts, effects, and relationships.
+
+## Core surfaces
+
+| Surface | Examples | Purpose |
+|---|---|---|
+| Recovery | `parley_describe`, `parley_where_am_i`, `parley_my_boards` | Help agents recover identity, scope, and next work |
+| Runtime protocol | threads, messages, turns | Coordinate bounded exchanges outside board state |
+| Board records | artifacts, objects, effects, relationships | Persist durable evidence and project context |
+| Obligations | create, query, resolve obligations | Track who needs to do what |
+| Plans | setup, review, activate, advance, validate | Govern lifecycle-managed work |
+| Triggers | create triggers | Bind future coordination events to board state |
+| Validation | validate plan/state | Detect invalid or inconsistent coordination state |
+
+`parley_describe` is the self-describing metadata tool for fresh agents. Omit `topic` for the overview; use topics such as `recovery`, `targets`, `query`, `query.runtime_obligations`, `query.board_obligations`, `query.search`, `mutate`, `mutate.create_plan`, and `boards/identity` for structured schemas, valid values, aliases, and examples.
+
+`parley_where_am_i({})` is boardless runtime recovery plus board discovery hints. All board-scoped reads and writes require an explicit `boardId`; `default_board` is returned as a selection hint, not silently applied.
+
+Prefer first-class tools for normal agent work:
+
+- `parley_query_runtime_obligations`
+- `parley_query_board_obligations`
+- `parley_query_search`
+- `parley_board_projection`
+- `parley_validate_plan`
+- `parley_validate_state`
+- `parley_register_artifact`
+- `parley_create_object`
+- `parley_record_effect`
+- `parley_create_obligation`
+- `parley_record_relationship`
+- `parley_remove_relationship`
+- `parley_create_plan`
+
+`parley_query` and `parley_mutate` remain advanced compatibility facades over those operations.
+
+Parley tool outputs are agent-facing coordination responses. They include compact result data plus `ok`, `summary`, `guidance`, and safe `diagnostics` when useful. Obligation outputs also include derived `priority` labels (`critical`, `high`, `normal`, `low`), and `needs_my_action` lists sort by priority, then age. Diagnostic identity/runtime provenance such as runtime refs and aliases remains behind explicit full-verbosity paths.
+
+See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
+
+See `docs/supported-runtimes.md` for the integration contract used by OpenClaw, Codex CLI, custom scripts, and future adapters.
+
+## Use cases
+
+Parley is useful for:
+
+- recovering cold agents after restart or context compaction
+- coordinating multiple agents on one project
+- tracking artifacts and effects across long-running work
+- maintaining plan lifecycle state outside chat
+- separating agent runtime execution from durable project state
+- running OpenClaw agents against a shared coordination backend
+- giving Codex CLI agents a durable coordination layer through CLI or HTTP
+- using custom scripts or non-OpenClaw runtimes against Parley service APIs
+- supporting human review, approvals, and handoffs through obligations
+
+## State synchronization
+
+Parley records coordination state, but it does not automatically know about external changes made outside Parley. Significant external changes should be recorded as artifacts, effects, checkpoints, or obligation updates.
+
+## Status
+
+Parley is release-candidate software.
+
+Current focus:
 
 - stabilizing the service/client boundary
 - improving OpenClaw primary-adapter ergonomics
@@ -455,9 +362,12 @@ Parley is currently focused on:
 - hardening recovery, obligation, and plan lifecycle flows
 - expanding end-to-end examples for mixed-runtime coordination
 
-## Status
+Potential future work:
 
-Parley is release-candidate software. Current goals are a stable JavaScript package shape, repo-backed ClawHub distribution, OpenClaw plugin metadata, a generic board configuration model, reliable recovery surfaces, scoped authority, agent-facing guidance, and passing tests.
+- event/audit export
+- webhooks for effect, obligation, and plan events
+- richer service deployment docs
+- generated schema/reference documentation
 
 ## License
 

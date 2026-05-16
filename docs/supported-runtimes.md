@@ -87,6 +87,14 @@ parley_query_board_obligations({ boardId: "project", filter: "needs_my_action" }
 
 Use `default_board` as a selection hint, not as implicit authority.
 
+## State synchronization
+
+Parley records coordination state. It does not automatically know about external changes made outside Parley.
+
+If a human, script, or agent changes project files, deployment state, or external systems without recording an artifact, effect, checkpoint, or obligation update in Parley, the board may become stale.
+
+For reliable coordination, significant external changes should be recorded through Parley.
+
 ## OpenClaw
 
 OpenClaw is the primary adapter today. It registers Parley tools, derives caller runtime metadata from trusted OpenClaw context, and routes calls through standalone/local or client/service mode according to configuration.
