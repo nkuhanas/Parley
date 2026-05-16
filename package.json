@@ -21,8 +21,9 @@
   },
   "scripts": {
     "test": "node --test",
-    "test:package": "node --test test/parley.package_metadata.test.js",
+    "test:package": "node --test test/parley.package_metadata.test.js test/parley.clawhub_dry_run.test.js",
     "pack:dry-run": "npm pack --dry-run",
+    "clawhub:dry-run": "node ./tools/package/clawhub-dry-run.js",
     "cli": "node ./src/cli/parley.js",
     "service": "node ./src/cli/parleyd.js"
   },

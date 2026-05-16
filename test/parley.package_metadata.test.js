@@ -62,7 +62,8 @@ test("npm pack dry-run includes plugin, CLI, docs, and executable bins", () => {
     "src/adapters/openclaw/index.js",
     "src/cli/parley.js",
     "src/cli/parleyd.js",
-    "src/cli/parley-codex.js"
+    "src/cli/parley-codex.js",
+    "tools/package/clawhub-dry-run.js"
   ]) {
     assert.ok(files.has(requiredPath), `${requiredPath} should be included in npm pack output`);
   }

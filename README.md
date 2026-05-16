@@ -115,10 +115,10 @@ npm run pack:dry-run
 openclaw plugins install -l .
 ```
 
-For ClawHub/package readiness checks without publishing:
+For ClawHub/package readiness checks without publishing, use the wrapper. It uses a globally installed `clawhub` when available, otherwise it falls back to `npx --yes clawhub@0.15.0`, and supplies the required GitHub source metadata from the local checkout:
 
 ```sh
-clawhub package publish . --dry-run --json
+npm run clawhub:dry-run
 ```
 
 Or register tools from another OpenClaw plugin:
