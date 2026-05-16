@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { createParleyEmbeddedClient } from "../src/client/index.js";
@@ -11,6 +12,9 @@ import { runParleyCli } from "../src/cli/parley.js";
 import { closeAllParleySqliteLedgers } from "../src/core/storage/sqlite_ledger.js";
 
 const execFileAsync = promisify(execFile);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO_ROOT = path.resolve(__dirname, "..");
 
 async function exists(targetPath) {
   try {
@@ -103,7 +107,7 @@ function memoryStream() {
 
 async function runCli(args, options = {}) {
   return execFileAsync(process.execPath, ["src/cli/parley.js", ...args], {
-    cwd: path.resolve("/srv/workspaces/Parley"),
+    cwd: REPO_ROOT,
     env: options.env,
     maxBuffer: 1024 * 1024
   });
