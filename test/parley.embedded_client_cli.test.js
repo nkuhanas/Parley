@@ -113,6 +113,14 @@ async function runCli(args, options = {}) {
   });
 }
 
+function parseJsonEnvelope(text) {
+  const jsonStart = text.indexOf("{");
+  const jsonEnd = text.lastIndexOf("}");
+  assert.notEqual(jsonStart, -1, `expected JSON object in ${JSON.stringify(text)}`);
+  assert.ok(jsonEnd > jsonStart, `expected complete JSON object in ${JSON.stringify(text)}`);
+  return JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+}
+
 test("embedded standalone client calls service queries in-process", async () => {
   await withTempRoot(async (tempRoot) => {
     const client = createParleyEmbeddedClient({
@@ -218,7 +226,7 @@ test("CLI client mode still refuses missing API URL", async () => {
     await assert.rejects(
       () => runCli(["mode"], { env: cliEnv(tempRoot, { PARLEY_MODE: "client" }) }),
       (error) => {
-        const parsed = JSON.parse(error.stderr);
+        const parsed = parseJsonEnvelope(error.stderr);
         assert.equal(parsed.ok, false);
         assert.equal(parsed.error.code, "PARLEY_API_URL_REQUIRED");
         return true;
