@@ -105,12 +105,20 @@ Or install the package directly:
 npm install @nkuhanas/parley
 ```
 
-For local development:
+For local development from a Parley checkout:
 
 ```sh
 npm install
 npm test
-openclaw plugins install -l ./parley
+npm run test:package
+npm run pack:dry-run
+openclaw plugins install -l .
+```
+
+For ClawHub/package readiness checks without publishing:
+
+```sh
+clawhub package publish . --dry-run --json
 ```
 
 Or register tools from another OpenClaw plugin:

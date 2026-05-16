@@ -21,6 +21,8 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:package": "node --test test/parley.package_metadata.test.js",
+    "pack:dry-run": "npm pack --dry-run",
     "cli": "node ./src/cli/parley.js",
     "service": "node ./src/cli/parleyd.js"
   },
@@ -61,13 +63,16 @@
     "extensions": [
       "./plugin.js"
     ],
+    "runtimeExtensions": [
+      "./plugin.js"
+    ],
     "compat": {
-      "pluginApi": ">=2026.4.27",
-      "minGatewayVersion": "2026.4.27"
+      "pluginApi": ">=2026.5.4",
+      "minGatewayVersion": "2026.5.4"
     },
     "build": {
-      "openclawVersion": "2026.4.27",
-      "pluginSdkVersion": "2026.4.27"
+      "openclawVersion": "2026.5.4",
+      "pluginSdkVersion": "2026.5.4"
     }
   },
   "bin": {
