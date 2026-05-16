@@ -71,7 +71,47 @@ parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) 
 
 `parley_where_am_i({})` should return compact runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`. Add `verbosity: "full"` only when diagnostic detail is needed.
 
-A successful `parley_where_am_i({ boardId })` response should include resolved identity, board access, obligations, summaries, and guidance. Current CLI output wraps the tool response in a command envelope; the important shape is inside `response.data`:
+A healthy `parley_where_am_i({})` response should resolve the caller, show accessible boards, and provide recovery guidance. Current CLI output wraps the tool response in a command envelope; the important shape is inside `response.data`:
+
+```json
+{
+  "ok": true,
+  "summary": "Recovered runtime identity and board discovery hints.",
+  "scope": "runtime",
+  "runtime": {
+    "identity": {
+      "global_agent_id": "my-agent",
+      "display_name": "My Agent",
+      "default_board": "project"
+    },
+    "obligations": [],
+    "counts": {
+      "obligations": 0,
+      "active": 0,
+      "blocking": 0
+    }
+  },
+  "boards": {
+    "default_board": "project",
+    "available": ["project"],
+    "hint": "Call parley_where_am_i({ boardId }) for compact board-local recovery."
+  },
+  "obligation_summary": {
+    "runtime": { "needs_action": 0 }
+  },
+  "guidance": {
+    "next": [
+      {
+        "tool": "parley_where_am_i",
+        "args": { "boardId": "project" },
+        "reason": "Recover board-local role, permissions, obligations, and checkpoints for the default board."
+      }
+    ]
+  }
+}
+```
+
+A successful `parley_where_am_i({ boardId })` response should include resolved identity, board access, obligations, summaries, and guidance:
 
 ```json
 {

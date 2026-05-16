@@ -2,7 +2,7 @@
   "name": "@nkuhanas/parley",
   "version": "0.1.0-rc.4",
   "type": "module",
-  "description": "Board-scoped coordination runtime and OpenClaw tools for AI agents",
+  "description": "Harness-agnostic coordination state, recovery, obligations, and plan lifecycle tools for AI agents",
   "main": "./index.js",
   "exports": {
     ".": "./index.js",
@@ -54,11 +54,15 @@
     "SECURITY.md"
   ],
   "keywords": [
-    "openclaw",
-    "plugin",
-    "agents",
+    "ai-agents",
+    "agent-coordination",
+    "multi-agent",
     "coordination",
-    "workflow"
+    "workflow",
+    "recovery",
+    "openclaw",
+    "codex-cli",
+    "plugin"
   ],
   "openclaw": {
     "extensions": [

@@ -1,11 +1,15 @@
-# Parley
-
-Persistent coordination state for AI agents: harness-agnostic, self-describing, and recovery-first.
-
-Parley gives agents durable coordination state outside chat history.
-
 <p align="center">
   <img src="./docs/assets/parley-lockup.png" alt="Parley" width="460" />
+</p>
+
+<h1 align="center">Parley</h1>
+
+<p align="center">
+  <strong>Persistent coordination state for AI agents: harness-agnostic, self-describing, and recovery-first.</strong>
+</p>
+
+<p align="center">
+  Parley gives agents durable coordination state outside chat history.
 </p>
 
 <p align="center">
@@ -27,6 +31,8 @@ Parley gives agents durable coordination state outside chat history.
   <a href="#install">Install</a>
   ·
   <a href="#core-surfaces">Core surfaces</a>
+  ·
+  <a href="./docs/supported-runtimes.md">Runtimes</a>
   ·
   <a href="./docs/getting-started.md">Docs</a>
 </p>
@@ -322,6 +328,8 @@ Parley tool outputs are agent-facing coordination responses. They include compac
 
 See `docs/getting-started.md` and `examples/basic-board/` for a complete example.
 
+See `docs/supported-runtimes.md` for the integration contract used by OpenClaw, Codex CLI, custom scripts, and future adapters.
+
 ## Use cases
 
 Parley is useful for:
@@ -388,6 +396,25 @@ const pluginConfig = {
 };
 ```
 
+### Minimal config fields
+
+| Field | What to change | Purpose |
+|---|---|---|
+| `parleyRoot` | Usually yes | Root directory for local Parley state in standalone/local usage |
+| `parleyRegistry.agents` | Yes | Global agent identities Parley can resolve |
+| `runtime_bindings` | Yes | Maps runtime caller metadata, such as OpenClaw or Codex, to a Parley agent |
+| `default_board` | Usually yes | Board selection hint for recovery and bootstrap flows |
+| `memberships` | Yes | Declares which boards the global agent belongs to |
+| `parleyBoards` | Yes | Defines available boards and their storage/configuration |
+| `board_root` | Yes | Filesystem root for board-local state |
+| `artifact_namespaces` | Optional at first | Declares named artifact/search roots for plans, references, or project files |
+| `roles` | Usually yes | Assigns board-local capabilities or semantic responsibilities |
+| `uri_prefix` | Yes if using artifact namespaces | Stable logical URI prefix exposed to agents |
+| `resolved_root` | Yes if using artifact namespaces | Actual filesystem path backing the namespace |
+| `members` | Yes | Board-local member list and roles |
+
+For first evaluation, start with one agent, one board, and one artifact namespace. Add more boards, roles, and namespaces only after the identity path works.
+
 Smoke the identity path:
 
 ```js
@@ -412,11 +439,21 @@ parley_where_am_i({
 Potential future work:
 
 - more end-to-end recovery and handoff examples
-- Codex CLI integration examples
+- deeper Codex CLI integration examples
 - event/audit export
 - webhooks for effect, obligation, and plan events
 - richer service deployment docs
 - generated schema/reference documentation
+
+## Current focus
+
+Parley is currently focused on:
+
+- stabilizing the service/client boundary
+- improving OpenClaw primary-adapter ergonomics
+- documenting Codex CLI and non-OpenClaw runtime usage
+- hardening recovery, obligation, and plan lifecycle flows
+- expanding end-to-end examples for mixed-runtime coordination
 
 ## Status
 
