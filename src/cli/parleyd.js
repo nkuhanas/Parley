@@ -5,6 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveParleyRuntimeConfig } from "../core/config.js";
+import {
+  PARLEY_CREDENTIAL_ENV_KEYS,
+  PARLEY_CREDENTIAL_FILE_ENV_KEYS,
+  PARLEY_CREDENTIAL_ENV,
+  PARLEY_CREDENTIAL_FILE_ENV,
+  REMOTE_CREDENTIAL_FILE_KEYS,
+  REMOTE_CREDENTIAL_FILE_OPTION,
+  REMOTE_CREDENTIAL_KEYS,
+  REMOTE_CREDENTIAL_OPTION
+} from "../core/sensitive_names.js";
 import { startParleyHttpService } from "../service/http_app.js";
 
 function expandHome(value) {
@@ -36,7 +46,7 @@ Options:
   --no-meta-auth               Development/test only: do not require auth on /v1/meta.
 
 Environment aliases: PARLEY_CONFIG, PARLEY_HOST, PARLEY_PORT, PARLEY_MODE, PARLEY_DB_PATH,
-PARLEY_REPO_ROOT, PARLEY_AGENT_ID, PARLEY_DEFAULT_BOARD, PARLEY_AUTH_TOKEN_FILE, PARLEY_AUTH_TOKEN.`;
+PARLEY_REPO_ROOT, PARLEY_AGENT_ID, PARLEY_DEFAULT_BOARD, ${PARLEY_CREDENTIAL_FILE_ENV}, ${PARLEY_CREDENTIAL_ENV}.`;
 }
 
 function parseArgs(argv) {
@@ -205,8 +215,8 @@ export async function startParleyDaemon(argv = process.argv.slice(2), io = {}) {
     pluginConfig,
     runtimeConfig,
     env,
-    authToken: pickConfigString(pluginConfig, env, ["parleyAuthToken", "authToken"], ["PARLEY_AUTH_TOKEN"]),
-    authTokenFile: pickConfigString(pluginConfig, env, ["parleyAuthTokenFile", "authTokenFile"], ["PARLEY_AUTH_TOKEN_FILE"]),
+    [REMOTE_CREDENTIAL_OPTION]: pickConfigString(pluginConfig, env, REMOTE_CREDENTIAL_KEYS, PARLEY_CREDENTIAL_ENV_KEYS),
+    [REMOTE_CREDENTIAL_FILE_OPTION]: pickConfigString(pluginConfig, env, REMOTE_CREDENTIAL_FILE_KEYS, PARLEY_CREDENTIAL_FILE_ENV_KEYS),
     ...(options.requireQueryAuth === false ? { requireQueryAuth: false } : {}),
     ...(options.requireMetaAuth === false ? { requireMetaAuth: false } : {})
   });

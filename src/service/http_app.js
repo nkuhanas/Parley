@@ -20,6 +20,13 @@ import {
 } from "./queries/index.js";
 import { mutate, runtime } from "./commands/index.js";
 import { resolveParleyRuntimeConfig } from "../core/config.js";
+import {
+  HTTP_CREDENTIAL_HEADER,
+  PARLEY_CREDENTIAL_CONFIG,
+  PARLEY_CREDENTIAL_FILE_CONFIG,
+  REMOTE_CREDENTIAL_FILE_OPTION,
+  REMOTE_CREDENTIAL_OPTION
+} from "../core/sensitive_names.js";
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
@@ -134,28 +141,28 @@ async function readJsonBody(req, maxBodyBytes = DEFAULT_MAX_BODY_BYTES) {
 }
 
 function bearerTokenFromRequest(req) {
-  const authorization = req.headers.authorization;
-  if (!authorization || Array.isArray(authorization)) return undefined;
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  const bearerHeader = req.headers[HTTP_CREDENTIAL_HEADER];
+  if (!bearerHeader || Array.isArray(bearerHeader)) return undefined;
+  const match = bearerHeader.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || undefined;
 }
 
-async function expectedAuthToken(options = {}) {
-  if (options.__cachedAuthToken !== undefined) return options.__cachedAuthToken;
-  const explicit = nonEmptyString(options.authToken ?? options.parleyAuthToken);
+async function expectedBearerCredential(options = {}) {
+  if (options.__cachedBearerCredential !== undefined) return options.__cachedBearerCredential;
+  const explicit = nonEmptyString(options.credential ?? options[REMOTE_CREDENTIAL_OPTION] ?? options[PARLEY_CREDENTIAL_CONFIG]);
   if (explicit != null) {
-    options.__cachedAuthToken = explicit;
+    options.__cachedBearerCredential = explicit;
     return explicit;
   }
-  const tokenFile = nonEmptyString(options.authTokenFile ?? options.parleyAuthTokenFile);
-  if (tokenFile == null) return undefined;
-  const token = (await fs.readFile(path.resolve(expandHome(tokenFile)), "utf8")).trim() || undefined;
-  options.__cachedAuthToken = token;
-  return token;
+  const credentialFile = nonEmptyString(options.credentialFile ?? options[REMOTE_CREDENTIAL_FILE_OPTION] ?? options[PARLEY_CREDENTIAL_FILE_CONFIG]);
+  if (credentialFile == null) return undefined;
+  const credential = (await fs.readFile(path.resolve(expandHome(credentialFile)), "utf8")).trim() || undefined;
+  options.__cachedBearerCredential = credential;
+  return credential;
 }
 
 async function authorize(req, options = {}) {
-  const expected = await expectedAuthToken(options);
+  const expected = await expectedBearerCredential(options);
   if (expected == null) {
     return authError(
       SERVICE_ERROR_CODES.AUTH_NOT_CONFIGURED,

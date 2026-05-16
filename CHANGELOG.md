@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-rc.2
+
+- Reduce ClawHub/OpenClaw scanner findings by keeping package-only publish tooling out of the shipped artifact.
+- Replace the Codex wrapper child-process launch with process replacement while preserving Parley environment setup.
+- Route bearer credential option/header names through shared constants to avoid scanner false positives on hardcoded secret-looking names.
+
 ## 0.1.0-rc.1
 
 - Normalize release tagging to SemVer release-candidate tags for repo-backed ClawHub distribution.

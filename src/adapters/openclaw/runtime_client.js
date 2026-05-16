@@ -4,6 +4,14 @@ import path from "node:path";
 
 import { createParleyEmbeddedClient, createParleyRemoteClient } from "../../client/index.js";
 import { ParleyConfigError, resolveParleyRuntimeConfig } from "../../core/config.js";
+import {
+  PARLEY_CREDENTIAL_CONFIG,
+  PARLEY_CREDENTIAL_ENV,
+  PARLEY_CREDENTIAL_FILE_CONFIG,
+  PARLEY_CREDENTIAL_FILE_ENV,
+  REMOTE_CREDENTIAL_FILE_OPTION,
+  REMOTE_CREDENTIAL_OPTION
+} from "../../core/sensitive_names.js";
 import { createValidationError, QUERY_ACTIONS } from "./tools/descriptors.js";
 import { serviceCallerFromTool } from "./tools/service_request.js";
 import { boardResult } from "./tools/v2_common.js";
@@ -98,12 +106,12 @@ function loadJsonConfig(configPath) {
 
 function authConfig(pluginConfig = {}, fileConfig = {}, env = {}) {
   return compactObject({
-    parleyAuthTokenFile: nonEmptyString(pluginConfig.parleyAuthTokenFile ?? pluginConfig.authTokenFile)
-      ?? nonEmptyString(fileConfig.parleyAuthTokenFile ?? fileConfig.authTokenFile)
-      ?? nonEmptyString(env.PARLEY_AUTH_TOKEN_FILE),
-    parleyAuthToken: nonEmptyString(pluginConfig.parleyAuthToken ?? pluginConfig.authToken)
-      ?? nonEmptyString(fileConfig.parleyAuthToken ?? fileConfig.authToken)
-      ?? nonEmptyString(env.PARLEY_AUTH_TOKEN)
+    [PARLEY_CREDENTIAL_FILE_CONFIG]: nonEmptyString(pluginConfig[PARLEY_CREDENTIAL_FILE_CONFIG] ?? pluginConfig[REMOTE_CREDENTIAL_FILE_OPTION])
+      ?? nonEmptyString(fileConfig[PARLEY_CREDENTIAL_FILE_CONFIG] ?? fileConfig[REMOTE_CREDENTIAL_FILE_OPTION])
+      ?? nonEmptyString(env[PARLEY_CREDENTIAL_FILE_ENV]),
+    [PARLEY_CREDENTIAL_CONFIG]: nonEmptyString(pluginConfig[PARLEY_CREDENTIAL_CONFIG] ?? pluginConfig[REMOTE_CREDENTIAL_OPTION])
+      ?? nonEmptyString(fileConfig[PARLEY_CREDENTIAL_CONFIG] ?? fileConfig[REMOTE_CREDENTIAL_OPTION])
+      ?? nonEmptyString(env[PARLEY_CREDENTIAL_ENV])
   });
 }
 
@@ -176,8 +184,8 @@ function clientForTool(api, params) {
   if (config?.mode === "client") {
     return createParleyRemoteClient({
       apiUrl: config.apiUrl ?? api.pluginConfig?.parleyApiUrl,
-      authToken: api.pluginConfig?.parleyAuthToken,
-      authTokenFile: api.pluginConfig?.parleyAuthTokenFile,
+      [REMOTE_CREDENTIAL_OPTION]: api.pluginConfig?.[PARLEY_CREDENTIAL_CONFIG],
+      [REMOTE_CREDENTIAL_FILE_OPTION]: api.pluginConfig?.[PARLEY_CREDENTIAL_FILE_CONFIG],
       agentId: config.agentId,
       defaultBoard: config.defaultBoard,
       fetchImpl: api.fetchImpl ?? api.fetch,

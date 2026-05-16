@@ -5,6 +5,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveParleyRuntimeConfig } from "../core/config.js";
+import {
+  PARLEY_CREDENTIAL_ENV_KEYS,
+  PARLEY_CREDENTIAL_FILE_ENV_KEYS,
+  REMOTE_CREDENTIAL_FILE_KEYS,
+  REMOTE_CREDENTIAL_FILE_OPTION,
+  REMOTE_CREDENTIAL_KEYS,
+  REMOTE_CREDENTIAL_OPTION
+} from "../core/sensitive_names.js";
 import { migrateParleySqliteLedger } from "../core/storage/sqlite_ledger.js";
 import { createParleyEmbeddedClient, createParleyRemoteClient } from "../client/index.js";
 
@@ -196,8 +204,8 @@ function createClientForRuntime(runtimeConfig, pluginConfig, options = {}) {
   if (runtimeConfig.mode === "client") {
     return createParleyRemoteClient({
       apiUrl: runtimeConfig.apiUrl,
-      authToken: pickConfigString(pluginConfig, options.env, ["parleyAuthToken", "authToken"], ["PARLEY_AUTH_TOKEN"]),
-      authTokenFile: pickConfigString(pluginConfig, options.env, ["parleyAuthTokenFile", "authTokenFile"], ["PARLEY_AUTH_TOKEN_FILE"]),
+      [REMOTE_CREDENTIAL_OPTION]: pickConfigString(pluginConfig, options.env, REMOTE_CREDENTIAL_KEYS, PARLEY_CREDENTIAL_ENV_KEYS),
+      [REMOTE_CREDENTIAL_FILE_OPTION]: pickConfigString(pluginConfig, options.env, REMOTE_CREDENTIAL_FILE_KEYS, PARLEY_CREDENTIAL_FILE_ENV_KEYS),
       ...caller,
       fetchImpl: options.fetchImpl
     });

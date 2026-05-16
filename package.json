@@ -1,6 +1,6 @@
 {
   "name": "@nkuhanas/parley",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "type": "module",
   "description": "Board-scoped coordination runtime and OpenClaw tools for AI agents",
   "main": "./index.js",
@@ -45,7 +45,7 @@
     "openclaw.plugin.json",
     "src/",
     "docs/",
-    "tools/",
+    "tools/deploy/",
     "examples/",
     "README.md",
     "LICENSE",

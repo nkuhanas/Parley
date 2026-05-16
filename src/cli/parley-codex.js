@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { PARLEY_CREDENTIAL_ENV, PARLEY_CREDENTIAL_FILE_ENV } from "../core/sensitive_names.js";
 
 const DEFAULT_ACTOR_ID = "codex-agent";
 const DEFAULT_RUNTIME = "codex";
@@ -25,6 +27,48 @@ function timestampForId(date = new Date()) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
+function hasPathSeparator(command) {
+  return command.includes("/") || (path.sep === "\\" && command.includes("\\"));
+}
+
+function executableNames(command, env = process.env) {
+  if (process.platform !== "win32" || path.extname(command)) return [command];
+  const pathExt = (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+    .split(";")
+    .filter(Boolean);
+  return [command, ...pathExt.map((ext) => `${command}${ext}`)];
+}
+
+export function resolveExecutable(command, env = process.env, cwd = process.cwd()) {
+  const names = executableNames(command, env);
+  if (hasPathSeparator(command)) {
+    for (const name of names) {
+      const candidate = path.isAbsolute(name) ? name : path.resolve(cwd, name);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        // Try the next platform-specific extension.
+      }
+    }
+    throw new Error(`Executable not found or not runnable: ${command}`);
+  }
+
+  for (const dir of String(env.PATH ?? "").split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        // Keep scanning PATH.
+      }
+    }
+  }
+  throw new Error(`Executable not found on PATH: ${command}`);
+}
+
 function usage() {
   return `Usage: parley-codex [options] [--] [codex-args...]
 
@@ -33,8 +77,8 @@ Launch codex with Parley client-mode identity environment.
 Options:
   --actor <id>             Durable Parley actor id. Default: codex-agent.
   --api-url <url>          Parley service URL. Defaults to PARLEY_API_URL.
-  --auth-token-file <path> Parley bearer token file. Defaults to PARLEY_AUTH_TOKEN_FILE.
-  --auth-token <token>     Parley bearer token. Defaults to PARLEY_AUTH_TOKEN.
+  --auth-token-file <path> Parley bearer credential file. Defaults to ${PARLEY_CREDENTIAL_FILE_ENV}.
+  --auth-token <token>     Parley bearer credential. Defaults to ${PARLEY_CREDENTIAL_ENV}.
   --default-board <board>  Default board. Defaults to PARLEY_DEFAULT_BOARD.
   --runtime <name>         Caller runtime scheme. Default: codex.
   --surface <name>         Worker surface metadata. Default: codex-cli.
@@ -46,7 +90,7 @@ Options:
   --dry-run                Print sanitized command/environment and exit.
   -h, --help               Show this help.
 
-Required for execution: PARLEY_API_URL/--api-url and either PARLEY_AUTH_TOKEN_FILE/--auth-token-file or PARLEY_AUTH_TOKEN/--auth-token.
+Required for execution: PARLEY_API_URL/--api-url and either ${PARLEY_CREDENTIAL_FILE_ENV}/--auth-token-file or ${PARLEY_CREDENTIAL_ENV}/--auth-token.
 `;
 }
 
@@ -93,8 +137,8 @@ export function parseParleyCodexArgs(argv = []) {
 export function buildParleyCodexLaunch(options = {}, baseEnv = process.env, now = new Date()) {
   const actorId = nonEmptyString(options.actor) ?? nonEmptyString(baseEnv.PARLEY_AGENT_ID) ?? DEFAULT_ACTOR_ID;
   const apiUrl = nonEmptyString(options["api-url"]) ?? nonEmptyString(baseEnv.PARLEY_API_URL);
-  const authTokenFile = nonEmptyString(options["auth-token-file"]) ?? nonEmptyString(baseEnv.PARLEY_AUTH_TOKEN_FILE);
-  const authToken = nonEmptyString(options["auth-token"]) ?? nonEmptyString(baseEnv.PARLEY_AUTH_TOKEN);
+  const credentialFile = nonEmptyString(options["auth-token-file"]) ?? nonEmptyString(baseEnv[PARLEY_CREDENTIAL_FILE_ENV]);
+  const credential = nonEmptyString(options["auth-token"]) ?? nonEmptyString(baseEnv[PARLEY_CREDENTIAL_ENV]);
   const defaultBoard = nonEmptyString(options["default-board"]) ?? nonEmptyString(baseEnv.PARLEY_DEFAULT_BOARD);
   const runtime = nonEmptyString(options.runtime) ?? nonEmptyString(baseEnv.PARLEY_CALLER_RUNTIME) ?? DEFAULT_RUNTIME;
   const surface = nonEmptyString(options.surface) ?? nonEmptyString(baseEnv.PARLEY_WORKER_SURFACE) ?? DEFAULT_SURFACE;
@@ -109,8 +153,8 @@ export function buildParleyCodexLaunch(options = {}, baseEnv = process.env, now 
   if (!apiUrl) {
     throw new Error("PARLEY_API_URL or --api-url is required");
   }
-  if (!authTokenFile && !authToken) {
-    throw new Error("PARLEY_AUTH_TOKEN_FILE/--auth-token-file or PARLEY_AUTH_TOKEN/--auth-token is required");
+  if (!credentialFile && !credential) {
+    throw new Error(`${PARLEY_CREDENTIAL_FILE_ENV}/--auth-token-file or ${PARLEY_CREDENTIAL_ENV}/--auth-token is required`);
   }
 
   const env = {
@@ -126,8 +170,8 @@ export function buildParleyCodexLaunch(options = {}, baseEnv = process.env, now 
     PARLEY_HOST_ID: hostId,
     PARLEY_WORKSPACE: workspace
   };
-  if (authTokenFile) env.PARLEY_AUTH_TOKEN_FILE = authTokenFile;
-  if (authToken) env.PARLEY_AUTH_TOKEN = authToken;
+  if (credentialFile) env[PARLEY_CREDENTIAL_FILE_ENV] = credentialFile;
+  if (credential) env[PARLEY_CREDENTIAL_ENV] = credential;
   if (defaultBoard) env.PARLEY_DEFAULT_BOARD = defaultBoard;
 
   return {
@@ -144,8 +188,8 @@ export function buildParleyCodexLaunch(options = {}, baseEnv = process.env, now 
       hostId,
       workspace,
       apiUrl,
-      authTokenFile: authTokenFile ?? null,
-      hasAuthToken: Boolean(authToken),
+      credentialFile: credentialFile ?? null,
+      hasCredential: Boolean(credential),
       defaultBoard: defaultBoard ?? null
     }
   };
@@ -156,8 +200,8 @@ function sanitizedLaunch(launch) {
     "PARLEY_MODE",
     "PARLEY_API_URL",
     "PARLEY_AGENT_ID",
-    "PARLEY_AUTH_TOKEN_FILE",
-    "PARLEY_AUTH_TOKEN",
+    PARLEY_CREDENTIAL_FILE_ENV,
+    PARLEY_CREDENTIAL_ENV,
     "PARLEY_DEFAULT_BOARD",
     "PARLEY_CALLER_RUNTIME",
     "PARLEY_CALLER_RUNTIME_REF",
@@ -170,15 +214,15 @@ function sanitizedLaunch(launch) {
   const env = {};
   for (const key of interestingEnvKeys) {
     if (launch.env[key] == null) continue;
-    env[key] = key === "PARLEY_AUTH_TOKEN" ? "__REDACTED__" : launch.env[key];
+    env[key] = key === PARLEY_CREDENTIAL_ENV ? "__REDACTED__" : launch.env[key];
   }
   return {
     command: launch.command,
     args: launch.args,
     metadata: {
       ...launch.metadata,
-      hasAuthToken: launch.metadata.hasAuthToken,
-      authTokenFile: launch.metadata.authTokenFile
+      hasCredential: launch.metadata.hasCredential,
+      credentialFile: launch.metadata.credentialFile
     },
     env
   };
@@ -198,25 +242,20 @@ export async function runParleyCodex(argv = process.argv.slice(2), io = {}) {
     stdout.write(`${JSON.stringify({ ok: true, dryRun: Boolean(options.dryRun), launch: sanitizedLaunch(launch) }, null, 2)}\n`);
     return 0;
   }
-  const child = spawn(launch.command, launch.args, {
-    env: launch.env,
-    cwd: launch.metadata.workspace,
-    stdio: "inherit"
-  });
-  return await new Promise((resolve) => {
-    child.on("error", (error) => {
-      stderr.write(`parley-codex: failed to launch ${launch.command}: ${error.message}\n`);
-      resolve(127);
-    });
-    child.on("exit", (code, signal) => {
-      if (signal) {
-        stderr.write(`parley-codex: ${launch.command} exited from signal ${signal}\n`);
-        resolve(1);
-      } else {
-        resolve(code ?? 0);
-      }
-    });
-  });
+  if (typeof process.execve !== "function") {
+    stderr.write("parley-codex: this Node.js runtime does not provide process.execve; upgrade Node or use --dry-run to export the Parley environment.\n");
+    return 127;
+  }
+
+  try {
+    const executable = resolveExecutable(launch.command, launch.env, launch.metadata.workspace);
+    process.chdir(launch.metadata.workspace);
+    process.execve(executable, [launch.command, ...launch.args], launch.env);
+    return 1;
+  } catch (error) {
+    stderr.write(`parley-codex: failed to launch ${launch.command}: ${error.message}\n`);
+    return error?.code === "ENOENT" ? 127 : 1;
+  }
 }
 
 const invokedPath = process.argv[1] == null ? null : path.resolve(process.argv[1]);

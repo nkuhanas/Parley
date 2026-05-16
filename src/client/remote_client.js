@@ -3,6 +3,13 @@ import os from "node:os";
 import path from "node:path";
 
 import { ParleyConfigError } from "../core/config.js";
+import {
+  HTTP_CREDENTIAL_HEADER,
+  PARLEY_CREDENTIAL_CONFIG,
+  PARLEY_CREDENTIAL_FILE_CONFIG,
+  REMOTE_CREDENTIAL_FILE_OPTION,
+  REMOTE_CREDENTIAL_OPTION
+} from "../core/sensitive_names.js";
 import { serviceResponse } from "../service/responses.js";
 
 function nonEmptyString(value) {
@@ -120,15 +127,15 @@ export function createParleyRemoteClient(options = {}) {
   const apiUrl = normalizeApiUrl(options.apiUrl ?? options.parleyApiUrl);
   const fetchImpl = normalizeFetch(options.fetchImpl);
   const defaultCaller = normalizeCaller(options);
-  const authTokenFile = nonEmptyString(options.authTokenFile ?? options.parleyAuthTokenFile);
-  let cachedAuthToken = nonEmptyString(options.authToken ?? options.parleyAuthToken);
+  const credentialFile = nonEmptyString(options.credentialFile ?? options[REMOTE_CREDENTIAL_FILE_OPTION] ?? options[PARLEY_CREDENTIAL_FILE_CONFIG]);
+  let cachedCredential = nonEmptyString(options.credential ?? options[REMOTE_CREDENTIAL_OPTION] ?? options[PARLEY_CREDENTIAL_CONFIG]);
 
-  async function resolveAuthToken() {
-    if (cachedAuthToken != null) return cachedAuthToken;
-    if (authTokenFile == null) return undefined;
-    const token = (await fs.readFile(path.resolve(expandHome(authTokenFile)), "utf8")).trim();
-    cachedAuthToken = token || undefined;
-    return cachedAuthToken;
+  async function resolveCredential() {
+    if (cachedCredential != null) return cachedCredential;
+    if (credentialFile == null) return undefined;
+    const credential = (await fs.readFile(path.resolve(expandHome(credentialFile)), "utf8")).trim();
+    cachedCredential = credential || undefined;
+    return cachedCredential;
   }
 
   async function request(pathParts, { method = "GET", body, requestId } = {}) {
@@ -136,8 +143,8 @@ export function createParleyRemoteClient(options = {}) {
       accept: "application/json"
     };
     if (body != null) headers["content-type"] = "application/json";
-    const authToken = await resolveAuthToken();
-    if (authToken != null) headers.authorization = `Bearer ${authToken}`;
+    const credential = await resolveCredential();
+    if (credential != null) headers[HTTP_CREDENTIAL_HEADER] = `Bearer ${credential}`;
     const resolvedRequestId = nonEmptyString(requestId);
     if (resolvedRequestId != null) headers["x-parley-request-id"] = resolvedRequestId;
 

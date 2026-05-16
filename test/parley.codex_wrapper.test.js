@@ -55,7 +55,7 @@ test("parley-codex supports explicit actor/runtime/command overrides", () => {
   assert.equal(launch.command, "echo");
   assert.deepEqual(launch.args, ["hello"]);
   assert.equal(launch.env.PARLEY_AUTH_TOKEN, "secret-token");
-  assert.equal(launch.metadata.hasAuthToken, true);
+  assert.equal(launch.metadata.hasCredential, true);
   assert.equal(launch.metadata.runtimeRef, "codex:agent:codex-agent");
   assert.match(launch.metadata.sessionId, /^codex-/);
 });
