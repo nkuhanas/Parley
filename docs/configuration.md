@@ -4,6 +4,8 @@ Parley resolves runtime configuration through an explicit mode contract before a
 
 ## Runtime mode
 
+Installation source and runtime mode are separate choices: ClawHub or npm installs the package, while `PARLEY_MODE` / `parleyMode` decides how tools store or reach Parley state.
+
 Set `PARLEY_MODE` or plugin/config `parleyMode` to one of:
 
 - `standalone`: intentional local file-backed Parley state.
@@ -40,6 +42,19 @@ The OpenClaw adapter is a strict configured surface:
 - unset mode fails closed with `PARLEY_MODE_REQUIRED` before registering tools against local storage.
 - service-backed query and mutate tools preserve their existing OpenClaw names/descriptors and route through the same service boundary used by the remote client. Runtime transport tools that are not yet exposed by the HTTP service fail clearly in client mode instead of touching local runtime state.
 
+A typical OpenClaw client configuration contains only the remote service connection plus caller identity hints:
+
+```json
+{
+  "parleyMode": "client",
+  "parleyApiUrl": "http://127.0.0.1:7331",
+  "parleyAuthTokenFile": "/etc/parley/token",
+  "parleyAgentId": "my-agent",
+  "parleyDefaultBoard": "project"
+}
+```
+
+Keep bearer values in files for deployments. Inline token configuration exists for local tests and controlled development environments.
 
 ## Service SQLite ledger
 

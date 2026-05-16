@@ -1,6 +1,6 @@
 # Contributing
 
-Parley is early alpha software. Keep changes small, tested, and scoped.
+Parley is release-candidate software. Keep changes small, tested, and scoped.
 
 ## Development
 

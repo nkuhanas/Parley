@@ -1,8 +1,10 @@
 # Examples
 
-See:
+The example directories are intentionally small and use placeholder identities. They are starting points for local smoke tests, not production policy templates.
 
-- `examples/basic-board/` for a single-board setup
-- `examples/multi-board/` for one agent participating in two boards
+- `examples/basic-board/` shows one board, one global agent, one board-local identity, and a single plan/reference namespace.
+- `examples/multi-board/` shows one global agent participating in two boards with separate board-local identities.
 
-Both examples use neutral local paths and placeholder runtime ids. Replace them with your own OpenClaw agent/session identities and storage roots.
+Replace placeholder runtime ids, board ids, namespace paths, and storage roots with values from your OpenClaw setup. Keep namespace roots narrow: prefer a project docs or plans directory over a broad home/vault root.
+
+For service/client deployments, use the examples for board and identity shape, then put service connection fields such as `parleyMode`, `parleyApiUrl`, and `parleyAuthTokenFile` in the OpenClaw plugin config for each client agent.

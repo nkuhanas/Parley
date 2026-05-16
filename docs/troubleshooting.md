@@ -28,6 +28,17 @@ Check the board's `artifact_namespaces`, `resolved_root`, and `allowed_subpaths`
 
 Restart OpenClaw after changing plugin registration or allowlists, then inspect plugin/tool visibility again.
 
+
+## ClawHub install succeeds but an older version remains active
+
+Run `openclaw plugins list` and check the Parley source path. If OpenClaw config explicitly selects a local checkout, that configured plugin overrides the globally installed ClawHub extension with the same plugin id. This is expected during local development; remove or change the explicit config entry when you want the ClawHub-installed extension to be the active source.
+
+Use `openclaw plugins update parley --dry-run` to verify the tracked ClawHub version without changing files.
+
+## OpenClaw adapter fails before tools register
+
+Check `parleyMode`. The OpenClaw adapter requires an explicit mode and refuses accidental local state in client mode. For remote service use, configure `parleyMode=client`, `parleyApiUrl`, and a token file if protected routes are enabled. For local development, set `parleyMode=standalone` and intentional local state roots.
+
 ## OpenClaw reports `plugin tool runtime missing`
 
 If OpenClaw shows a plugin as loaded and manifest tool names are visible, but invoking one tool fails with `plugin tool runtime missing (<plugin-id>): <tool-name>`, check whether the plugin registered runtime-context tool factories without explicit names.

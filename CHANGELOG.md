@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-rc.4
+
+- Re-encode documentation image assets for a cleaner ClawHub artifact review surface.
+- Refresh public docs for ClawHub-first OpenClaw installation, runtime-mode selection, service/client configuration, and release-candidate status.
+
 ## 0.1.0-rc.3
 
 - Replace escaped NUL key separators with JSON-encoded tuple keys to avoid ClawHub unicode-control scan review triggers.

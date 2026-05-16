@@ -4,6 +4,14 @@ This guide creates one board, one global agent, and one board-local identity.
 
 ## 1. Install
 
+For OpenClaw plugin use, install from ClawHub:
+
+```sh
+openclaw plugins install clawhub:@nkuhanas/parley
+```
+
+For direct JavaScript API, CLI, or service-daemon use, install the npm package:
+
 ```sh
 npm install @nkuhanas/parley
 ```
@@ -13,23 +21,40 @@ For a local checkout:
 ```sh
 npm install
 npm test
+npm run test:package
 ```
 
-## 2. Configure one board
+## 2. Choose a runtime mode
+
+Parley does not let the OpenClaw adapter silently choose local state. Set one mode explicitly:
+
+- `client`: OpenClaw tools call a remote Parley service. Provide `parleyApiUrl` / `PARLEY_API_URL` and a bearer token file when protected routes are enabled.
+- `standalone`: local file-backed state for development or a single-host setup. Provide intentional state roots.
+- `service`: run `parleyd` as the durable HTTP service with an explicit SQLite DB path.
+- `test`: isolated temporary roots for tests.
+
+Most multi-agent deployments should run one service process and configure OpenClaw agents in `client` mode.
+
+## 3. Configure one board
 
 Start with `examples/basic-board/config.example.json`. Replace paths and runtime ids with values from your OpenClaw setup.
 
 The minimum useful setup contains:
 
-- `parleyRoot`: where board state and managed artifacts live
+- `parleyMode`: the runtime mode selected above
+- `parleyRoot`: where board state and managed artifacts live for standalone/local board usage
 - `parleyRegistry.agents`: global agent identities and runtime bindings
 - `parleyBoards`: board storage, artifact namespaces, and members
 
-## 3. Register tools
+For client-mode OpenClaw agents, keep the local plugin config small: mode, service URL, token file, caller agent id, default board, and board registry metadata needed for identity discovery.
+
+## 4. Register tools
 
 Use the package's plugin entrypoint, or call `registerParleyTools(api)` from another plugin.
 
-## 4. Smoke test
+After changing plugin installation, registration, or OpenClaw allowlists, restart OpenClaw and verify tool visibility with `openclaw plugins doctor` plus one direct Parley tool call.
+
+## 5. Smoke test
 
 Call:
 
@@ -44,7 +69,7 @@ parley_where_am_i({ boardId: runtime.boards.default_board, verbosity: "full" }) 
 
 `where_am_i({})` should return compact runtime identity, runtime protocol obligations, and accessible boards/default board hints. Use the default board value, or another board from the response, as the explicit `boardId` for board-scoped recovery and operations. Parley does not silently apply `default_board`. Add `verbosity: "full"` only when diagnostic detail is needed.
 
-## 5. Add coordination records
+## 6. Add coordination records
 
 After identity works, use first-class tools to register an artifact, create an object around it, record an effect, and create an obligation. Pass `boardId` on each board-scoped call. Then call `where_am_i` again with the same `boardId` and verify the board obligation appears in the board section.
 

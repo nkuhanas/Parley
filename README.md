@@ -11,7 +11,7 @@
     <img src="https://img.shields.io/npm/v/@nkuhanas/parley" alt="npm version" />
   </a>
   <img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="license" />
-  <img src="https://img.shields.io/badge/status-alpha-orange" alt="status alpha" />
+  <img src="https://img.shields.io/badge/status-release--candidate-orange" alt="status release candidate" />
   <img src="https://img.shields.io/badge/OpenClaw-plugin-blue" alt="OpenClaw plugin" />
 </p>
 
@@ -93,17 +93,24 @@ Parley tools return agent-facing coordination responses: compact result data plu
 
 ## Install and first run
 
-Install Parley as an OpenClaw plugin from npm:
+Install Parley as an OpenClaw plugin from ClawHub:
 
 ```sh
-openclaw plugins install @nkuhanas/parley
+openclaw plugins install clawhub:@nkuhanas/parley
 ```
 
-Or install the package directly:
+Install the npm package directly when you want the JavaScript API, CLI, or service daemon outside OpenClaw plugin installation:
 
 ```sh
 npm install @nkuhanas/parley
 ```
+
+Choose a runtime mode before using the OpenClaw adapter:
+
+- `client`: an OpenClaw agent talks to a remote Parley service through `parleyApiUrl` / `PARLEY_API_URL`.
+- `standalone`: intentional local file-backed state for development or single-host use.
+- `service`: the durable HTTP service process with an explicit SQLite DB path.
+- `test`: isolated test roots only.
 
 For local development from a Parley checkout:
 
@@ -115,7 +122,7 @@ npm run pack:dry-run
 openclaw plugins install -l .
 ```
 
-For ClawHub/package readiness checks without publishing, use the wrapper. It uses a globally installed `clawhub` when available, otherwise it falls back to `npx --yes clawhub@0.15.0`, and supplies the required GitHub source metadata from the local checkout:
+For ClawHub/package readiness checks without publishing, use the wrapper. It uses a globally installed `clawhub` when available, otherwise it falls back to `npx --yes clawhub@0.15.0`, and supplies GitHub source metadata from the local checkout:
 
 ```sh
 npm run clawhub:dry-run
@@ -301,7 +308,7 @@ parley_where_am_i({
 
 ## Status
 
-Parley is early alpha software. Current goals are a stable JavaScript package shape, OpenClaw plugin metadata, a generic board configuration model, reliable recovery surfaces, scoped authority, agent-facing guidance, and passing tests.
+Parley is release-candidate software. Current goals are a stable JavaScript package shape, repo-backed ClawHub distribution, OpenClaw plugin metadata, a generic board configuration model, reliable recovery surfaces, scoped authority, agent-facing guidance, and passing tests.
 
 ## License
 
