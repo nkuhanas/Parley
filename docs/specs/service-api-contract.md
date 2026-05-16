@@ -42,17 +42,28 @@ Command names below are service-level names. Existing OpenClaw tools should beco
 
 ### Runtime protocol commands
 
-| Service command | Current tool | Notes |
+The HTTP/service command boundary exposes runtime protocol operations through command `runtime` with input shape:
+
+```json
+{
+  "action": "open_thread",
+  "input": { "...": "tool-specific params" }
+}
+```
+
+Service-hosted runtime commands persist canonical thread/message state and return caller-managed `transport_request` handoffs. Service clients that actually dispatch through a host runtime must call `record_transport_result` after delivery. The service process must not assume it can call a client runtime such as OpenClaw `sessions.send` locally.
+
+| Runtime action | Current tool | Notes |
 | --- | --- | --- |
-| `openThread` | `parley_open_thread` | Create runtime thread/message records and pending dispatch metadata. |
-| `replyThread` | `parley_reply_thread` | Append a substantive runtime protocol message. |
-| `claimTurn` | `parley_claim_turn` | Record a control claim without settling the turn. |
-| `probeThread` | `parley_probe_thread` | Record first stalled-thread probe. |
-| `settleTurn` | `parley_settle_turn` | Set current turn control marker and next action owner. |
-| `concludeThread` | `parley_conclude_thread` | Conclude a live thread by initiator. |
-| `dispatchTransportRequest` | `parley_dispatch_transport_request` | Fallback/debug dispatch helper. Transport remains adapter-owned. |
-| `recordTransportResult` | `parley_record_transport_result` | Persist accepted/failed dispatch outcome. |
-| `recordHumanSummaryAnchor` | `parley_record_human_summary_anchor` | Persist delivered human-summary anchor. |
+| `open_thread` | `parley_open_thread` | Create runtime thread/message records and pending dispatch metadata. |
+| `reply_thread` | `parley_reply_thread` | Append a substantive runtime protocol message. |
+| `claim_turn` | `parley_claim_turn` | Record a control claim without settling the turn. |
+| `probe_thread` | `parley_probe_thread` | Record first stalled-thread probe. |
+| `settle_turn` | `parley_settle_turn` | Set current turn control marker and next action owner. |
+| `conclude_thread` | `parley_conclude_thread` | Conclude a live thread by initiator. |
+| `dispatch_transport_request` | `parley_dispatch_transport_request` | Return a caller-managed transport request for fallback/debug dispatch. |
+| `record_transport_result` | `parley_record_transport_result` | Persist accepted/failed dispatch outcome. |
+| `record_human_summary_anchor` | `parley_record_human_summary_anchor` | Persist delivered human-summary anchor. |
 
 ### Board artifact/object/effect commands
 
@@ -131,7 +142,7 @@ These are explicit service queries even if current clients can read local paths 
 
 ## Compatibility Facades
 
-`parley_query` and `parley_mutate` are compatibility facades over first-class service queries/commands. They may remain for advanced callers, but the application service should expose first-class command/query functions internally.
+`parley_query`, `parley_mutate`, and the OpenClaw runtime/thread tools are compatibility facades over first-class service queries/commands. They may remain for advanced callers, but the application service should expose first-class command/query functions internally.
 
 Facade action mapping should be mechanical:
 

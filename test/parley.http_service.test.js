@@ -124,7 +124,7 @@ test("HTTP service exposes unauthenticated health and protected metadata", async
       assert.equal(meta.response.status, 200);
       assert.equal(meta.body.status, "ok");
       assert.ok(meta.body.data.queries.includes("describe"));
-      assert.deepEqual(meta.body.data.commands, ["mutate"]);
+      assert.deepEqual(meta.body.data.commands, ["mutate", "runtime"]);
       assert.equal(meta.body.data.boards, undefined);
     });
   });
@@ -160,6 +160,64 @@ test("remote client calls real HTTP service for health and discovery queries", a
       const meta = await client.meta();
       assert.equal(meta.status, "ok");
       assert.ok(meta.data.queries.includes("whereAmI"));
+    });
+  });
+});
+
+test("remote client calls real HTTP service runtime command with caller-managed transport", async () => {
+  await withTempRoot(async (tempRoot) => {
+    await fs.mkdir(path.join(tempRoot, "repo", "plans"), { recursive: true });
+    await withHttpService({ pluginConfig: makePluginConfig(tempRoot), authToken: AUTH_TOKEN }, async (baseUrl) => {
+      const client = createParleyRemoteClient({
+        apiUrl: baseUrl,
+        authToken: AUTH_TOKEN,
+        agentId: "parley-agent",
+        defaultBoard: "project",
+        runtime: "sdk"
+      });
+
+      const opened = await client.runtime({
+        action: "open_thread",
+        input: {
+          initiator: "parley-agent",
+          recipient: "parley-peer",
+          bodyText: "Please take a look.",
+          targetSessionKey: "agent:parley-peer:session:test",
+          initiatorSessionKey: "agent:parley-agent:session:test"
+        }
+      });
+      assert.equal(opened.status, "ok");
+      assert.equal(opened.data.tool, "parley_open_thread");
+      assert.equal(opened.data.transport_required, true);
+      assert.equal(opened.data.transport_request.target_session_key, "agent:parley-peer:session:test");
+      assert.equal(typeof opened.data.transport_request.outbound_text, "string");
+
+      const dispatchHandoff = await client.runtime({
+        action: "dispatch_transport_request",
+        input: {
+          threadId: opened.data.thread.thread_id,
+          messageId: opened.data.message.message_id
+        }
+      });
+      assert.equal(dispatchHandoff.status, "ok");
+      assert.equal(dispatchHandoff.data.tool, "parley_dispatch_transport_request");
+      assert.equal(dispatchHandoff.data.transport_required, true);
+      assert.equal(dispatchHandoff.data.transport_request.target_session_key, "agent:parley-peer:session:test");
+
+      const replied = await client.runtime({
+        action: "reply_thread",
+        input: {
+          threadId: opened.data.thread.thread_id,
+          sender: "parley-peer",
+          bodyText: "Here is the answer."
+        }
+      });
+      assert.equal(replied.status, "ok");
+      assert.equal(replied.data.tool, "parley_reply_thread");
+      assert.equal(replied.data.transport_required, true);
+      assert.equal(replied.data.dispatch_status, undefined);
+      assert.equal(replied.data.message.transport_state, "pending_dispatch");
+      assert.equal(replied.data.transport_request.target_session_key, "agent:parley-agent:session:test");
     });
   });
 });

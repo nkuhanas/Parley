@@ -20,8 +20,9 @@ Standalone CLI calls use the embedded Parley service boundary with local file-ba
 
 ## Client mode
 
-`PARLEY_MODE=client` requires `PARLEY_API_URL`. Client-mode commands use the remote client surface (`GET /health`, `POST /v1/queries/:queryName`) and never fall back to local state. Use `--auth-token-file` or `PARLEY_AUTH_TOKEN_FILE` for bearer auth without printing token material.
+`PARLEY_MODE=client` requires `PARLEY_API_URL`. Client-mode commands use the remote client surface (`GET /health`, `POST /v1/queries/:queryName`, `POST /v1/commands/:commandName`) and never fall back to local state. Use `--auth-token-file` or `PARLEY_AUTH_TOKEN_FILE` for bearer auth without printing token material.
 
+Remote services resolve callers through runtime refs. For operator automation, prefer keeping the canonical identity as the OpenClaw runtime ref and making CLI an alias rather than registering a second global agent. Use `--caller-runtime openclaw`, `PARLEY_CALLER_RUNTIME=openclaw`, or `parleyCallerRuntime: "openclaw"` in the CLI config; optional aliases can be supplied as `PARLEY_CALLER_RUNTIME_ALIASES=cli:agent:<id>` or `parleyCallerRuntimeAliases`.
 
 ## Service daemon
 
@@ -37,4 +38,4 @@ Standalone CLI calls use the embedded Parley service boundary with local file-ba
 
 ## Config
 
-Use `--config <file>` or `PARLEY_CONFIG=<file>` to load a JSON object shaped like Parley plugin config. Command-line flags such as `--mode`, `--state-root`, `--runtime-root`, `--db-path`, `--api-url`, `--agent`, and `--default-board` override file config.
+Use `--config <file>` or `PARLEY_CONFIG=<file>` to load a JSON object shaped like Parley plugin config. Command-line flags such as `--mode`, `--state-root`, `--runtime-root`, `--db-path`, `--api-url`, `--agent`, `--default-board`, `--caller-runtime`, `--caller-runtime-ref`, and `--caller-runtime-aliases` override file config.

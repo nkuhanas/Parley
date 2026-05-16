@@ -22,6 +22,18 @@ const SERVICE_QUERY_TOOL_SPECS = Object.freeze({
   parley_query_search: { query: "searchReferences", input: params => params ?? {}, result: data => boardResult(data) }
 });
 
+const RUNTIME_TOOL_ACTIONS = Object.freeze({
+  parley_open_thread: "open_thread",
+  parley_claim_turn: "claim_turn",
+  parley_reply_thread: "reply_thread",
+  parley_probe_thread: "probe_thread",
+  parley_settle_turn: "settle_turn",
+  parley_conclude_thread: "conclude_thread",
+  parley_record_transport_result: "record_transport_result",
+  parley_dispatch_transport_request: "dispatch_transport_request",
+  parley_record_human_summary_anchor: "record_human_summary_anchor"
+});
+
 const MUTATE_TOOL_ACTIONS = Object.freeze({
   parley_register_artifact: "register_artifact",
   parley_create_object: "create_object",
@@ -279,6 +291,15 @@ async function executeRuntimeSplitTool(api, tool, params = {}) {
     return querySpec.result(data, params);
   }
 
+  const runtimeAction = RUNTIME_TOOL_ACTIONS[tool.name];
+  if (runtimeAction != null) {
+    const data = await executeCommand(api, params, "runtime", {
+      action: runtimeAction,
+      input: params ?? {}
+    });
+    return rawToolResult(data);
+  }
+
   const mutateAction = MUTATE_TOOL_ACTIONS[tool.name];
   if (mutateAction != null) {
     const data = await executeCommand(api, params, "mutate", commandInputForAction(mutateAction, params));
@@ -299,6 +320,7 @@ export function wrapOpenClawToolForRuntime(api, tool) {
     || tool.name === "parley_query"
     || tool.name === "parley_mutate"
     || SERVICE_QUERY_TOOL_SPECS[tool.name] != null
+    || RUNTIME_TOOL_ACTIONS[tool.name] != null
     || MUTATE_TOOL_ACTIONS[tool.name] != null;
   if (!shouldWrap) return tool;
   return {

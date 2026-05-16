@@ -18,7 +18,7 @@ import {
   validateState,
   whereAmI
 } from "./queries/index.js";
-import { mutate } from "./commands/index.js";
+import { mutate, runtime } from "./commands/index.js";
 import { resolveParleyRuntimeConfig } from "../core/config.js";
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -38,7 +38,8 @@ export const HTTP_QUERY_HANDLERS = Object.freeze({
 });
 
 export const HTTP_COMMAND_HANDLERS = Object.freeze({
-  mutate
+  mutate,
+  runtime
 });
 
 function nonEmptyString(value) {
@@ -172,7 +173,7 @@ async function authorize(req, options = {}) {
 }
 
 function depsForOptions(options = {}) {
-  return { pluginConfig: options.pluginConfig ?? {} };
+  return { pluginConfig: options.pluginConfig ?? {}, callGateway: options.callGateway };
 }
 
 function normalizeHttpServiceOptions(options = {}) {

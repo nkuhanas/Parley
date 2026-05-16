@@ -298,3 +298,45 @@ test("CLI client mode uses injected remote client transport without local state"
     assert.equal(await exists(stateRoot), false);
   });
 });
+
+test("CLI client mode can use canonical OpenClaw caller identity plus CLI aliases", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const env = cliEnv(tempRoot, {
+      PARLEY_MODE: "client",
+      PARLEY_API_URL: "http://parley.test",
+      PARLEY_AGENT_ID: "parley-agent",
+      PARLEY_DEFAULT_BOARD: "project",
+      PARLEY_CALLER_RUNTIME: "openclaw",
+      PARLEY_CALLER_RUNTIME_ALIASES: "cli:agent:parley-agent"
+    });
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: { get: () => "application/json" },
+        json: async () => ({ status: "ok", data: { url } })
+      };
+    };
+
+    const stdout = memoryStream();
+    const stderr = memoryStream();
+    const exitCode = await runParleyCli(["my-boards"], { env, stdout, stderr, fetchImpl });
+    assert.equal(exitCode, 0);
+    assert.equal(stderr.text(), "");
+    const parsed = JSON.parse(stdout.text());
+    assert.equal(parsed.ok, true);
+    assert.equal(calls[0].url, "http://parley.test/v1/queries/myBoards");
+    assert.deepEqual(JSON.parse(calls[0].init.body).caller, {
+      actor_id: "parley-agent",
+      actor_type: "agent",
+      runtime: "openclaw",
+      runtime_aliases: [
+        { runtime_ref: { scheme: "cli", type: "agent", id: "parley-agent" }, source: "cli_config" }
+      ],
+      board_id: "project"
+    });
+  });
+});

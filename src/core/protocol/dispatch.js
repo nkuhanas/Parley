@@ -46,19 +46,18 @@ function normalizeTransportError(error) {
   return { code, message };
 }
 
-export async function dispatchTransportRequest(api, { threadId, messageId, timeoutMs, notePrefix = null }) {
+export async function prepareTransportDispatchRequest(pluginConfig, { threadId, messageId, notePrefix = null }) {
   const normalizedThreadId = typeof threadId === "string" && threadId.trim() ? threadId.trim() : null;
   const normalizedMessageId = typeof messageId === "string" && messageId.trim() ? messageId.trim() : null;
   if (!normalizedThreadId) throw new Error("threadId required");
   if (!normalizedMessageId) throw new Error("messageId required");
 
-  const normalizedTimeoutMs = normalizeDispatchTimeoutMs(timeoutMs);
-  const thread = await loadThreadRecord(api.pluginConfig, normalizedThreadId);
+  const thread = await loadThreadRecord(pluginConfig, normalizedThreadId);
   if (!thread) {
     throw new Error(`thread not found: ${normalizedThreadId}`);
   }
 
-  const message = await loadMessageRecord(api.pluginConfig, normalizedThreadId, normalizedMessageId);
+  const message = await loadMessageRecord(pluginConfig, normalizedThreadId, normalizedMessageId);
   if (!message) {
     throw new Error(`message not found: ${normalizedMessageId}`);
   }
@@ -75,8 +74,37 @@ export async function dispatchTransportRequest(api, { threadId, messageId, timeo
     };
   }
 
-  await assertLatestDispatchableMessage(api.pluginConfig, normalizedThreadId, message);
-  const expectedRequest = buildTransportRequest({ thread, message });
+  await assertLatestDispatchableMessage(pluginConfig, normalizedThreadId, message);
+  return {
+    thread,
+    message,
+    transport_required: true,
+    transport_request: buildTransportRequest({ thread, message }),
+    note: notePrefix == null
+      ? "Parley transport handoff is ready for caller-managed dispatch."
+      : `${notePrefix} Transport handoff is ready for caller-managed dispatch.`
+  };
+}
+
+export async function dispatchTransportRequest(api, { threadId, messageId, timeoutMs, notePrefix = null }) {
+  const normalizedThreadId = typeof threadId === "string" && threadId.trim() ? threadId.trim() : null;
+  const normalizedMessageId = typeof messageId === "string" && messageId.trim() ? messageId.trim() : null;
+  if (!normalizedThreadId) throw new Error("threadId required");
+  if (!normalizedMessageId) throw new Error("messageId required");
+
+  const normalizedTimeoutMs = normalizeDispatchTimeoutMs(timeoutMs);
+  const prepared = await prepareTransportDispatchRequest(api.pluginConfig, {
+    threadId: normalizedThreadId,
+    messageId: normalizedMessageId,
+    notePrefix
+  });
+  const { thread, message } = prepared;
+
+  if (prepared.transport_required === false) {
+    return prepared;
+  }
+
+  const expectedRequest = prepared.transport_request;
 
   const attemptedAt = nowIso();
   await updateMessageTransport(api.pluginConfig, normalizedThreadId, normalizedMessageId, {

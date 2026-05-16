@@ -347,8 +347,9 @@ test("OpenClaw adapter client mode refuses state or DB env before local state", 
   });
 });
 
-test("OpenClaw adapter client mode fails runtime transport tools clearly", async () => {
+test("OpenClaw adapter client mode routes runtime transport tools through remote runtime command", async () => {
   await withTempRoot(async (tempRoot) => {
+    const calls = [];
     const tools = registeredTools({
       env: openclawEnv(tempRoot),
       pluginConfig: {
@@ -357,12 +358,40 @@ test("OpenClaw adapter client mode fails runtime transport tools clearly", async
         parleyAgentId: "kairos-operator",
         parleyDefaultBoard: "project"
       },
-      fetchImpl: async () => jsonResponse({ status: "ok" })
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return jsonResponse({
+          status: "ok",
+          data: {
+            ok: true,
+            tool: "parley_open_thread",
+            thread: { thread_id: "thread_remote" },
+            message: { message_id: "message_remote" },
+            transport_required: true,
+            transport_request: { target_session_key: "session:b" }
+          }
+        });
+      }
     });
 
-    await assert.rejects(
-      () => tools.get("parley_open_thread").execute(null, { initiator: "a", recipient: "b", bodyText: "hi", targetSessionKey: "session:b" }),
-      (error) => error?.code === "PARLEY_OPENCLAW_CLIENT_TOOL_UNSUPPORTED"
-    );
+    const result = await tools.get("parley_open_thread").execute(null, {
+      initiator: "a",
+      recipient: "b",
+      bodyText: "hi",
+      targetSessionKey: "session:b"
+    });
+
+    assert.equal(result.details.tool, "parley_open_thread");
+    assert.equal(result.details.thread.thread_id, "thread_remote");
+    assert.equal(calls[0].url, "http://parley.test/v1/commands/runtime");
+    assert.deepEqual(JSON.parse(calls[0].init.body).input, {
+      action: "open_thread",
+      input: {
+        initiator: "a",
+        recipient: "b",
+        bodyText: "hi",
+        targetSessionKey: "session:b"
+      }
+    });
   });
 });

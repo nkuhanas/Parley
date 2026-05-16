@@ -7,6 +7,7 @@ import {
   listRuntimeObligations,
   mutate,
   myBoards,
+  runtime,
   searchReferences,
   validatePlan,
   validateState,
@@ -29,7 +30,8 @@ const QUERY_HANDLERS = Object.freeze({
 });
 
 const COMMAND_HANDLERS = Object.freeze({
-  mutate
+  mutate,
+  runtime
 });
 
 function nonEmptyString(value) {
@@ -120,6 +122,7 @@ export function createParleyEmbeddedClient(options = {}) {
     describe: (input = {}, options = {}) => query("describe", input, options),
     myBoards: (input = {}, options = {}) => query("myBoards", input, options),
     whereAmI: (input = {}, options = {}) => query("whereAmI", input, options),
-    mutate: (input = {}, options = {}) => command("mutate", input, options)
+    mutate: (input = {}, options = {}) => command("mutate", input, options),
+    runtime: (input = {}, options = {}) => command("runtime", input, options)
   };
 }

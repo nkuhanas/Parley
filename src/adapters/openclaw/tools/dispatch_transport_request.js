@@ -1,4 +1,4 @@
-import { dispatchTransportRequest, normalizeDispatchTimeoutMs } from "../../../core/protocol/dispatch.js";
+import { dispatchTransportRequest, normalizeDispatchTimeoutMs, prepareTransportDispatchRequest } from "../../../core/protocol/dispatch.js";
 import { formatParleyResult, nonEmptyString } from "./common.js";
 
 export function createDispatchTransportRequestTool(api) {
@@ -29,6 +29,13 @@ export function createDispatchTransportRequestTool(api) {
       const threadId = nonEmptyString(params?.threadId, "threadId");
       const messageId = nonEmptyString(params?.messageId, "messageId");
       const timeoutMs = normalizeDispatchTimeoutMs(params?.timeoutMs);
+
+      if (api.pluginConfig?.__parleyServiceTransportMode === "caller_managed") {
+        return formatParleyResult({
+          tool: "parley_dispatch_transport_request",
+          ...(await prepareTransportDispatchRequest(api.pluginConfig, { threadId, messageId }))
+        });
+      }
 
       return formatParleyResult({
         tool: "parley_dispatch_transport_request",

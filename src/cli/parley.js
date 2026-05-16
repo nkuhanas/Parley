@@ -22,7 +22,7 @@ function nonEmptyString(value) {
 }
 
 function usage() {
-  return `Usage: parley [--config <file>] [--mode <mode>] [--agent <id>] [--default-board <board>] <command> [options]
+  return `Usage: parley [--config <file>] [--mode <mode>] [--agent <id>] [--default-board <board>] [--caller-runtime <scheme>] <command> [options]
 
 Commands:
   mode                         Show resolved runtime mode/config summary.
@@ -33,7 +33,8 @@ Commands:
   where-am-i [--board <board>] [--verbosity compact|full] [--include-terminal]
 
 Standalone mode calls the embedded Parley service boundary with local file-backed state.
-Client mode requires PARLEY_API_URL/parleyApiUrl and uses the remote client surface.`;
+Client mode requires PARLEY_API_URL/parleyApiUrl and uses the remote client surface.
+Use --caller-runtime openclaw or parleyCallerRuntime to make CLI calls impersonate the canonical OpenClaw runtime identity when the service registry does not bind cli:* refs.`;
 }
 
 function parseArgs(argv) {
@@ -84,7 +85,10 @@ function cliOverrides(options) {
     parleyAuthToken: nonEmptyString(options["auth-token"]),
     parleyAuthTokenFile: nonEmptyString(options["auth-token-file"]),
     parleyAgentId: nonEmptyString(options.agent),
-    parleyDefaultBoard: nonEmptyString(options["default-board"])
+    parleyDefaultBoard: nonEmptyString(options["default-board"]),
+    parleyCallerRuntime: nonEmptyString(options["caller-runtime"]),
+    parleyCallerRuntimeRef: nonEmptyString(options["caller-runtime-ref"]),
+    parleyCallerRuntimeAliases: nonEmptyString(options["caller-runtime-aliases"])
   }).filter(([, value]) => value != null));
 }
 
@@ -135,6 +139,34 @@ function commandInput(command, options) {
   return {};
 }
 
+function parseRuntimeRef(value) {
+  if (value == null) return undefined;
+  if (typeof value === "object" && !Array.isArray(value)) return value;
+  const normalized = nonEmptyString(value);
+  if (normalized == null) return undefined;
+  if (normalized.startsWith("{")) return JSON.parse(normalized);
+  const parts = normalized.split(":");
+  if (parts.length < 3) throw new Error("runtime ref must use scheme:type:id");
+  const [scheme, type, ...idParts] = parts;
+  const id = idParts.join(":");
+  if (!scheme || !type || !id) throw new Error("runtime ref must use scheme:type:id");
+  return { scheme, type, id };
+}
+
+function parseRuntimeAliases(value) {
+  if (value == null) return undefined;
+  if (Array.isArray(value)) {
+    return value.map((entry) => {
+      if (entry?.runtime_ref != null || entry?.runtimeRef != null) return entry;
+      return { runtime_ref: parseRuntimeRef(entry), source: "cli_config" };
+    });
+  }
+  const normalized = nonEmptyString(value);
+  if (normalized == null) return undefined;
+  if (normalized.startsWith("[")) return parseRuntimeAliases(JSON.parse(normalized));
+  return normalized.split(",").map((entry) => ({ runtime_ref: parseRuntimeRef(entry), source: "cli_config" }));
+}
+
 function pickConfigString(pluginConfig, env, keys, envKeys = []) {
   for (const key of keys) {
     const value = nonEmptyString(pluginConfig[key]);
@@ -147,15 +179,26 @@ function pickConfigString(pluginConfig, env, keys, envKeys = []) {
   return undefined;
 }
 
+function callerOptions(runtimeConfig, pluginConfig, env = {}) {
+  return {
+    actor_id: runtimeConfig.agentId,
+    agentId: runtimeConfig.agentId,
+    board_id: runtimeConfig.defaultBoard,
+    defaultBoard: runtimeConfig.defaultBoard,
+    runtime: pickConfigString(pluginConfig, env, ["parleyCallerRuntime", "callerRuntime"], ["PARLEY_CALLER_RUNTIME"]) ?? "cli",
+    runtime_ref: parseRuntimeRef(pluginConfig.parleyCallerRuntimeRef ?? pluginConfig.callerRuntimeRef ?? env.PARLEY_CALLER_RUNTIME_REF),
+    runtime_aliases: parseRuntimeAliases(pluginConfig.parleyCallerRuntimeAliases ?? pluginConfig.callerRuntimeAliases ?? env.PARLEY_CALLER_RUNTIME_ALIASES)
+  };
+}
+
 function createClientForRuntime(runtimeConfig, pluginConfig, options = {}) {
+  const caller = callerOptions(runtimeConfig, pluginConfig, options.env);
   if (runtimeConfig.mode === "client") {
     return createParleyRemoteClient({
       apiUrl: runtimeConfig.apiUrl,
       authToken: pickConfigString(pluginConfig, options.env, ["parleyAuthToken", "authToken"], ["PARLEY_AUTH_TOKEN"]),
       authTokenFile: pickConfigString(pluginConfig, options.env, ["parleyAuthTokenFile", "authTokenFile"], ["PARLEY_AUTH_TOKEN_FILE"]),
-      agentId: runtimeConfig.agentId,
-      defaultBoard: runtimeConfig.defaultBoard,
-      runtime: "cli",
+      ...caller,
       fetchImpl: options.fetchImpl
     });
   }
@@ -163,11 +206,7 @@ function createClientForRuntime(runtimeConfig, pluginConfig, options = {}) {
     surface: "cli",
     pluginConfig,
     runtimeConfig,
-    caller: {
-      actor_id: runtimeConfig.agentId,
-      runtime: "cli",
-      board_id: runtimeConfig.defaultBoard
-    }
+    caller
   });
 }
 

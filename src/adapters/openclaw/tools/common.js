@@ -280,6 +280,7 @@ function compactTransportRequest(request) {
     canonical_thread_id: request.canonical_thread_id ?? request.thread_id,
     canonical_message_id: request.canonical_message_id ?? request.message_id,
     target_session_key: request.target_session_key,
+    outbound_text: request.outbound_text,
     idempotency_key: request.idempotency_key
   };
 }
@@ -407,6 +408,18 @@ export async function buildParleyActionResult(api, {
   autoDispatch = false,
   extraDetails = {}
 }) {
+  if (autoDispatch && api.pluginConfig?.__parleyServiceTransportMode === "caller_managed") {
+    return formatParleyResult({
+      tool,
+      thread,
+      message,
+      transport_required: true,
+      transport_request: buildTransportRequest({ thread, message }),
+      note,
+      ...extraDetails
+    });
+  }
+
   if (!transportRequired) {
     return formatParleyResult({
       tool,
