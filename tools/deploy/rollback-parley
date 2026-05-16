@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+usage: rollback-parley <commit-or-tag> [db-backup.sqlite]
+
+If db-backup.sqlite is supplied, rollback restores that SQLite file before restart.
+Use this for migration-breaking rollback. Without it, rollback is code-only.
+
+Environment overrides:
+  PARLEY_DEPLOY_REPO=/srv/workspaces/Parley
+  PARLEY_DEPLOY_DB=/var/lib/parley/parley.sqlite
+  PARLEY_DEPLOY_SERVICE=parley.service
+  PARLEY_DEPLOY_HEALTH_URL=http://127.0.0.1:7331/health
+  PARLEY_DEPLOY_SKIP_SYSTEMD=0
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+REF="${1:?usage: rollback-parley <commit-or-tag> [db-backup.sqlite]}"
+DB_BACKUP="${2:-}"
+REPO="${PARLEY_DEPLOY_REPO:-/srv/workspaces/Parley}"
+DB="${PARLEY_DEPLOY_DB:-/var/lib/parley/parley.sqlite}"
+SERVICE="${PARLEY_DEPLOY_SERVICE:-parley.service}"
+HEALTH_URL="${PARLEY_DEPLOY_HEALTH_URL:-http://127.0.0.1:7331/health}"
+SKIP_SYSTEMD="${PARLEY_DEPLOY_SKIP_SYSTEMD:-0}"
+
+run_systemctl() {
+  if [[ "$SKIP_SYSTEMD" == "1" ]]; then
+    echo "Skipping systemctl $* because PARLEY_DEPLOY_SKIP_SYSTEMD=1"
+    return 0
+  fi
+  sudo systemctl "$@"
+}
+
+install_dependencies() {
+  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+    npm ci
+  else
+    npm install --no-package-lock
+  fi
+}
+
+cd "$REPO"
+
+echo "Checking clean worktree..."
+git diff --quiet
+git diff --cached --quiet
+
+echo "Stopping service..."
+run_systemctl stop "$SERVICE" || true
+
+if [[ -n "$DB_BACKUP" ]]; then
+  echo "Restoring DB backup..."
+  test -f "$DB_BACKUP"
+  mkdir -p "$(dirname "$DB")"
+  cp "$DB_BACKUP" "$DB"
+fi
+
+echo "Fetching refs..."
+git fetch origin --tags
+
+echo "Checking out $REF..."
+git checkout "$REF"
+
+echo "Installing dependencies..."
+install_dependencies
+
+echo "Starting service..."
+run_systemctl start "$SERVICE"
+
+echo "Health check..."
+curl -fsS "$HEALTH_URL"
+printf '\n'
+
+echo "Rolled back code to $(git rev-parse HEAD)"

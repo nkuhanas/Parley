@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+usage: deploy-parley <commit-or-tag>
+
+Environment overrides:
+  PARLEY_DEPLOY_REPO=/srv/workspaces/Parley
+  PARLEY_DEPLOY_DB=/var/lib/parley/parley.sqlite
+  PARLEY_DEPLOY_BACKUP_DIR=/var/lib/parley/backups
+  PARLEY_DEPLOY_MARKER_DIR=/var/lib/parley
+  PARLEY_DEPLOY_SERVICE=parley.service
+  PARLEY_DEPLOY_HEALTH_URL=http://127.0.0.1:7331/health
+  PARLEY_DEPLOY_SKIP_SYSTEMD=0
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+REF="${1:?usage: deploy-parley <commit-or-tag>}"
+REPO="${PARLEY_DEPLOY_REPO:-/srv/workspaces/Parley}"
+DB="${PARLEY_DEPLOY_DB:-/var/lib/parley/parley.sqlite}"
+BACKUP_DIR="${PARLEY_DEPLOY_BACKUP_DIR:-/var/lib/parley/backups}"
+MARKER_DIR="${PARLEY_DEPLOY_MARKER_DIR:-/var/lib/parley}"
+SERVICE="${PARLEY_DEPLOY_SERVICE:-parley.service}"
+HEALTH_URL="${PARLEY_DEPLOY_HEALTH_URL:-http://127.0.0.1:7331/health}"
+SKIP_SYSTEMD="${PARLEY_DEPLOY_SKIP_SYSTEMD:-0}"
+
+run_systemctl() {
+  if [[ "$SKIP_SYSTEMD" == "1" ]]; then
+    echo "Skipping systemctl $* because PARLEY_DEPLOY_SKIP_SYSTEMD=1"
+    return 0
+  fi
+  sudo systemctl "$@"
+}
+
+install_dependencies() {
+  if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
+    npm ci
+  else
+    npm install --no-package-lock
+  fi
+}
+
+cd "$REPO"
+
+echo "Checking clean worktree..."
+git diff --quiet
+git diff --cached --quiet
+
+echo "Fetching refs..."
+git fetch origin --tags
+
+echo "Checking out $REF..."
+git checkout "$REF"
+
+echo "Installing dependencies..."
+install_dependencies
+
+echo "Running tests..."
+npm test
+
+echo "Building if present..."
+npm run build --if-present
+
+echo "Stopping service before migration..."
+run_systemctl stop "$SERVICE" || true
+
+echo "Backing up DB..."
+mkdir -p "$BACKUP_DIR"
+if [[ -f "$DB" ]]; then
+  cp "$DB" "$BACKUP_DIR/parley-$(date -u +%Y%m%dT%H%M%SZ)-pre-migrate.sqlite"
+fi
+
+echo "Migrating DB..."
+PARLEY_MODE=service PARLEY_DB_PATH="$DB" npm run cli -- migrate
+
+echo "Restarting service..."
+run_systemctl restart "$SERVICE"
+
+echo "Health check..."
+curl -fsS "$HEALTH_URL"
+printf '\n'
+
+echo "Recording deployment marker..."
+mkdir -p "$MARKER_DIR"
+git rev-parse HEAD > "$MARKER_DIR/deployed-commit"
+date -u +"%Y-%m-%dT%H:%M:%SZ" > "$MARKER_DIR/deployed-at"
+
+echo "Deployed $(cat "$MARKER_DIR/deployed-commit")"

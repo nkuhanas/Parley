@@ -16,11 +16,13 @@
     "./adapters/openclaw/*": "./src/adapters/openclaw/*",
     "./adapters/proxmox": "./src/adapters/proxmox/index.js",
     "./adapters/proxmox/*": "./src/adapters/proxmox/*",
-    "./src/*": "./src/*"
+    "./src/*": "./src/*",
+    "./daemon": "./src/cli/parleyd.js"
   },
   "scripts": {
     "test": "node --test",
-    "cli": "node ./src/cli/parley.js"
+    "cli": "node ./src/cli/parley.js",
+    "service": "node ./src/cli/parleyd.js"
   },
   "license": "Apache-2.0",
   "repository": {
@@ -40,6 +42,7 @@
     "openclaw.plugin.json",
     "src/",
     "docs/",
+    "tools/",
     "examples/",
     "README.md",
     "LICENSE",
@@ -68,7 +71,8 @@
     }
   },
   "bin": {
-    "parley": "./src/cli/parley.js"
+    "parley": "./src/cli/parley.js",
+    "parleyd": "./src/cli/parleyd.js"
   },
   "engines": {
     "node": ">=22.5.0"

@@ -5,6 +5,7 @@ The alpha CLI is intentionally small and uses the same runtime mode resolver as 
 ```sh
 parley mode
 parley migrate --mode service --db-path /var/lib/parley/parley.sqlite
+parleyd --mode service --db-path /var/lib/parley/parley.sqlite --auth-token-file /etc/parley/token
 parley health
 parley describe
 parley my-boards --config ./parley.config.json
@@ -22,9 +23,17 @@ Standalone CLI calls use the embedded Parley service boundary with local file-ba
 `PARLEY_MODE=client` requires `PARLEY_API_URL`. Client-mode commands use the remote client surface (`GET /health`, `POST /v1/queries/:queryName`) and never fall back to local state. Use `--auth-token-file` or `PARLEY_AUTH_TOKEN_FILE` for bearer auth without printing token material.
 
 
+## Service daemon
+
+`parleyd` starts the HTTP service boundary for `PARLEY_MODE=service`. It requires an explicit `PARLEY_DB_PATH`/`--db-path`; default bind is `127.0.0.1:7331`. Use `--auth-token-file` or `PARLEY_AUTH_TOKEN_FILE` for protected `/v1/meta`, `/v1/queries/*`, and `/v1/commands/*` routes. The daemon prints a JSON `ready` event after binding and exits cleanly on `SIGTERM`/`SIGINT`.
+
 ## Service migration
 
 `parley migrate` runs idempotent SQLite ledger migrations for `PARLEY_MODE=service`. It requires an explicit `PARLEY_DB_PATH`/`--db-path`; client mode cannot run it, and standalone/test remain file-backed. For deployments, back up the SQLite DB file or containing volume before migration.
+
+## Deployment helpers
+
+`tools/deploy/deploy-parley` and `tools/deploy/rollback-parley` are intentionally small Git-backed deployment helpers. They require a clean worktree, fetch tags, check out an explicit ref, install dependencies, and health-check the service. The deploy helper also backs up the DB before running `npm run cli -- migrate`.
 
 ## Config
 
