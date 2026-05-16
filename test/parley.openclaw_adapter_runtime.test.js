@@ -140,17 +140,48 @@ function projectConfig(tempRoot, overrides = {}) {
   };
 }
 
-function registeredTools(api, toolContext = TOOL_CONTEXT) {
-  const tools = new Map();
+function registeredToolRegistrations(api) {
+  const registrations = [];
   registerParleyTools({
     ...api,
-    registerTool(toolOrFactory) {
-      const tool = typeof toolOrFactory === "function" ? toolOrFactory(toolContext) : toolOrFactory;
-      tools.set(tool.name, tool);
+    registerTool(toolOrFactory, options = {}) {
+      registrations.push({ toolOrFactory, options });
     }
   });
+  return registrations;
+}
+
+function registeredTools(api, toolContext = TOOL_CONTEXT) {
+  const tools = new Map();
+  for (const { toolOrFactory } of registeredToolRegistrations(api)) {
+    const tool = typeof toolOrFactory === "function" ? toolOrFactory(toolContext) : toolOrFactory;
+    tools.set(tool.name, tool);
+  }
   return tools;
 }
+
+test("OpenClaw adapter names runtime-context factories for descriptor routing", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const registrations = registeredToolRegistrations({
+      env: openclawEnv(tempRoot),
+      pluginConfig: {
+        parleyMode: "client",
+        parleyApiUrl: "http://parley.test",
+        parleyAgentId: "kairos-operator",
+        parleyDefaultBoard: "project"
+      },
+      fetchImpl: async () => jsonResponse({ status: "ok" })
+    });
+
+    const unnamedFactories = registrations
+      .filter(({ toolOrFactory, options }) => typeof toolOrFactory === "function"
+        && options?.name == null
+        && (!Array.isArray(options?.names) || options.names.length === 0))
+      .map(({ toolOrFactory }) => toolOrFactory(TOOL_CONTEXT).name);
+
+    assert.deepEqual(unnamedFactories, []);
+  });
+});
 
 test("OpenClaw adapter registers the stable tool names in explicit client mode", async () => {
   await withTempRoot(async (tempRoot) => {
