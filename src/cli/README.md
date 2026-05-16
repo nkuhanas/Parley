@@ -10,6 +10,7 @@ parley health
 parley describe
 parley my-boards --config ./parley.config.json
 parley where-am-i --config ./parley.config.json --board project
+parley-codex --api-url http://127.0.0.1:7331 --auth-token-file /etc/parley/token --dry-run
 ```
 
 ## Standalone mode
@@ -23,6 +24,32 @@ Standalone CLI calls use the embedded Parley service boundary with local file-ba
 `PARLEY_MODE=client` requires `PARLEY_API_URL`. Client-mode commands use the remote client surface (`GET /health`, `POST /v1/queries/:queryName`, `POST /v1/commands/:commandName`) and never fall back to local state. Use `--auth-token-file` or `PARLEY_AUTH_TOKEN_FILE` for bearer auth without printing token material.
 
 Remote services resolve callers through runtime refs. For operator automation, prefer keeping the canonical identity as the OpenClaw runtime ref and making CLI an alias rather than registering a second global agent. Use `--caller-runtime openclaw`, `PARLEY_CALLER_RUNTIME=openclaw`, or `parleyCallerRuntime: "openclaw"` in the CLI config; optional aliases can be supplied as `PARLEY_CALLER_RUNTIME_ALIASES=cli:agent:<id>` or `parleyCallerRuntimeAliases`.
+
+## Codex wrapper
+
+`parley-codex` launches `codex` with Parley client-mode identity environment. It is intentionally thin: Parley obligations should be assigned to a durable board actor such as `codex-agent`, while each `codex` process is only an ephemeral worker/session for provenance.
+
+```sh
+parley-codex \
+  --actor codex-agent \
+  --api-url http://127.0.0.1:7331 \
+  --auth-token-file /etc/parley/token \
+  --default-board parley \
+  -- --model gpt-5.5
+```
+
+The wrapper exports:
+
+- `PARLEY_MODE=client`
+- `PARLEY_API_URL`
+- `PARLEY_AUTH_TOKEN_FILE` or `PARLEY_AUTH_TOKEN`
+- `PARLEY_AGENT_ID` (default `codex-agent`)
+- `PARLEY_CALLER_RUNTIME=codex`
+- `PARLEY_CALLER_RUNTIME_REF=codex:agent:<actor>`
+- `PARLEY_CALLER_RUNTIME_ALIASES=codex:session:<generated-session-id>`
+- provenance variables: `PARLEY_SESSION_ID`, `PARLEY_WORKER_SURFACE`, `PARLEY_HOST_ID`, and `PARLEY_WORKSPACE`
+
+`parley-codex --dry-run` prints the sanitized launch environment without executing `codex`. To smoke the Parley CLI through the same environment, override the launched command, for example `parley-codex --command parley -- where-am-i`. The wrapper does not assign board authority by itself; the service board registry must contain the durable actor/runtime ref (for example `codex:agent:codex-agent`).
 
 ## Service daemon
 
