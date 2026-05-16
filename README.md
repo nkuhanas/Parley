@@ -94,6 +94,15 @@ Parley is recovery-first. A cold agent can call `parley_describe`, `parley_where
 
 Parley tools return more than raw records. They include `summary`, `guidance`, diagnostics, scoped identifiers, and safe next operations so agents do not need to keep Parley's protocol in context.
 
+The guidance loop is:
+
+1. A cold agent calls `parley_describe`.
+2. Parley explains available capabilities and safe entry points.
+3. The agent calls `parley_where_am_i`.
+4. Parley returns identity, board hints, obligations, diagnostics, and next actions.
+5. The agent chooses an explicit board and records artifacts, effects, or obligation resolutions.
+6. Parley returns state-specific guidance for the next valid operations.
+
 Example recovery flow:
 
 ```text
@@ -270,6 +279,32 @@ parley_where_am_i({
   boardId: runtime.boards.default_board,
   verbosity: "full"
 }) // optional diagnostic detail
+```
+
+A healthy compact `parley_where_am_i({})` response looks like:
+
+```json
+{
+  "ok": true,
+  "summary": "Recovered runtime identity and board discovery hints.",
+  "scope": "runtime",
+  "runtime": {
+    "identity": {
+      "global_agent_id": "my-agent",
+      "default_board": "project"
+    },
+    "obligations": []
+  },
+  "boards": {
+    "default_board": "project",
+    "available": ["project"]
+  },
+  "guidance": {
+    "next": [
+      { "tool": "parley_where_am_i", "args": { "boardId": "project" } }
+    ]
+  }
+}
 ```
 
 A fresh agent can recover without prior chat context:
