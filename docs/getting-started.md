@@ -52,7 +52,20 @@ For client-mode OpenClaw agents, keep the local plugin config small: mode, servi
 
 ## 4. Register tools
 
-Use the package's plugin entrypoint, or call `registerParleyTools(api)` from another plugin.
+Use the package's plugin entrypoint, or call `registerParleyTools(api)` from another plugin:
+
+```js
+import { registerParleyTools } from "@nkuhanas/parley";
+
+export default {
+  id: "my-plugin",
+  name: "My Plugin",
+  description: "Registers Parley coordination tools.",
+  register(api) {
+    registerParleyTools(api);
+  }
+};
+```
 
 After changing plugin installation, registration, or OpenClaw allowlists, restart OpenClaw and verify tool visibility with `openclaw plugins doctor` plus one direct Parley tool call.
 

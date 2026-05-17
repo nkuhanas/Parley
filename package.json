@@ -1,6 +1,6 @@
 {
   "name": "@nkuhanas/parley",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0",
   "type": "module",
   "description": "Harness-agnostic coordination state, recovery, obligations, and plan lifecycle tools for AI agents",
   "main": "./index.js",
@@ -81,9 +81,9 @@
     }
   },
   "bin": {
-    "parley": "./src/cli/parley.js",
-    "parleyd": "./src/cli/parleyd.js",
-    "parley-codex": "./src/cli/parley-codex.js"
+    "parley": "src/cli/parley.js",
+    "parleyd": "src/cli/parleyd.js",
+    "parley-codex": "src/cli/parley-codex.js"
   },
   "engines": {
     "node": ">=22.5.0"

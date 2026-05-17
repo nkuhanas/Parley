@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0
+
+- Promote Parley from release-candidate packaging to the first pre-1.0 npm/repo release.
+- Refresh the README for release-readiness: recovery-first positioning, OpenClaw-first runtime support, compact install/quick-start guidance, zero external runtime dependency note, and pre-1.0 stability wording.
+- Move contributor/package-readiness details out of the README and keep plugin registration details in getting-started docs.
+
 ## 0.1.0-rc.4
 
 - Re-encode documentation image assets for a cleaner ClawHub artifact review surface.
