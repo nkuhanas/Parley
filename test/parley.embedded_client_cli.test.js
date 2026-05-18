@@ -191,6 +191,27 @@ test("CLI standalone my-boards and where-am-i use JSON config", async () => {
 });
 
 
+test("CLI npm-bin symlink invokes the real entrypoint", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const configPath = await writeConfig(tempRoot);
+    const binDir = path.join(tempRoot, "bin");
+    await fs.mkdir(binDir, { recursive: true });
+    const binPath = path.join(binDir, "parley");
+    await fs.symlink(path.join(REPO_ROOT, "src", "cli", "parley.js"), binPath);
+
+    const { stdout } = await execFileAsync(process.execPath, [binPath, "--config", configPath, "mode"], {
+      cwd: tempRoot,
+      env: cliEnv(tempRoot),
+      maxBuffer: 1024 * 1024
+    });
+    const parsed = JSON.parse(stdout);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.command, "mode");
+    assert.equal(parsed.runtime.mode, "standalone");
+  });
+});
+
+
 test("CLI migrate runs idempotent service SQLite migrations", async () => {
   await withTempRoot(async (tempRoot) => {
     const configPath = await writeConfig(tempRoot, projectConfig(tempRoot, {

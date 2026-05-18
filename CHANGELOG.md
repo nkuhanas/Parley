@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Fix npm/npx bin entrypoint execution through package manager symlinks.
+- Tighten package exports to stable named public surfaces and keep implementation paths private.
+
 ## 0.1.0
 
 - Promote Parley from release-candidate packaging to the first pre-1.0 npm/repo release.

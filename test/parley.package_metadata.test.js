@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,17 @@ test("package metadata advertises installable OpenClaw runtime entrypoints", asy
   assert.equal(pkg.name, "@nkuhanas/parley");
   assert.equal(pkg.type, "module");
   assert.equal(pkg.main, "./index.js");
+  assert.deepEqual(pkg.exports, {
+    ".": "./index.js",
+    "./plugin": "./plugin.js",
+    "./openclaw": "./src/adapters/openclaw/index.js",
+    "./client": "./src/client/index.js",
+    "./service": "./src/service/index.js",
+    "./schemas": "./src/schemas/index.js",
+    "./adapters/proxmox": "./src/adapters/proxmox/index.js",
+    "./daemon": "./src/cli/parleyd.js"
+  });
+  assert.equal(Object.keys(pkg.exports).some((exportPath) => exportPath.includes("*")), false);
   assert.deepEqual(pkg.openclaw?.extensions, ["./plugin.js"]);
   assert.deepEqual(pkg.openclaw?.runtimeExtensions, ["./plugin.js"]);
   assert.equal(pkg.openclaw?.compat?.pluginApi, ">=2026.5.4");
@@ -40,6 +52,30 @@ test("package metadata advertises installable OpenClaw runtime entrypoints", asy
   await assertFile("plugin.js");
   await assertFile("openclaw.plugin.json");
   await assertFile("src/adapters/openclaw/index.js");
+});
+
+test("package bin symlinks execute real entrypoints", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "parley-package-bin-test-"));
+  try {
+    const binCases = [
+      ["parley", "src/cli/parley.js", "Usage: parley"],
+      ["parleyd", "src/cli/parleyd.js", "Usage: parleyd"],
+      ["parley-codex", "src/cli/parley-codex.js", "Usage: parley-codex"]
+    ];
+    for (const [name, target, expected] of binCases) {
+      const binPath = path.join(tempRoot, name);
+      await fs.symlink(path.join(repoRoot, target), binPath);
+      const result = spawnSync(process.execPath, [binPath, "--help"], {
+        cwd: tempRoot,
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, HOME: tempRoot }
+      });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, new RegExp(expected));
+    }
+  } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("npm pack dry-run includes plugin, CLI, docs, and executable bins", () => {
