@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { contentHash } from "../../core/plan/projection.js";
+import { compactPlanProjectionPayload, contentHash } from "../../core/plan/projection.js";
 
 const MIRROR_METADATA_SCHEMA = "parley.projection_mirror.v1";
 const REPO_PLANS_URI_PREFIX = "repo://plans/";
@@ -130,16 +130,29 @@ async function materializePlanProjection(projection, mirrorRoot) {
 
 export async function materializeProjectionResult(result, options = {}) {
   const mirrorRoot = options.runtimeConfig?.mode === "client" ? options.runtimeConfig?.projectionMirrorRoot : null;
-  if (mirrorRoot == null || result == null || typeof result !== "object" || Array.isArray(result)) return result;
+  if (result == null || typeof result !== "object" || Array.isArray(result)) return result;
   const projection = result.projection;
   if (projection == null || typeof projection !== "object" || Array.isArray(projection)) return result;
 
-  try {
-    const materialization = await materializePlanProjection(projection, mirrorRoot);
-    if (materialization == null) return result;
+  if (mirrorRoot == null) {
     return {
       ...result,
-      projection: compactObject({ ...projection, localPath: materialization.localPath, materialization }),
+      projection: compactPlanProjectionPayload(projection)
+    };
+  }
+
+  try {
+    const materialization = await materializePlanProjection(projection, mirrorRoot);
+    if (materialization == null) {
+      return {
+        ...result,
+        projection: compactPlanProjectionPayload(projection)
+      };
+    }
+    const projected = compactObject({ ...projection, localPath: materialization.localPath, materialization });
+    return {
+      ...result,
+      projection: compactPlanProjectionPayload(projected),
       projection_materialization: materialization
     };
   } catch (error) {
@@ -148,9 +161,10 @@ export async function materializeProjectionResult(result, options = {}) {
       reason: error?.code ?? "projection_materialization_failed",
       message: error?.message
     });
+    const projected = compactObject({ ...projection, materialization });
     return {
       ...result,
-      projection: compactObject({ ...projection, materialization }),
+      projection: compactPlanProjectionPayload(projected),
       projection_materialization: materialization
     };
   }

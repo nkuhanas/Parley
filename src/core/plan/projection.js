@@ -27,3 +27,17 @@ export function planProjectionPayload({ plan, artifact = null, markdown, include
     serviceLocalPath: landing.resolved_path ?? artifact?.resolved_path
   });
 }
+
+export function compactPlanProjectionPayload(projection) {
+  if (projection == null || typeof projection !== "object" || Array.isArray(projection)) return projection;
+  if (projection.kind !== "plan_markdown") return projection;
+  const { body, ...rest } = projection;
+  if (typeof body !== "string") return compactObject(rest);
+  return compactObject({
+    ...rest,
+    bodyOmitted: true,
+    bodyCharLength: body.length,
+    bodyByteLength: Buffer.byteLength(body, "utf8"),
+    bodyLineCount: body.length === 0 ? 0 : body.split("\n").length
+  });
+}

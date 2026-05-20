@@ -171,7 +171,7 @@ Plan commands that create or update plan artifacts should return:
 - recommended next action
 - lifecycle obligations created/resolved, summarized
 
-Interactive/client-facing plan mutations may return a service-rendered plan `projection` payload so clients can materialize local generated mirrors without treating local files as canonical. Arbitrary artifact body access still belongs to explicit artifact reads.
+Interactive/client-facing plan mutations may receive a service-rendered plan `projection` payload so clients can materialize local generated mirrors without treating local files as canonical. Tool-facing responses must strip the Markdown body after any materialization and return only compact projection metadata. Arbitrary artifact body access still belongs to explicit artifact reads.
 
 
 Plan projection payloads are generated mirrors, not an editing/import channel:
@@ -186,7 +186,11 @@ type PlanProjectionPayload = {
   uri?: string;
   mediaType: "text/markdown; charset=utf-8";
   contentDigest: string;
-  body: string;
+  body?: string; // service/client transport input only; omitted from tool-facing output
+  bodyOmitted?: true;
+  bodyCharLength?: number;
+  bodyByteLength?: number;
+  bodyLineCount?: number;
   namespace?: string;
   subpath?: string;
   filename?: string;
@@ -201,7 +205,7 @@ type ProjectionMaterializationResult = {
 };
 ```
 
-Clients may materialize `projection.body` only into configured adapter-local mirror roots. OpenClaw client mirrors map `repo://plans/...` to `<mirrorRoot>/plans/...`; non-repo projection payloads fall back to namespace/subpath/filename mapping. The service remains canonical for state and rendering semantics.
+Clients may materialize `projection.body` only into configured adapter-local mirror roots. OpenClaw client mirrors map `repo://plans/...` to `<mirrorRoot>/plans/...`; non-repo projection payloads fall back to namespace/subpath/filename mapping. After materialization, OpenClaw tool output omits `body` and may include `bodyOmitted` plus size metadata. The service remains canonical for state and rendering semantics.
 
 ## Artifact Read Responses
 

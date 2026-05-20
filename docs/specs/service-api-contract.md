@@ -162,7 +162,7 @@ Commands return compact mutation envelopes. Queries return bounded query envelop
 Key rules:
 
 - mutation responses include `code` and `message` when blocked or errored
-- plan mutations normally stay compact, but plan-projection mutations may include a bounded `projection` payload (`uri`, `mediaType`, `contentDigest`, `body`, and diagnostic `serviceLocalPath`) so interactive/client adapters can materialize local non-authoritative mirrors without a second round trip
+- plan mutations normally stay compact, but plan-projection mutations may include a bounded service/client transport `projection` payload (`uri`, `mediaType`, `contentDigest`, optional `body`, and diagnostic `serviceLocalPath`) so adapters can materialize local non-authoritative mirrors without a second round trip; tool-facing output must omit the projection body after any materialization
 - artifact body access for arbitrary artifacts still requires explicit artifact-read query or `include_body: true`
 - top-level artifact fields are primary artifact fields
 - multi-artifact responses may add a plural `artifacts` array later when a concrete command needs it

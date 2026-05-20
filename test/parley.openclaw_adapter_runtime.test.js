@@ -338,6 +338,9 @@ test("OpenClaw adapter client mode materializes remote plan projection mirrors",
     assert.equal(result.details.projection.localPath, localPath);
     assert.equal(result.details.projection.serviceLocalPath, serviceLocalPath);
     assert.notEqual(result.details.projection.localPath, result.details.projection.serviceLocalPath);
+    assert.equal(result.details.projection.body, undefined);
+    assert.equal(result.details.projection.bodyOmitted, true);
+    assert.equal(result.details.projection.bodyCharLength, body.length);
     assert.equal(result.details.projection_materialization.status, "written");
   });
 });
@@ -377,8 +380,31 @@ test("OpenClaw adapter client mode skips dirty local projection mirrors", async 
     const result = await tools.get("parley_create_plan").execute(null, { boardId: "project", title: "Remote Plan" });
 
     assert.equal(await fs.readFile(localPath, "utf8"), "local edits\n");
+    assert.equal(result.details.projection.body, undefined);
+    assert.equal(result.details.projection.bodyOmitted, true);
     assert.equal(result.details.projection_materialization.status, "skipped");
     assert.equal(result.details.projection_materialization.reason, "local_mirror_conflict");
+  });
+});
+
+test("OpenClaw adapter standalone plan tool output omits projection bodies", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const tools = registeredTools({
+      env: openclawEnv(tempRoot),
+      pluginConfig: projectConfig(tempRoot)
+    });
+
+    const result = await tools.get("parley_create_plan").execute(null, {
+      boardId: "project",
+      title: "Compact Plan Output",
+      landingSubpath: "drafts",
+      filename: "compact-plan-output.md"
+    });
+
+    assert.equal(Object.hasOwn(result.details.projection, "body"), false);
+    assert.equal(result.details.projection.bodyOmitted, true);
+    assert.equal(await exists(result.details.plan.path), true);
+    assert.match(await fs.readFile(result.details.plan.path, "utf8"), /# Compact Plan Output/);
   });
 });
 
