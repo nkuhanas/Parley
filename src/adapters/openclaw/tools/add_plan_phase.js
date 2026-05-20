@@ -45,6 +45,7 @@ export function createAddPlanPhaseAction(api) {
           tool: "parley_add_plan_phase",
           identity,
           plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
+          projection: result.projection,
           accepted: { phase: addedPhase },
           artifact: result.artifact,
           human_checkpoints: {

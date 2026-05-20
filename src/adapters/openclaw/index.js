@@ -27,6 +27,7 @@ import { createWritePlanOverviewAction } from "./tools/write_plan_overview.js";
 import { createAddPlanPhaseAction } from "./tools/add_plan_phase.js";
 import { createAddPlanCheckpointAction } from "./tools/add_plan_checkpoint.js";
 import { createGetPlanSetupStatusAction } from "./tools/get_plan_setup_status.js";
+import { createReadPlanProjectionAction } from "./tools/read_plan_projection.js";
 import { createActivatePlanAction, createMarkPlanReadyAction, createPausePlanAction, createRecordPhaseOutcomeAction, createRecordPlanDispositionAction, createRecordReviewDecisionAction, createRequestPlanReviewAction, createResumePlanAction } from "./tools/plan_lifecycle.js";
 import { createRuntimeObligationsQueryAction, createBoardObligationsQueryAction } from "./tools/obligations.js";
 import { createNamespaceSearchAction } from "./tools/namespace_search.js";
@@ -79,6 +80,7 @@ export function registerParleyTools(api) {
   registerRuntimeContextTool(runtimeApi, createAddPlanPhaseAction);
   registerRuntimeContextTool(runtimeApi, createAddPlanCheckpointAction);
   registerRuntimeContextTool(runtimeApi, createGetPlanSetupStatusAction);
+  registerRuntimeContextTool(runtimeApi, createReadPlanProjectionAction);
   registerRuntimeContextTool(runtimeApi, createRequestPlanReviewAction);
   registerRuntimeContextTool(runtimeApi, createMarkPlanReadyAction);
   registerRuntimeContextTool(runtimeApi, createRecordReviewDecisionAction);

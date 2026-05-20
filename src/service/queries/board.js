@@ -1,6 +1,8 @@
 import { buildBoardProjection } from "../../core/board/board_projection.js";
 import { loadPlanSetupRecord } from "../../core/storage/board_store.js";
-import { derivePlanSetupState, isHumanGatePhase } from "../../core/plan/plan_state.js";
+import { derivePlanSetupState, isHumanGatePhase, renderPlanSetupMarkdown } from "../../core/plan/plan_state.js";
+import { planProjectionPayload } from "../../core/plan/projection.js";
+import { validateParleyPlanV1Document } from "../../core/schema/index.js";
 import { normalizeServiceRequest } from "../context.js";
 import { SERVICE_ERROR_CODES, serviceError } from "../errors.js";
 import { queryResponse } from "../responses.js";
@@ -72,6 +74,26 @@ export async function getPlanSetupStatus(request = {}, deps = {}) {
       identity: summarizeIdentity(identity),
       plan: summarizePlan(plan),
       setupState: derivePlanSetupState(plan, identity.board)
+    }
+  });
+}
+
+export async function readPlanProjection(request = {}, deps = {}) {
+  const { caller, input } = normalizeServiceRequest(request);
+  const identity = resolveServiceCallerIdentity(deps.pluginConfig, caller, input);
+  const planId = requireString(input, "plan_id", "planId");
+  const plan = await loadPlanSetupRecord(deps.pluginConfig, identity.board, planId);
+  if (plan == null) {
+    throw serviceError(SERVICE_ERROR_CODES.PLAN_NOT_FOUND, `Parley plan not found: ${planId}`);
+  }
+  const markdown = renderPlanSetupMarkdown(plan);
+  const validation = validateParleyPlanV1Document(markdown);
+  return queryResponse({
+    data: {
+      tool: "parley_read_plan_projection",
+      identity: summarizeIdentity(identity),
+      plan: { ...summarizePlan(plan), projection_validation: validation },
+      projection: planProjectionPayload({ plan, markdown })
     }
   });
 }

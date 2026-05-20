@@ -184,15 +184,17 @@ function resolveCommonRuntimeInputs(options = {}) {
   );
   const rawMode = pickRuntimeString(context, ["parleyMode", "mode"], ["PARLEY_MODE"]);
   const apiUrl = normalizeApiUrl(pickRuntimeString(context, ["parleyApiUrl", "apiUrl"], ["PARLEY_API_URL"]));
+  const projectionMirrorRootInput = pickRuntimeString(context, ["parleyProjectionMirrorRoot", "projectionMirrorRoot"], ["PARLEY_PROJECTION_MIRROR_ROOT"]);
+  const projectionMirrorRoot = projectionMirrorRootInput == null ? null : ensureAbsoluteConfigPath(projectionMirrorRootInput, "parleyProjectionMirrorRoot");
   const agentId = pickRuntimeString(context, ["parleyAgentId", "agentId", "parleyDefaultAgentId"], ["PARLEY_AGENT_ID"]);
   const defaultBoard = pickRuntimeString(context, ["parleyDefaultBoard", "defaultBoard"], ["PARLEY_DEFAULT_BOARD"]);
   const mode = normalizeMode(rawMode);
-  return { context, surface, repoRoot, rawMode, mode, apiUrl, agentId, defaultBoard };
+  return { context, surface, repoRoot, rawMode, mode, apiUrl, projectionMirrorRoot, agentId, defaultBoard };
 }
 
 export function resolveParleyRuntimeConfig(options = {}) {
   const inputs = resolveCommonRuntimeInputs(options);
-  const { context, surface, repoRoot, rawMode, apiUrl, agentId, defaultBoard } = inputs;
+  const { context, surface, repoRoot, rawMode, apiUrl, projectionMirrorRoot, agentId, defaultBoard } = inputs;
   let mode = inputs.mode;
   const warnings = [];
   let modeSource = rawMode == null ? "default" : "explicit";
@@ -244,6 +246,7 @@ export function resolveParleyRuntimeConfig(options = {}) {
       surface,
       repoRoot,
       apiUrl,
+      projectionMirrorRoot,
       agentId,
       defaultBoard,
       storageMode: "remote-service",
@@ -264,6 +267,7 @@ export function resolveParleyRuntimeConfig(options = {}) {
       surface,
       repoRoot,
       dbPath,
+      projectionMirrorRoot,
       agentId,
       defaultBoard,
       storageMode: "service-db",
@@ -288,6 +292,7 @@ export function resolveParleyRuntimeConfig(options = {}) {
       repoRoot,
       testRoot: testRootInput == null ? null : ensureAbsoluteConfigPath(testRootInput, "parleyTestRoot"),
       runtimeRoot,
+      projectionMirrorRoot,
       agentId,
       defaultBoard,
       storageMode: "test-file",
@@ -312,6 +317,7 @@ export function resolveParleyRuntimeConfig(options = {}) {
     repoRoot,
     stateRoot,
     runtimeRoot: resolvedRuntimeRoot,
+    projectionMirrorRoot,
     implicitStateRoot,
     agentId,
     defaultBoard,

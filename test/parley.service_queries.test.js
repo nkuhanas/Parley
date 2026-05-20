@@ -13,6 +13,7 @@ import {
   listRuntimeObligations,
   mutate,
   myBoards,
+  readPlanProjection,
   SERVICE_ERROR_CODES,
   searchReferences,
   validatePlan,
@@ -184,6 +185,31 @@ test("service getPlanSetupStatus reads setup state through core storage", async 
     assert.equal(result.data.plan.plan_id, "plan_service_query");
     assert.equal(result.data.plan.phase_count, 1);
     assert.equal(result.data.setupState.setupComplete, true);
+  });
+});
+
+
+test("service readPlanProjection renders tracked plan markdown through query envelope", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const plan = testPlanRecord(board);
+    await savePlanSetupRecord(pluginConfig, board, plan);
+
+    const result = await readPlanProjection({
+      caller: CALLER,
+      input: { plan_id: plan.plan_id }
+    }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_read_plan_projection");
+    assert.equal(result.data.identity.board_id, "project");
+    assert.equal(result.data.projection.kind, "plan_markdown");
+    assert.equal(result.data.projection.uri, "repo://plans/service/query-plan.md");
+    assert.equal(result.data.projection.namespace, "project_plans");
+    assert.equal(result.data.projection.serviceLocalPath, plan.landing.resolved_path);
+    assert.match(result.data.projection.body, /Service Query Plan/);
+    assert.match(result.data.projection.contentDigest, /^sha256:/);
+    assert.equal(result.data.plan.projection_validation.ok, true);
   });
 });
 
@@ -469,6 +495,33 @@ test("service checkpointProjection rejects unsupported projection types", async 
         return true;
       }
     );
+  });
+});
+
+
+test("service mutate bridge returns plan projection payloads for plan mutations", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const result = await mutate({
+      caller: CALLER,
+      input: {
+        board_id: "project",
+        action: "create_plan",
+        input: {
+          title: "Service Projection Plan",
+          planId: "plan_service_projection",
+          landingSubpath: "service",
+          filename: "projection-plan.md"
+        }
+      }
+    }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.tool, "parley_create_plan");
+    assert.equal(result.data.projection.kind, "plan_markdown");
+    assert.equal(result.data.projection.uri, "repo://plans/service/projection-plan.md");
+    assert.equal(result.data.projection.namespace, "project_plans");
+    assert.match(result.data.projection.body, /Service Projection Plan/);
+    assert.match(result.data.projection.contentDigest, /^sha256:/);
   });
 });
 

@@ -82,6 +82,8 @@ type MutationResponse = {
   artifact_ref?: string;
   artifact_path?: string;
   artifact_version?: number;
+  projection?: PlanProjectionPayload;
+  projection_materialization?: ProjectionMaterializationResult;
   summary?: string;
   effects_recorded?: EffectSummary[];
   obligations_created?: ObligationSummary[];
@@ -169,7 +171,37 @@ Plan commands that create or update plan artifacts should return:
 - recommended next action
 - lifecycle obligations created/resolved, summarized
 
-They must not return the full plan Markdown by default. Full body access belongs to explicit artifact reads.
+Interactive/client-facing plan mutations may return a service-rendered plan `projection` payload so clients can materialize local generated mirrors without treating local files as canonical. Arbitrary artifact body access still belongs to explicit artifact reads.
+
+
+Plan projection payloads are generated mirrors, not an editing/import channel:
+
+```ts
+type PlanProjectionPayload = {
+  kind: "plan_markdown";
+  planId?: string;
+  boardId?: string;
+  artifactId?: string;
+  artifactVersion?: number;
+  uri?: string;
+  mediaType: "text/markdown; charset=utf-8";
+  contentDigest: string;
+  body: string;
+  namespace?: string;
+  subpath?: string;
+  filename?: string;
+  serviceLocalPath?: string; // diagnostic only for remote clients
+};
+
+type ProjectionMaterializationResult = {
+  status: "written" | "unchanged" | "skipped" | "failed";
+  localPath?: string;
+  reason?: string;
+  contentDigest?: string;
+};
+```
+
+Clients may materialize `projection.body` only into configured adapter-local mirror roots. The service remains canonical for state and rendering semantics.
 
 ## Artifact Read Responses
 

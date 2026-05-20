@@ -126,6 +126,7 @@ Phase 2 should implement current-tool-aligned service query names first. Dashboa
 | `validatePlan` | `parley_validate_plan` | Validate plan Markdown/path and optional setup state. |
 | `validateState` | `parley_validate_state` | Validate board records/references/derived state. |
 | `getPlanSetupStatus` | `parley_get_plan_setup_status` | Plan setup/lifecycle status. |
+| `readPlanProjection` | `parley_read_plan_projection` / `parley_query(action="read_plan_projection")` | Service-rendered tracked plan Markdown projection for recovery/cache misses. |
 
 ### Artifact read queries
 
@@ -161,8 +162,8 @@ Commands return compact mutation envelopes. Queries return bounded query envelop
 Key rules:
 
 - mutation responses include `code` and `message` when blocked or errored
-- plan mutations do not return full Markdown by default
-- artifact body access requires explicit artifact-read query or `include_body: true`
+- plan mutations normally stay compact, but plan-projection mutations may include a bounded `projection` payload (`uri`, `mediaType`, `contentDigest`, `body`, and diagnostic `serviceLocalPath`) so interactive/client adapters can materialize local non-authoritative mirrors without a second round trip
+- artifact body access for arbitrary artifacts still requires explicit artifact-read query or `include_body: true`
 - top-level artifact fields are primary artifact fields
 - multi-artifact responses may add a plural `artifacts` array later when a concrete command needs it
 

@@ -103,6 +103,7 @@ export function createRequestPlanReviewAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });
@@ -155,6 +156,7 @@ export function createRecordReviewDecisionAction(api) {
           effect,
           plan: result.plan,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });
@@ -209,6 +211,7 @@ export function createMarkPlanReadyAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });
@@ -253,6 +256,7 @@ export function createRecordPlanDispositionAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });
@@ -292,6 +296,7 @@ export function createPausePlanAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           resume_point: result.plan.managed?.resumePoint ?? null,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
@@ -334,6 +339,7 @@ export function createResumePlanAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });
@@ -374,6 +380,7 @@ export function createActivatePlanAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });
@@ -431,6 +438,7 @@ export function createRecordPhaseOutcomeAction(api) {
           plan: result.plan,
           effect,
           artifact: result.artifact,
+          projection: result.projection,
           plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
         });
       });

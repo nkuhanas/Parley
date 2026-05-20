@@ -39,6 +39,7 @@ export function createWritePlanOverviewAction(api) {
           tool: "parley_write_plan_overview",
           identity,
           plan: { plan_id: result.plan.plan_id, path: result.plan.landing.resolved_path, uri: result.plan.landing.uri, projection_validation: result.validation },
+          projection: result.projection,
           accepted: { overview: true },
           artifact: result.artifact,
           setupState: result.setupState,

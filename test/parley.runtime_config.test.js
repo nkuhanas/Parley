@@ -109,6 +109,42 @@ test("client mode rejects configured local state paths before layout creation", 
   });
 });
 
+
+test("client mode accepts projection mirror root without enabling local state", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const mirrorRoot = path.join(tempRoot, "projection-mirror");
+    const config = resolveParleyRuntimeConfig({
+      surface: "openclaw-adapter",
+      env: {},
+      pluginConfig: {
+        parleyMode: "client",
+        parleyApiUrl: "http://127.0.0.1:7331",
+        parleyProjectionMirrorRoot: mirrorRoot
+      }
+    });
+
+    assert.equal(config.mode, "client");
+    assert.equal(config.localStateAllowed, false);
+    assert.equal(config.projectionMirrorRoot, mirrorRoot);
+    assert.equal(await exists(mirrorRoot), false);
+  });
+});
+
+test("projection mirror root must be absolute", () => {
+  assert.throws(
+    () => resolveParleyRuntimeConfig({
+      surface: "openclaw-adapter",
+      env: {},
+      pluginConfig: {
+        parleyMode: "client",
+        parleyApiUrl: "http://127.0.0.1:7331",
+        parleyProjectionMirrorRoot: "relative/mirror"
+      }
+    }),
+    (error) => error?.code === "PARLEY_CONFIG_INVALID_PATH"
+  );
+});
+
 test("client mode cannot use file runtime storage even without explicit local paths", async () => {
   const pluginConfig = {
     parleyMode: "client",

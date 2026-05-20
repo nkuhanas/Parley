@@ -223,6 +223,7 @@ export function createParleyRemoteClient(options = {}) {
     describe: (input = {}, options = {}) => query("describe", input, options),
     myBoards: (input = {}, options = {}) => query("myBoards", input, options),
     whereAmI: (input = {}, options = {}) => query("whereAmI", input, options),
+    readPlanProjection: (input = {}, options = {}) => query("readPlanProjection", input, options),
     mutate: (input = {}, options = {}) => command("mutate", input, options),
     runtime: (input = {}, options = {}) => command("runtime", input, options),
     listRuntimeObligations: (input = {}, options = {}) => query("listRuntimeObligations", input, options),

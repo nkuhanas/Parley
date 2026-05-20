@@ -124,6 +124,7 @@ test("HTTP service exposes unauthenticated health and protected metadata", async
       assert.equal(meta.response.status, 200);
       assert.equal(meta.body.status, "ok");
       assert.ok(meta.body.data.queries.includes("describe"));
+      assert.ok(meta.body.data.queries.includes("readPlanProjection"));
       assert.deepEqual(meta.body.data.commands, ["mutate", "runtime"]);
       assert.equal(meta.body.data.boards, undefined);
     });
@@ -160,6 +161,7 @@ test("remote client calls real HTTP service for health and discovery queries", a
       const meta = await client.meta();
       assert.equal(meta.status, "ok");
       assert.ok(meta.data.queries.includes("whereAmI"));
+      assert.ok(meta.data.queries.includes("readPlanProjection"));
     });
   });
 });

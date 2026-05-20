@@ -27,7 +27,7 @@ export function serviceResponse({ status = "ok", code, message, data, summary, n
   });
 }
 
-export function mutationResponse({ status = "ok", code, message, ids, artifact_ref, artifact_path, artifact_version, summary, effects_recorded, obligations_created, obligations_resolved, next_actions, warnings, diagnostics } = {}) {
+export function mutationResponse({ status = "ok", code, message, ids, artifact_ref, artifact_path, artifact_version, projection, projection_materialization, summary, effects_recorded, obligations_created, obligations_resolved, next_actions, warnings, diagnostics } = {}) {
   return compactObject({
     status: normalizeStatus(status),
     code,
@@ -36,6 +36,8 @@ export function mutationResponse({ status = "ok", code, message, ids, artifact_r
     artifact_ref,
     artifact_path,
     artifact_version,
+    projection,
+    projection_materialization,
     summary,
     effects_recorded,
     obligations_created,

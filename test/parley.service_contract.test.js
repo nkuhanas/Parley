@@ -66,6 +66,8 @@ test("service mutation response includes protocol code and primary artifact fiel
     artifact_ref: "repo://plans/example.md",
     artifact_path: "/tmp/example.md",
     artifact_version: 2,
+    projection: { kind: "plan_markdown", uri: "repo://plans/example.md" },
+    projection_materialization: { status: "written", localPath: "/tmp/mirror/example.md" },
     summary: "Mutation was not applied.",
     warnings: ["permission denied"]
   });
@@ -76,6 +78,8 @@ test("service mutation response includes protocol code and primary artifact fiel
   assert.equal(response.artifact_ref, "repo://plans/example.md");
   assert.equal(response.artifact_path, "/tmp/example.md");
   assert.equal(response.artifact_version, 2);
+  assert.deepEqual(response.projection, { kind: "plan_markdown", uri: "repo://plans/example.md" });
+  assert.deepEqual(response.projection_materialization, { status: "written", localPath: "/tmp/mirror/example.md" });
 });
 
 test("service query and artifact read responses stay compact by default", () => {

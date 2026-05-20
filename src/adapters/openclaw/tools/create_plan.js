@@ -47,6 +47,7 @@ export function createCreatePlanAction(api) {
           uri: created.plan.landing.uri,
           projection_validation: created.validation
         },
+        projection: created.projection,
         object: created.object,
         artifact: created.artifact,
         setupState: created.setupState,

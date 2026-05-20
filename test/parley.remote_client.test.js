@@ -30,6 +30,7 @@ test("remote client uses injected fetch for health and query calls", async () =>
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
     if (url.endsWith("/health")) return jsonResponse({ status: "ok", data: { service: "parley" } });
+    if (url.endsWith("/v1/queries/readPlanProjection")) return jsonResponse({ status: "ok", data: { query: "readPlanProjection" } });
     return jsonResponse({ status: "ok", data: { query: "describe" } });
   };
 
@@ -66,6 +67,11 @@ test("remote client uses injected fetch for health and query calls", async () =>
     input: { topic: "targets" },
     request_id: "req-query"
   });
+
+  const projection = await client.readPlanProjection({ boardId: "project", planId: "plan_remote" });
+  assert.equal(projection.status, "ok");
+  assert.equal(projection.data.query, "readPlanProjection");
+  assert.equal(calls[2].url, "http://parley.test/base/v1/queries/readPlanProjection");
 });
 
 test("remote client can read bearer token from an injected token file", async () => {

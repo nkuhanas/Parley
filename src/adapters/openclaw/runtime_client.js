@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createParleyEmbeddedClient, createParleyRemoteClient } from "../../client/index.js";
+import { materializeProjectionResult } from "./projection_materializer.js";
 import { ParleyConfigError, resolveParleyRuntimeConfig } from "../../core/config.js";
 import {
   PARLEY_CREDENTIAL_CONFIG,
@@ -25,6 +26,7 @@ const SERVICE_QUERY_TOOL_SPECS = Object.freeze({
   parley_validate_plan: { query: "validatePlan", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_plan", identity: data.identity, validation: data.validation, setupState: data.setupState, resolved_path: data.resolved_path }) },
   parley_validate_state: { query: "validateState", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_state", identity: data.identity, validation: data.validation }) },
   parley_get_plan_setup_status: { query: "getPlanSetupStatus", input: params => params ?? {}, result: data => boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }) },
+  parley_read_plan_projection: { query: "readPlanProjection", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_runtime_obligations: { query: "listRuntimeObligations", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_board_obligations: { query: "listBoardObligations", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_search: { query: "searchReferences", input: params => params ?? {}, result: data => boardResult(data) }
@@ -125,7 +127,8 @@ function materializeRuntimeConfig(pluginConfig = {}, runtimeConfig = {}) {
     ...(runtimeConfig.stateRoot != null ? { parleyStateRoot: runtimeConfig.stateRoot } : {}),
     ...(runtimeConfig.runtimeRoot != null ? { parleyRuntimeRoot: runtimeConfig.runtimeRoot } : {}),
     ...(runtimeConfig.testRoot != null ? { parleyTestRoot: runtimeConfig.testRoot } : {}),
-    ...(runtimeConfig.dbPath != null ? { parleyDbPath: runtimeConfig.dbPath } : {})
+    ...(runtimeConfig.dbPath != null ? { parleyDbPath: runtimeConfig.dbPath } : {}),
+    ...(runtimeConfig.projectionMirrorRoot != null ? { parleyProjectionMirrorRoot: runtimeConfig.projectionMirrorRoot } : {})
   };
 }
 
@@ -203,12 +206,14 @@ function clientForTool(api, params) {
 
 async function executeQuery(api, params, queryName, input) {
   const response = await clientForTool(api, params).query(queryName, input, { caller: serviceCallerFromTool(api, params) });
-  return unwrapServiceResponse(response);
+  const data = unwrapServiceResponse(response);
+  return await materializeProjectionResult(data, { runtimeConfig: runtimeConfig(api) });
 }
 
 async function executeCommand(api, params, commandName, input) {
   const response = await clientForTool(api, params).command(commandName, input, { caller: serviceCallerFromTool(api, params) });
-  return unwrapServiceResponse(response);
+  const data = unwrapServiceResponse(response);
+  return await materializeProjectionResult(data, { runtimeConfig: runtimeConfig(api) });
 }
 
 function commandInputForAction(action, params = {}) {
@@ -251,6 +256,9 @@ async function executeQueryFacade(api, params = {}) {
   } else if (params.action === "plan_setup_status") {
     const data = await executeQuery(api, params, "getPlanSetupStatus", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
     delegatedDetails = boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }).details;
+  } else if (params.action === "read_plan_projection") {
+    const data = await executeQuery(api, params, "readPlanProjection", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
   } else if (params.action === "validate_state") {
     const data = await executeQuery(api, params, "validateState", { boardId: params?.boardId });
     delegatedDetails = boardResult({ tool: "parley_validate_state", identity: data.identity, validation: data.validation }).details;

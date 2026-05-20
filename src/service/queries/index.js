@@ -1,7 +1,8 @@
 export {
   getBoardProjection,
   getPlanSetupStatus,
-  myBoards
+  myBoards,
+  readPlanProjection
 } from "./board.js";
 export {
   checkpointProjection

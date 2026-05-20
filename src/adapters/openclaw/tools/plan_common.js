@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -9,6 +8,7 @@ import { nowIso } from "../../../core/time.js";
 import { assertBoardAgentForTool } from "./v2_common.js";
 import { boardAgentIds, derivePlanSetupState, isHumanGatePhase, normalizePlanCheckpoint, normalizePlanOverview, normalizePlanPhase, renderPlanSetupMarkdown } from "../../../core/plan/plan_state.js";
 import { activePhase, managedBinding, normalizeActivationPolicy, normalizePlanAuthority, normalizePlanManaged, terminalStatus, withLifecycleIndexes } from "../../../core/plan/lifecycle.js";
+import { contentHash, planProjectionPayload } from "../../../core/plan/projection.js";
 import { parseParleyPlanV1Document, validateParleyPlanV1Document } from "../../../core/schema/index.js";
 
 function camelOrSnake(value, camelKey, snakeKey) {
@@ -24,9 +24,6 @@ export function landingInput(params) {
   };
 }
 
-export function contentHash(markdown) {
-  return `sha256:${crypto.createHash("sha256").update(markdown, "utf8").digest("hex")}`;
-}
 
 function defaultFilename(planId, title) {
   const slug = String(title ?? planId).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || planId;
@@ -525,7 +522,8 @@ export async function exportPlanProjection(api, identity, plan, { checkpointForO
   const setupState = derivePlanSetupState(plan, identity.board);
   const lifecycle = await reconcilePlanLifecycleObligations(api, identity, plan, savedArtifact, setupState);
   const createdCheckpointObligation = checkpoint == null ? null : await createCheckpointObligation(api, identity, lifecycle.plan, savedArtifact, checkpoint);
-  return { markdown, validation, plan: lifecycle.plan, artifact: savedArtifact, lifecycleObligations: lifecycle.obligations, createdCheckpointObligation };
+  const projection = planProjectionPayload({ plan: lifecycle.plan, artifact: savedArtifact, markdown });
+  return { markdown, validation, projection, plan: lifecycle.plan, artifact: savedArtifact, lifecycleObligations: lifecycle.obligations, createdCheckpointObligation };
 }
 
 export async function saveAndExportPlan(api, identity, plan, options = {}) {
