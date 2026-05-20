@@ -4,6 +4,7 @@ import path from "node:path";
 import { contentHash } from "../../core/plan/projection.js";
 
 const MIRROR_METADATA_SCHEMA = "parley.projection_mirror.v1";
+const REPO_PLANS_URI_PREFIX = "repo://plans/";
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null));
@@ -27,6 +28,11 @@ function splitSafeRelativePath(value, fieldName) {
 }
 
 function projectionRelativeParts(projection) {
+  if (typeof projection?.uri === "string" && projection.uri.startsWith(REPO_PLANS_URI_PREFIX)) {
+    const repoSubpath = projection.uri.slice("repo://".length);
+    return { parts: splitSafeRelativePath(repoSubpath, "projection.uri") };
+  }
+
   const namespace = projection?.namespace;
   const filename = projection?.filename;
   if (typeof namespace !== "string" || !namespace.trim() || typeof filename !== "string" || !filename.trim()) {

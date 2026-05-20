@@ -332,7 +332,7 @@ test("OpenClaw adapter client mode materializes remote plan projection mirrors",
       title: "Remote Plan"
     });
 
-    const localPath = path.join(mirrorRoot, "project_plans", "drafts", "remote-plan.md");
+    const localPath = path.join(mirrorRoot, "plans", "drafts", "remote-plan.md");
     assert.equal(calls[0].url, "http://parley.test/v1/commands/mutate");
     assert.equal(await fs.readFile(localPath, "utf8"), body);
     assert.equal(result.details.projection.localPath, localPath);
@@ -345,7 +345,7 @@ test("OpenClaw adapter client mode materializes remote plan projection mirrors",
 test("OpenClaw adapter client mode skips dirty local projection mirrors", async () => {
   await withTempRoot(async (tempRoot) => {
     const mirrorRoot = path.join(tempRoot, "projection-mirror");
-    const localPath = path.join(mirrorRoot, "project_plans", "drafts", "remote-plan.md");
+    const localPath = path.join(mirrorRoot, "plans", "drafts", "remote-plan.md");
     await fs.mkdir(path.dirname(localPath), { recursive: true });
     await fs.writeFile(localPath, "local edits\n", "utf8");
     const tools = registeredTools({

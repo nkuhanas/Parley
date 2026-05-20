@@ -201,7 +201,7 @@ type ProjectionMaterializationResult = {
 };
 ```
 
-Clients may materialize `projection.body` only into configured adapter-local mirror roots. The service remains canonical for state and rendering semantics.
+Clients may materialize `projection.body` only into configured adapter-local mirror roots. OpenClaw client mirrors map `repo://plans/...` to `<mirrorRoot>/plans/...`; non-repo projection payloads fall back to namespace/subpath/filename mapping. The service remains canonical for state and rendering semantics.
 
 ## Artifact Read Responses
 
