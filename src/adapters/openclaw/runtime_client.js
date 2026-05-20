@@ -26,6 +26,7 @@ const SERVICE_QUERY_TOOL_SPECS = Object.freeze({
   parley_validate_plan: { query: "validatePlan", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_plan", identity: data.identity, validation: data.validation, setupState: data.setupState, resolved_path: data.resolved_path }) },
   parley_validate_state: { query: "validateState", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_state", identity: data.identity, validation: data.validation }) },
   parley_get_plan_setup_status: { query: "getPlanSetupStatus", input: params => params ?? {}, result: data => boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }) },
+  parley_get_plan_status: { query: "getPlanStatus", input: params => params ?? {}, result: data => boardResult(data) },
   parley_read_plan_projection: { query: "readPlanProjection", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_runtime_obligations: { query: "listRuntimeObligations", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_board_obligations: { query: "listBoardObligations", input: params => params ?? {}, result: data => boardResult(data) },
@@ -64,6 +65,7 @@ const MUTATE_TOOL_ACTIONS = Object.freeze({
   parley_pause_plan: "pause_plan",
   parley_resume_plan: "resume_plan",
   parley_record_plan_disposition: "record_plan_disposition",
+  parley_record_hitl_input: "record_hitl_input",
   parley_record_phase_outcome: "record_phase_outcome"
 });
 
@@ -231,6 +233,36 @@ function normalizeFacadeInput(input) {
   return input;
 }
 
+function compactBoardCounts(counts = {}) {
+  return Object.fromEntries(Object.entries(counts).filter(([, value]) => typeof value !== "object" || value == null));
+}
+
+function compactBoardProjectionForFacade(projection) {
+  if (projection == null || typeof projection !== "object" || Array.isArray(projection)) return projection;
+  return {
+    board_id: projection.board_id,
+    display_name: projection.display_name,
+    status: projection.status,
+    projection_type: projection.projection_type,
+    derived: projection.derived,
+    agent_count: Array.isArray(projection.agents) ? projection.agents.length : projection.counts?.agents,
+    counts: compactBoardCounts(projection.counts),
+    omitted: ["agents", "approval_state", "activation_state", "checkpoint_state", "relationship_graph", "records"],
+    records: null,
+    recordsOmitted: projection.records != null,
+    detailedProjectionAvailableVia: "parley_board_projection",
+    recordExcerptsAvailableVia: "parley_board_projection"
+  };
+}
+
+function compactDelegatedDetailsForFacade(action, details) {
+  if (action !== "board" || details?.projection == null) return details;
+  return {
+    ...details,
+    projection: compactBoardProjectionForFacade(details.projection)
+  };
+}
+
 async function executeQueryFacade(api, params = {}) {
   if (!QUERY_ACTION_SET.has(params?.action)) {
     throw createValidationError(`unsupported parley_query action: ${params?.action}`, {
@@ -256,6 +288,9 @@ async function executeQueryFacade(api, params = {}) {
   } else if (params.action === "plan_setup_status") {
     const data = await executeQuery(api, params, "getPlanSetupStatus", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
     delegatedDetails = boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }).details;
+  } else if (params.action === "plan_status") {
+    const data = await executeQuery(api, params, "getPlanStatus", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
   } else if (params.action === "read_plan_projection") {
     const data = await executeQuery(api, params, "readPlanProjection", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
     delegatedDetails = boardResult(data).details;
@@ -290,7 +325,7 @@ async function executeQueryFacade(api, params = {}) {
   return boardResult({
     tool: "parley_query",
     action: params.action,
-    result: delegatedDetails
+    result: compactDelegatedDetailsForFacade(params.action, delegatedDetails)
   }, { summarize: params.action !== "where_am_i" || params?.verbosity !== "full" });
 }
 

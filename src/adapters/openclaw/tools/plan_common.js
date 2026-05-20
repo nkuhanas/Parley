@@ -156,6 +156,32 @@ function desiredPlanLifecycleObligations(identity, plan, artifact, setupState) {
         managedBinding: managedBinding(plan, "phase_outcome_decision")
       }];
     }
+    if (isHumanGatePhase(phase)) {
+      return [{
+        obligation_id: `${prefix}_hitl_input_${safeIdPart(phase.phase_id)}_${safeIdPart(phase.owner ?? plan.owner)}`,
+        agent: phase.owner ?? plan.owner,
+        type: "record_hitl_input",
+        target: {
+          plan_id: plan.plan_id,
+          phase_id: phase.phase_id,
+          artifact_id: artifact.artifact_id,
+          artifact_version: artifact.version,
+          review_required_from: phase.required_from,
+          requested_decision: phase.requested_decision
+        },
+        reason: `HITL input required for active plan phase ${phase.phase_id}: ${phase.title}`,
+        scope: "plan_lifecycle:hitl_input",
+        managedBinding: managedBinding(plan, "hitl_input", { phaseId: phase.phase_id })
+      }, {
+        obligation_id: `${prefix}_owner`,
+        agent: plan.owner,
+        type: "report_status",
+        target: { ...target, phase_id: phase.phase_id },
+        reason: `Plan ${plan.plan_id} phase ${phase.phase_id} is HITL-gated; record explicit human input before recording phase completion.`,
+        scope: "plan_lifecycle:phase_outcome_decision",
+        managedBinding: managedBinding(plan, "phase_outcome_decision", { phaseId: phase.phase_id })
+      }];
+    }
     return [{
       obligation_id: `${prefix}_phase_work_${safeIdPart(phase.phase_id)}_${safeIdPart(phase.owner)}`,
       agent: phase.owner,

@@ -1268,6 +1268,98 @@ test("Parley managed plan lifecycle tools own review, activation, and phase curs
   });
 });
 
+test("Parley HITL phases require explicit recorded input before completion", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const queryTool = createQueryTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_hitl_completion_gate",
+      filename: "hitl-completion-gate-plan.md",
+      participants: ["parley-agent", "human:sensei"],
+      phase: {
+        planId: "plan_hitl_completion_gate",
+        phaseId: "phase_human_approval",
+        title: "Sensei approval gate",
+        kind: "human_approval_gate",
+        owner: "parley-agent",
+        status: "draft",
+        requiredFrom: "human:sensei",
+        requestedDecision: "approve_or_request_changes",
+        entryCriteria: ["Implementation evidence is ready."],
+        work: ["Ask Sensei for explicit approval."],
+        exitCriteria: ["Sensei explicitly approves or requests changes."],
+        reviewTrigger: ["Pipeline implementation is ready for review."],
+        supportingAgents: []
+      }
+    });
+
+    await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "mark_plan_ready",
+      input: { planId, noReviewReason: "Test owner accepts setup without separate review." }
+    });
+    const activationResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "activate_plan",
+      input: { planId, reason: "Start HITL gate." }
+    });
+    assert.equal(activationResult.details.result.plan.status, "active");
+    assert.equal(activationResult.details.result.plan_lifecycle.obligations.some((obligation) => obligation.managedBinding.role === "phase_work"), false);
+    assert.ok(activationResult.details.result.plan_lifecycle.obligations.some((obligation) => obligation.managedBinding.role === "hitl_input"));
+
+    const statusBefore = await queryTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "plan_status",
+      input: { planId }
+    });
+    assert.equal(statusBefore.details.result.current_phase.phase_id, "phase_human_approval");
+    assert.equal(statusBefore.details.result.current_phase.hitl.required, true);
+    assert.equal(statusBefore.details.result.current_phase.hitl.completion_ready, false);
+    assert.equal(statusBefore.details.result.next_action.kind, "record_hitl_input");
+
+    await assert.rejects(
+      () => mutateTool.execute(null, {
+        callerRuntimeRef: AGENT_RUNTIME_REF,
+        boardId: "project",
+        action: "record_phase_outcome",
+        input: { planId, phaseId: "phase_human_approval", outcome: "complete", note: "Attempt to skip explicit input." }
+      }),
+      /requires explicit approving input/
+    );
+
+    const hitlInputResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "record_hitl_input",
+      input: {
+        planId,
+        phaseId: "phase_human_approval",
+        decision: "approve",
+        summary: "Sensei explicitly approved the gate in chat.",
+        source: { kind: "human_message", channel: "discord", messageId: "discord-message-123" }
+      }
+    });
+    assert.equal(hitlInputResult.details.result.hitl_input.type, "hitl_input_recorded");
+    assert.equal(hitlInputResult.details.result.current_phase.hitl.completion_ready, true);
+    assert.equal(hitlInputResult.details.result.current_phase.hitl.approving_input_effect_id, hitlInputResult.details.result.hitl_input.effect_id);
+    const activeAfterInput = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.equal(activeAfterInput.managed.activeLifecycleObligationIds.some((id) => id.includes("_hitl_input_")), false);
+
+    const phaseOutcomeResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "record_phase_outcome",
+      input: { planId, phaseId: "phase_human_approval", outcome: "complete", note: "Owner accepts explicit HITL approval." }
+    });
+    assert.equal(phaseOutcomeResult.details.result.plan.status, "complete");
+    assert.equal(phaseOutcomeResult.details.result.effect.payload.hitl_input_effect_id, hitlInputResult.details.result.hitl_input.effect_id);
+  });
+});
 
 
 test("Parley migration-safe lifecycle commands cover no-review ready, pause/resume, and terminal disposition", async () => {
@@ -1387,6 +1479,7 @@ test("Parley human checkpoint phases create shepherd obligations", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);
     const queryTool = createQueryTool(api);
+    const boardProjectionTool = createBoardProjectionTool(api);
     const mutateTool = createMutateTool(api);
 
     await createGuidedPlan(mutateTool, {
@@ -1486,14 +1579,13 @@ test("Parley human checkpoint phases create shepherd obligations", async () => {
       }
     });
 
-    const boardResultValue = await queryTool.execute(null, {
+    const boardResultValue = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "board"
+      boardId: "project"
     });
-    const checkpointState = boardResultValue.details.result.projection.checkpoint_state;
-    assert.equal(boardResultValue.details.result.projection.counts.human_checkpoints, 1);
-    assert.equal(boardResultValue.details.result.projection.counts.active_human_checkpoint_obligations, 1);
+    const checkpointState = boardResultValue.details.projection.checkpoint_state;
+    assert.equal(boardResultValue.details.projection.counts.human_checkpoints, 1);
+    assert.equal(boardResultValue.details.projection.counts.active_human_checkpoint_obligations, 1);
     assert.equal(checkpointState.human_checkpoints[0].checkpoint_id, "checkpoint_initial_review");
     assert.equal(checkpointState.human_checkpoints[0].phase_id, "checkpoint_initial_review");
     assert.equal(checkpointState.human_checkpoints[0].plan_id, "plan_human_checkpoint");
@@ -1512,8 +1604,9 @@ test("Parley human checkpoint phases create shepherd obligations", async () => {
 
 test("Parley deferred human approval gate phases do not create notify obligations", async () => {
   await withPluginConfig(async (pluginConfig) => {
-    const mutateTool = createMutateTool(toolApi(pluginConfig));
-    const queryTool = createQueryTool(toolApi(pluginConfig));
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const boardProjectionTool = createBoardProjectionTool(api);
 
     await createGuidedPlan(mutateTool, {
       planId: "plan_deferred_approval_gate",
@@ -1542,14 +1635,13 @@ test("Parley deferred human approval gate phases do not create notify obligation
     assert.equal(gateResult.details.result.accepted.phase.owner, "parley-agent");
     assert.equal(gateResult.details.result.human_checkpoints.created_obligations.length, 0);
 
-    const boardResultValue = await queryTool.execute(null, {
+    const boardResultValue = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "board"
+      boardId: "project"
     });
-    assert.equal(boardResultValue.details.result.projection.counts.human_checkpoints, 1);
-    assert.equal(boardResultValue.details.result.projection.counts.active_human_checkpoint_obligations, 0);
-    assert.equal(boardResultValue.details.result.projection.checkpoint_state.human_checkpoints[0].status, "deferred");
+    assert.equal(boardResultValue.details.projection.counts.human_checkpoints, 1);
+    assert.equal(boardResultValue.details.projection.counts.active_human_checkpoint_obligations, 0);
+    assert.equal(boardResultValue.details.projection.checkpoint_state.human_checkpoints[0].status, "deferred");
   });
 });
 
@@ -1743,6 +1835,7 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);
     const queryTool = createQueryTool(api);
+    const boardProjectionTool = createBoardProjectionTool(api);
     const mutateTool = createMutateTool(api);
 
     await mutateTool.execute(null, {
@@ -1872,15 +1965,14 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
       }
     });
 
-    const boardBefore = await queryTool.execute(null, {
+    const boardBefore = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "board"
+      boardId: "project"
     });
-    assert.equal(boardBefore.details.result.projection.counts.deferred_phases, 1);
-    assert.equal(boardBefore.details.result.projection.counts.activation_candidates, 0);
-    assert.equal(boardBefore.details.result.projection.activation_state.deferred_phases[0].status, "deferred_visible");
-    assert.equal(boardBefore.details.result.projection.activation_state.deferred_phases[0].plan_id, "plan_activation_visibility");
+    assert.equal(boardBefore.details.projection.counts.deferred_phases, 1);
+    assert.equal(boardBefore.details.projection.counts.activation_candidates, 0);
+    assert.equal(boardBefore.details.projection.activation_state.deferred_phases[0].status, "deferred_visible");
+    assert.equal(boardBefore.details.projection.activation_state.deferred_phases[0].plan_id, "plan_activation_visibility");
 
     const whereBefore = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -1916,13 +2008,12 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
       }
     });
 
-    const boardAfterProposal = await queryTool.execute(null, {
+    const boardAfterProposal = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "board"
+      boardId: "project"
     });
-    const [candidate] = boardAfterProposal.details.result.projection.activation_state.activation_candidates;
-    assert.equal(boardAfterProposal.details.result.projection.counts.activation_candidates, 1);
+    const [candidate] = boardAfterProposal.details.projection.activation_state.activation_candidates;
+    assert.equal(boardAfterProposal.details.projection.counts.activation_candidates, 1);
     assert.equal(candidate.status, "proposed");
     assert.equal(candidate.candidate_key, "project:plan_activation_visibility:phase_4:v1");
     assert.equal(candidate.review_required_from[0], "parley-agent");
@@ -1954,12 +2045,11 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
       }
     });
 
-    const boardAfterDismissal = await queryTool.execute(null, {
+    const boardAfterDismissal = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project",
-      action: "board"
+      boardId: "project"
     });
-    assert.equal(boardAfterDismissal.details.result.projection.activation_state.activation_candidates[0].status, "dismissed");
+    assert.equal(boardAfterDismissal.details.projection.activation_state.activation_candidates[0].status, "dismissed");
 
     const whereAfterDismissal = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -2604,6 +2694,7 @@ test("Parley effect-derived projections use deterministic created_at plus effect
     const api = toolApi(pluginConfig);
     const mutateTool = createMutateTool(api);
     const queryTool = createQueryTool(api);
+    const boardProjectionTool = createBoardProjectionTool(api);
     const registry = resolveParleyBoardRegistry(pluginConfig);
     const board = registry.boards.project;
     const artifactResult = await mutateTool.execute(null, {
@@ -2643,24 +2734,36 @@ test("Parley effect-derived projections use deterministic created_at plus effect
     await saveEffectRecord(pluginConfig, board, laterAlphabeticalEffect);
     await saveEffectRecord(pluginConfig, board, earlierAlphabeticalEffect);
 
-    const first = await queryTool.execute(null, {
+    const queryResult = await queryTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
       action: "board",
       includeRecords: true,
       recordLimit: 10
     });
-    const second = await queryTool.execute(null, {
+    assert.equal(queryResult.details.result.projection.records, null);
+    assert.equal(queryResult.details.result.projection.recordsOmitted, true);
+    assert.equal(queryResult.details.result.projection.approval_state, undefined);
+    assert.equal(queryResult.details.result.projection.relationship_graph, undefined);
+    assert.equal(queryResult.details.result.projection.detailedProjectionAvailableVia, "parley_board_projection");
+    assert.equal(queryResult.details.result.projection.recordExcerptsAvailableVia, "parley_board_projection");
+
+    const first = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
-      action: "board",
+      includeRecords: true,
+      recordLimit: 10
+    });
+    const second = await boardProjectionTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
       includeRecords: true,
       recordLimit: 10
     });
 
-    const effectIds = first.details.result.projection.records.effects.map((effect) => effect.effect_id);
+    const effectIds = first.details.projection.records.effects.map((effect) => effect.effect_id);
     assert.deepEqual(effectIds.slice(0, 2), ["effect_same_time_a", "effect_same_time_b"]);
-    assert.deepEqual(second.details.result.projection.records.effects.map((effect) => effect.effect_id), effectIds);
-    assert.equal(first.details.result.projection.approval_state.approvals[0].status, "withdrawn");
+    assert.deepEqual(second.details.projection.records.effects.map((effect) => effect.effect_id), effectIds);
+    assert.equal(first.details.projection.approval_state.approvals[0].status, "withdrawn");
   });
 });

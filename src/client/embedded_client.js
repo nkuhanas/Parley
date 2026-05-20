@@ -3,6 +3,7 @@ import {
   describe,
   getBoardProjection,
   getPlanSetupStatus,
+  getPlanStatus,
   listBoardObligations,
   listRuntimeObligations,
   mutate,
@@ -21,6 +22,7 @@ const QUERY_HANDLERS = Object.freeze({
   describe,
   getBoardProjection,
   getPlanSetupStatus,
+  getPlanStatus,
   listBoardObligations,
   listRuntimeObligations,
   myBoards,
@@ -125,6 +127,7 @@ export function createParleyEmbeddedClient(options = {}) {
     myBoards: (input = {}, options = {}) => query("myBoards", input, options),
     whereAmI: (input = {}, options = {}) => query("whereAmI", input, options),
     readPlanProjection: (input = {}, options = {}) => query("readPlanProjection", input, options),
+    getPlanStatus: (input = {}, options = {}) => query("getPlanStatus", input, options),
     mutate: (input = {}, options = {}) => command("mutate", input, options),
     runtime: (input = {}, options = {}) => command("runtime", input, options)
   };

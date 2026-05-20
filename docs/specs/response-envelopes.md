@@ -137,6 +137,7 @@ Rules:
 - Queries should prefer projections/read models over raw storage records.
 - Pagination or cursor fields should be included for lists that can grow.
 - Bounded excerpts are acceptable; full artifacts require explicit artifact-read behavior.
+- Facade board reads (`parley_query(action="board")`) must remain compact: include only board metadata and scalar counts, omit raw `records`, and omit detailed derived state. Callers that need bounded record excerpts or detailed graph/approval/checkpoint state should use the first-class `parley_board_projection` query explicitly.
 
 ## Plan Mutation Responses
 
@@ -168,10 +169,50 @@ Plan commands that create or update plan artifacts should return:
 - setup completeness
 - missing required fields, if any
 - active/current phase, if lifecycle-active
+- HITL readiness for human checkpoint/approval phases
 - recommended next action
 - lifecycle obligations created/resolved, summarized
 
 Interactive/client-facing plan mutations may receive a service-rendered plan `projection` payload so clients can materialize local generated mirrors without treating local files as canonical. Tool-facing responses must strip the Markdown body after any materialization and return only compact projection metadata. Arbitrary artifact body access still belongs to explicit artifact reads.
+
+HITL phase completion requires an explicit recorded input event before `recordPhaseOutcome(..., outcome="complete")` may advance the cursor:
+
+```ts
+type HitlInputSummary = {
+  effect_id: string;
+  actor?: string;
+  decision: "approve" | "request_changes" | "reject" | "defer" | "comment" | "acknowledge" | string;
+  summary: string;
+  required_from?: string;
+  source?: Record<string, unknown>;
+  created_at: string;
+};
+
+type PlanStatusReadModel = {
+  plan: PlanHandle & {
+    current_phase_id?: string;
+    phase_count?: number;
+    lifecycle_revision?: number;
+  };
+  current_phase?: {
+    phase_id: string;
+    title: string;
+    kind: string;
+    status: string;
+    hitl?: {
+      required: true;
+      required_from?: string;
+      requested_decision?: string;
+      recorded_input_count: number;
+      latest_input?: HitlInputSummary;
+      approving_input_effect_id?: string;
+      completion_ready: boolean;
+    };
+  } | null;
+  phases: Array<Record<string, unknown>>;
+  next_action: NextAction & { kind: string; tool?: string };
+};
+```
 
 
 Plan projection payloads are generated mirrors, not an editing/import channel:

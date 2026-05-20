@@ -23,6 +23,7 @@ export const PLAN_LIFECYCLE_OBLIGATION_ROLES = Object.freeze([
   "review_decision",
   "activation_decision",
   "phase_work",
+  "hitl_input",
   "phase_outcome_decision",
   "blocker_resolution",
   "change_response",

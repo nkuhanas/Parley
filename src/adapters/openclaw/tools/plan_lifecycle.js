@@ -1,8 +1,9 @@
-import { createEffectRecord, loadObligationRecord, saveEffectRecord, saveObligationRecord } from "../../../core/storage/board_store.js";
+import { createEffectRecord, loadObligationRecord, saveEffectRecord, saveObligationRecord, savePlanSetupRecord } from "../../../core/storage/board_store.js";
 import { nowIso } from "../../../core/time.js";
 import { activePhase, assertPlanOwner, isCurrentLifecycleObligation, makeResumePoint, nextIncompletePhase, withLifecycleTransition } from "../../../core/plan/lifecycle.js";
-import { derivePlanSetupState } from "../../../core/plan/plan_state.js";
+import { derivePlanSetupState, isHumanGatePhase } from "../../../core/plan/plan_state.js";
 import { loadPlanOrThrow, saveAndExportPlan, withPlanMutationLock } from "./plan_common.js";
+import { explicitPlanStatus, HITL_INPUT_EFFECT_TYPE, latestApprovingHitlInput, normalizeHitlDecision } from "./plan_status_common.js";
 import { boardResult, callerRuntimeRefParameter, resolveToolCaller } from "./v2_common.js";
 
 function compactObject(value) {
@@ -169,6 +170,66 @@ function requireReason(value, fieldName = "reason") {
   const reason = String(value ?? "").trim();
   if (!reason) throw new Error(`${fieldName} is required`);
   return reason;
+}
+
+function assertHitlInputAuthority(plan, phase, actor) {
+  const actorId = typeof actor === "string" ? actor : actor?.board_agent_id;
+  const allowed = [plan.owner, phase.owner ?? phase.shepherd].filter(Boolean);
+  if (!allowed.includes(actorId)) throw new Error(`plan owner or HITL phase shepherd required: ${allowed.join(" or ")}`);
+  return actorId;
+}
+
+function normalizeHitlSource(value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("source is required and must be an object");
+  const kind = String(value.kind ?? "").trim();
+  if (!["human_message", "external_record", "manual_transcription"].includes(kind)) {
+    throw new Error("source.kind must be human_message, external_record, or manual_transcription");
+  }
+  const messageId = value.messageId ?? value.message_id ?? value.transportMessageRef ?? value.transport_message_ref;
+  const ref = value.ref ?? value.url ?? messageId;
+  if (kind === "human_message" && (messageId == null || !String(messageId).trim())) {
+    throw new Error("source.messageId or source.transportMessageRef is required for human_message HITL input");
+  }
+  if (kind !== "human_message" && (ref == null || !String(ref).trim())) {
+    throw new Error("source.ref is required for non-message HITL input sources");
+  }
+  return compactObject({
+    kind,
+    channel: value.channel,
+    channel_id: value.channelId ?? value.channel_id,
+    target: value.target,
+    account_id: value.accountId ?? value.account_id,
+    message_id: messageId,
+    transport_message_ref: value.transportMessageRef ?? value.transport_message_ref,
+    ref,
+    captured_at: value.capturedAt ?? value.captured_at
+  });
+}
+
+async function resolveActiveHitlObligation(api, identity, plan, phaseId, note) {
+  const obligationId = (plan.managed?.activeLifecycleObligationIds ?? []).find((id) => id.includes("_hitl_input_"));
+  if (obligationId == null) return { obligation: null, plan };
+  const obligation = await loadObligationRecord(api.pluginConfig, identity.board, obligationId);
+  if (obligation == null || obligation.target?.phase_id !== phaseId || obligation.status === "resolved") return { obligation: null, plan };
+  const timestamp = nowIso();
+  const resolvedObligation = await saveObligationRecord(api.pluginConfig, identity.board, {
+    ...obligation,
+    status: "resolved",
+    resolution: "completed",
+    resolution_note: note,
+    resolved_at: timestamp,
+    updated_at: timestamp
+  });
+  const updatedPlan = await savePlanSetupRecord(api.pluginConfig, identity.board, {
+    ...plan,
+    managed: {
+      ...plan.managed,
+      activeLifecycleObligationIds: (plan.managed?.activeLifecycleObligationIds ?? []).filter((id) => id !== resolvedObligation.obligation_id),
+      lifecycle_updated_at: timestamp
+    },
+    updated_at: timestamp
+  });
+  return { obligation: resolvedObligation, plan: updatedPlan };
 }
 
 function assertSetupComplete(plan, board) {
@@ -388,6 +449,62 @@ export function createActivatePlanAction(api) {
   };
 }
 
+export function createRecordHitlInputAction(api) {
+  return {
+    name: "parley_record_hitl_input",
+    label: "Parley Record HITL Input",
+    description: "Record explicit human-in-the-loop input for the current plan phase. HITL phases require this before they can be completed.",
+    parameters: lifecycleToolParams({
+      phaseId: { type: "string" },
+      decision: { type: "string", description: "approve, request_changes, reject, defer, comment, or acknowledge." },
+      summary: { type: "string", description: "Concise summary of the human input/decision." },
+      source: { type: "object", additionalProperties: true, description: "Evidence source. Use kind=human_message with messageId/transportMessageRef when input came from chat." }
+    }, ["boardId", "planId", "phaseId", "decision", "summary", "source"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      return await withPlanMutationLock(api, identity, params.planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, params.planId);
+        const phase = (plan.phases ?? []).find((item) => item.phase_id === params.phaseId);
+        if (phase == null) throw new Error(`phase not found: ${params.phaseId}`);
+        if (!isHumanGatePhase(phase)) throw new Error(`phase is not a HITL phase: ${params.phaseId}`);
+        assertHitlInputAuthority(plan, phase, identity.actor);
+        if (plan.managed?.current_phase_id !== params.phaseId) throw new Error(`HITL input can only be recorded for the current phase: ${params.phaseId}`);
+        const decision = normalizeHitlDecision(params.decision);
+        if (!decision) throw new Error("decision is required");
+        const summary = requireReason(params.summary, "summary");
+        const source = normalizeHitlSource(params.source);
+        const { obligation: resolvedObligation, plan: updatedPlan } = await resolveActiveHitlObligation(api, identity, plan, params.phaseId, summary);
+        const effect = await saveEffectRecord(api.pluginConfig, identity.board, createEffectRecord({
+          board_id: identity.board_id,
+          type: HITL_INPUT_EFFECT_TYPE,
+          actor: identity.actor,
+          target: compactObject({
+            plan_id: plan.plan_id,
+            artifact_id: plan.artifact_id,
+            artifact_version: plan.version,
+            phase_id: phase.phase_id
+          }),
+          payload: compactObject({
+            decision,
+            summary,
+            required_from: phase.required_from,
+            requested_decision: phase.requested_decision,
+            source,
+            resolved_obligation_id: resolvedObligation?.obligation_id
+          })
+        }));
+        return boardResult({
+          tool: "parley_record_hitl_input",
+          identity,
+          hitl_input: effect,
+          resolved_obligation: resolvedObligation,
+          ...(await explicitPlanStatus(api, identity, updatedPlan))
+        });
+      });
+    }
+  };
+}
+
 export function createRecordPhaseOutcomeAction(api) {
   return {
     name: "parley_record_phase_outcome",
@@ -405,8 +522,16 @@ export function createRecordPhaseOutcomeAction(api) {
         assertPlanOwner(plan, identity.actor);
         if (plan.status !== "active") throw new Error(`plan is not active: ${plan.status}`);
         if (plan.managed?.current_phase_id !== params.phaseId) throw new Error(`phase is not current: ${params.phaseId}`);
+        const phase = (plan.phases ?? []).find((item) => item.phase_id === params.phaseId);
+        if (phase == null) throw new Error(`phase not found: ${params.phaseId}`);
         const outcome = String(params.outcome).trim();
         if (!["complete", "blocked", "failed"].includes(outcome)) throw new Error("outcome must be complete, blocked, or failed");
+        const approvingHitlInput = outcome === "complete" && isHumanGatePhase(phase)
+          ? await latestApprovingHitlInput(api, identity, plan, params.phaseId)
+          : null;
+        if (outcome === "complete" && isHumanGatePhase(phase) && approvingHitlInput == null) {
+          throw new Error(`HITL phase ${params.phaseId} requires explicit approving input via parley_record_hitl_input before it can be completed`);
+        }
         const nextPhase = outcome === "complete" ? nextIncompletePhase(plan, params.phaseId) : null;
         const toStatus = outcome === "complete" ? (nextPhase == null ? "complete" : "active") : outcome;
         const timestamp = nowIso();
@@ -428,7 +553,8 @@ export function createRecordPhaseOutcomeAction(api) {
           to_status: toStatus,
           decision: outcome,
           note: params.note,
-          phase_id: params.phaseId
+          phase_id: params.phaseId,
+          hitl_input_effect_id: approvingHitlInput?.effect_id
         });
         const result = await saveAndExportPlan(api, identity, transitioned);
         return boardResult({

@@ -60,6 +60,7 @@ export const EFFECT_TYPES = Object.freeze([
   "activation_candidate_dismissed",
   "handoff_created",
   "effect_corrected",
+  "hitl_input_recorded",
   "plan_lifecycle_transitioned"
 ]);
 export const OBLIGATION_TYPES = Object.freeze([
@@ -68,6 +69,7 @@ export const OBLIGATION_TYPES = Object.freeze([
   "resolve_objection",
   "implement_phase",
   "report_status",
+  "record_hitl_input",
   "validate_activation",
   "notify_human",
   "preserve_awareness"
@@ -438,8 +440,10 @@ export function assertEffectPayload(type, value, fieldName = "payload") {
       return assertKnownPayload(value, fieldName, ["trigger_id", "source_event_type", "source_obligation_id", "action_type", "created_obligation_id", "created_effect_id", "result", "skipped", "reason"]);
     case "phase_deferred":
       return assertKnownPayload(value, fieldName, ["reason", "activation_conditions", "review_trigger", "non_executing"]);
+    case "hitl_input_recorded":
+      return assertKnownPayload(value, fieldName, ["decision", "summary", "required_from", "requested_decision", "source", "resolved_obligation_id"]);
     case "plan_lifecycle_transitioned":
-      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "disposition", "phase_id", "obligation_id"]);
+      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "disposition", "phase_id", "obligation_id", "hitl_input_effect_id"]);
     default:
       return assertPlainOptionalObject(value, fieldName);
   }
@@ -465,6 +469,17 @@ export function assertObligationTarget(type, value, fieldName = "target") {
   }
   if (type === "implement_phase" || type === "validate_activation") {
     return assertPlanPhaseTarget(raw, fieldName);
+  }
+  if (type === "record_hitl_input") {
+    assertAllowedKeys(raw, fieldName, ["phase_id", "plan_id", "artifact_id", "artifact_version", "review_required_from", "requested_decision"]);
+    return {
+      phase_id: assertRecordId(raw.phase_id, `${fieldName}.phase_id`),
+      plan_id: assertRecordId(raw.plan_id, `${fieldName}.plan_id`),
+      artifact_id: assertRecordId(raw.artifact_id, `${fieldName}.artifact_id`),
+      artifact_version: assertPositiveInteger(raw.artifact_version, `${fieldName}.artifact_version`),
+      review_required_from: assertFlexibleParticipant(raw.review_required_from, `${fieldName}.review_required_from`),
+      requested_decision: assertNonEmptyString(raw.requested_decision, `${fieldName}.requested_decision`)
+    };
   }
   if (type === "resolve_objection") {
     return assertGenericBoardTarget(raw, fieldName);

@@ -1,6 +1,7 @@
 import { createBoardProjectionTool } from "./board_projection.js";
 import { createValidatePlanAction } from "./validate_plan.js";
 import { createGetPlanSetupStatusAction } from "./get_plan_setup_status.js";
+import { createGetPlanStatusAction } from "./get_plan_status.js";
 import { createReadPlanProjectionAction } from "./read_plan_projection.js";
 import { createValidateStateAction } from "./validate_state.js";
 import { createWhereAmITool } from "./where_am_i.js";
@@ -43,6 +44,36 @@ function assertDelegatedParams(tool, params) {
   }
 }
 
+function compactBoardCounts(counts = {}) {
+  return Object.fromEntries(Object.entries(counts).filter(([, value]) => typeof value !== "object" || value == null));
+}
+
+function compactBoardProjectionForFacade(projection) {
+  if (projection == null || typeof projection !== "object" || Array.isArray(projection)) return projection;
+  return {
+    board_id: projection.board_id,
+    display_name: projection.display_name,
+    status: projection.status,
+    projection_type: projection.projection_type,
+    derived: projection.derived,
+    agent_count: Array.isArray(projection.agents) ? projection.agents.length : projection.counts?.agents,
+    counts: compactBoardCounts(projection.counts),
+    omitted: ["agents", "approval_state", "activation_state", "checkpoint_state", "relationship_graph", "records"],
+    records: null,
+    recordsOmitted: projection.records != null,
+    detailedProjectionAvailableVia: "parley_board_projection",
+    recordExcerptsAvailableVia: "parley_board_projection"
+  };
+}
+
+function compactDelegatedDetailsForFacade(action, details) {
+  if (action !== "board" || details?.projection == null) return details;
+  return {
+    ...details,
+    projection: compactBoardProjectionForFacade(details.projection)
+  };
+}
+
 export function createQueryTool(api) {
   return {
     name: "parley_query",
@@ -55,7 +86,7 @@ export function createQueryTool(api) {
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
         boardId: { type: "string", description: "Required for board-scoped actions. Omit for my_boards, runtime_obligations, and runtime-only where_am_i." },
-        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, plan_setup_status, read_plan_projection, validate_state, runtime_obligations, board_obligations, search." },
+        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, plan_setup_status, plan_status, read_plan_projection, validate_state, runtime_obligations, board_obligations, search." },
         includeTerminal: { type: "boolean", description: "where_am_i board section only: include resolved/cancelled/superseded obligations. Defaults to false." },
         verbosity: { type: "string", description: "where_am_i only: compact or full. Defaults to compact." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },
@@ -92,6 +123,14 @@ export function createQueryTool(api) {
         delegated = await delegatedTool.execute(toolCallId, delegatedParams);
       } else if (params.action === "plan_setup_status") {
         const delegatedTool = createGetPlanSetupStatusAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "plan_status") {
+        const delegatedTool = createGetPlanStatusAction(api);
         const delegatedParams = {
           ...shared,
           ...normalizeInput(params?.input)
@@ -156,7 +195,7 @@ export function createQueryTool(api) {
       return boardResult({
         tool: "parley_query",
         action: params.action,
-        result: delegated.details
+        result: compactDelegatedDetailsForFacade(params.action, delegated.details)
       }, { summarize: params.action !== "where_am_i" || params?.verbosity !== "full" });
     }
   };

@@ -36,6 +36,7 @@ const OPENCLAW_TOOL_NAMES = [
   "parley_add_plan_phase",
   "parley_add_plan_checkpoint",
   "parley_get_plan_setup_status",
+  "parley_get_plan_status",
   "parley_read_plan_projection",
   "parley_request_plan_review",
   "parley_mark_plan_ready",
@@ -44,6 +45,7 @@ const OPENCLAW_TOOL_NAMES = [
   "parley_pause_plan",
   "parley_resume_plan",
   "parley_record_plan_disposition",
+  "parley_record_hitl_input",
   "parley_record_phase_outcome",
   "parley_query_runtime_obligations",
   "parley_query_board_obligations",
@@ -237,6 +239,44 @@ test("OpenClaw adapter client mode forwards caller context to the remote SDK", a
       { runtime_ref: { scheme: "openclaw", type: "session", id: "session-123" }, source: "adapter_discovered" },
       { runtime_ref: { scheme: "openclaw", type: "agent", id: "kairos-parent" }, source: "adapter_discovered" }
     ]);
+  });
+});
+
+test("OpenClaw adapter client mode compacts parley_query board records", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const tools = registeredTools({
+      env: openclawEnv(tempRoot),
+      pluginConfig: {
+        parleyMode: "client",
+        parleyApiUrl: "http://parley.test/base",
+        parleyAgentId: "kairos-operator",
+        parleyDefaultBoard: "project"
+      },
+      fetchImpl: async () => jsonResponse({
+        status: "ok",
+        data: {
+          identity: { board_id: "project", global_agent_id: "kairos-operator", board_agent_id: "kairos-operator" },
+          projection: {
+            board_id: "project",
+            counts: { effects: 1 },
+            records: { effects: [{ effect_id: "effect_large", payload: { body: "large" } }] }
+          }
+        }
+      })
+    });
+
+    const result = await tools.get("parley_query").execute(null, {
+      boardId: "project",
+      action: "board",
+      includeRecords: true,
+      recordLimit: 10
+    });
+
+    assert.equal(result.details.result.projection.records, null);
+    assert.equal(result.details.result.projection.recordsOmitted, true);
+    assert.equal(result.details.result.projection.approval_state, undefined);
+    assert.equal(result.details.result.projection.detailedProjectionAvailableVia, "parley_board_projection");
+    assert.equal(result.details.result.projection.recordExcerptsAvailableVia, "parley_board_projection");
   });
 });
 

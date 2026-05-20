@@ -10,6 +10,7 @@ import {
   createActivatePlanAction,
   createMarkPlanReadyAction,
   createPausePlanAction,
+  createRecordHitlInputAction,
   createRecordPhaseOutcomeAction,
   createRecordPlanDispositionAction,
   createRecordReviewDecisionAction,
@@ -46,6 +47,7 @@ const MUTATE_TOOL_FACTORIES = {
   pause_plan: createPausePlanAction,
   resume_plan: createResumePlanAction,
   record_plan_disposition: createRecordPlanDispositionAction,
+  record_hitl_input: createRecordHitlInputAction,
   record_phase_outcome: createRecordPhaseOutcomeAction
 };
 

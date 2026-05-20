@@ -9,6 +9,7 @@ import {
   describe,
   getBoardProjection,
   getPlanSetupStatus,
+  getPlanStatus,
   listBoardObligations,
   listRuntimeObligations,
   mutate,
@@ -185,6 +186,30 @@ test("service getPlanSetupStatus reads setup state through core storage", async 
     assert.equal(result.data.plan.plan_id, "plan_service_query");
     assert.equal(result.data.plan.phase_count, 1);
     assert.equal(result.data.setupState.setupComplete, true);
+  });
+});
+
+test("service getPlanStatus reads compact lifecycle position", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const plan = {
+      ...testPlanRecord(board),
+      status: "active",
+      managed: { current_phase_id: "phase_1", lifecycle_revision: 1, activeLifecycleObligationIds: [], generatedObligationIds: [] },
+      phases: [{ ...testPlanRecord(board).phases[0], status: "active" }]
+    };
+    await savePlanSetupRecord(pluginConfig, board, plan);
+
+    const result = await getPlanStatus({
+      caller: CALLER,
+      input: { plan_id: plan.plan_id }
+    }, { pluginConfig });
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.data.plan.plan_id, "plan_service_query");
+    assert.equal(result.data.plan.current_phase_id, "phase_1");
+    assert.equal(result.data.current_phase.phase_id, "phase_1");
+    assert.equal(result.data.next_action.kind, "record_phase_outcome");
   });
 });
 
