@@ -214,6 +214,36 @@ type PlanStatusReadModel = {
 };
 ```
 
+When `recordPhaseOutcome(..., outcome="complete")` accepts a phase completion, the command does not re-fight the owner's judgement or require a separate confirmation. It must return advisory completion-review guidance so the agent re-checks the phase criteria, compares the claimed completion against concrete work/evidence, names any gaps, and notifies the human. Human notification is standard for now and has no opt-out flag.
+
+```ts
+type PhaseCompletionReview = {
+  mode: "advisory_after_completion";
+  completion_recorded: true;
+  enforcement: "not_blocking_or_reverting_agent_decision";
+  plan?: { plan_id: string; title?: string; resulting_status?: string };
+  completed_phase?: { phase_id: string; title?: string; kind?: string; owner?: string; status?: string };
+  next_phase?: { phase_id: string; title?: string; kind?: string; owner?: string; status?: string } | null;
+  recorded_note?: string;
+  criteria_snapshot?: {
+    entry_criteria?: string[];
+    work?: string[];
+    exit_criteria?: string[];
+    activation_conditions?: string[];
+    review_trigger?: string[];
+    non_goals_before_activation?: string[];
+  };
+  introspection_questions: string[];
+  checklist: string[];
+  human_notification: {
+    required: true;
+    opt_out_available: false;
+    timing: "after_marking_complete";
+    guidance: string;
+  };
+};
+```
+
 
 Plan projection payloads are generated mirrors, not an editing/import channel:
 

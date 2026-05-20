@@ -21,6 +21,59 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function phaseSummary(phase) {
+  if (phase == null) return null;
+  return compactObject({
+    phase_id: phase.phase_id,
+    title: phase.title,
+    kind: phase.kind,
+    owner: phase.owner,
+    status: phase.status
+  });
+}
+
+function phaseCriteriaSnapshot(phase) {
+  return compactObject({
+    entry_criteria: stringArray(phase?.entry_criteria),
+    work: stringArray(phase?.work),
+    exit_criteria: stringArray(phase?.exit_criteria),
+    activation_conditions: stringArray(phase?.activation_conditions),
+    review_trigger: stringArray(phase?.review_trigger),
+    non_goals_before_activation: stringArray(phase?.non_goals_before_activation)
+  });
+}
+
+function completionReviewForPhase({ plan, phase, note, nextPhase, toStatus }) {
+  return compactObject({
+    mode: "advisory_after_completion",
+    completion_recorded: true,
+    enforcement: "not_blocking_or_reverting_agent_decision",
+    plan: compactObject({ plan_id: plan?.plan_id, title: plan?.title, resulting_status: toStatus }),
+    completed_phase: phaseSummary(phase),
+    next_phase: nextPhase == null ? null : phaseSummary(nextPhase),
+    recorded_note: note,
+    criteria_snapshot: phaseCriteriaSnapshot(phase),
+    introspection_questions: [
+      "Which entry, work, and exit criteria did I verify before marking this phase complete?",
+      "What concrete work, artifacts, tests, smokes, or inspection evidence did I actually produce or review?",
+      "What remains incomplete, uncertain, or merely assumed, and why is completion still the honest state?",
+      "What concise human-visible update should I send now so the human knows what completed and what remains?"
+    ],
+    checklist: [
+      "Re-read the completed phase criteria and compare them against actual evidence.",
+      "Inspect the work performed, not just the intended plan or generated projection.",
+      "Name any gaps or follow-up work instead of hiding them inside a completion note.",
+      "Notify the human with a concise completion update and any remaining uncertainty."
+    ],
+    human_notification: {
+      required: true,
+      opt_out_available: false,
+      timing: "after_marking_complete",
+      guidance: "Send the human a concise update covering what was completed, what evidence supports it, and any known gaps or next steps."
+    }
+  });
+}
+
 async function recordLifecycleEffect(api, identity, plan, payload) {
   const effect = createEffectRecord({
     board_id: identity.board_id,
@@ -509,7 +562,7 @@ export function createRecordPhaseOutcomeAction(api) {
   return {
     name: "parley_record_phase_outcome",
     label: "Parley Record Phase Outcome",
-    description: "Owner-only lifecycle command: record the outcome for the current active phase and move the lifecycle cursor.",
+    description: "Owner-only lifecycle command: record the outcome for the current active phase and move the lifecycle cursor. Completing a phase is accepted, then returned guidance asks the agent to verify criteria/evidence and notify the human.",
     parameters: lifecycleToolParams({
       phaseId: { type: "string" },
       outcome: { type: "string", description: "complete, blocked, or failed." },
@@ -561,6 +614,7 @@ export function createRecordPhaseOutcomeAction(api) {
           tool: "parley_record_phase_outcome",
           identity,
           outcome,
+          completion_review: outcome === "complete" ? completionReviewForPhase({ plan, phase, note: params.note, nextPhase, toStatus }) : undefined,
           plan: result.plan,
           effect,
           artifact: result.artifact,

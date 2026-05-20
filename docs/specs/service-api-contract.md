@@ -98,7 +98,7 @@ Service-hosted runtime commands persist canonical thread/message state and retur
 | `pausePlan` | `parley_pause_plan` | Owner pauses active plan. |
 | `resumePlan` | `parley_resume_plan` | Owner resumes paused/blocked plan. |
 | `recordHitlInput` | `parley_record_hitl_input` | Owner/shepherd records explicit human input for current HITL phase. |
-| `recordPhaseOutcome` | `parley_record_phase_outcome` | Owner records current phase outcome and advances cursor; HITL completion requires prior approving HITL input. |
+| `recordPhaseOutcome` | `parley_record_phase_outcome` | Owner records current phase outcome and advances cursor; completion is accepted with criteria/evidence review and required human-notification guidance; HITL completion requires prior approving HITL input. |
 | `recordPlanDisposition` | `parley_record_plan_disposition` | Owner terminally dispositions or archives plan. |
 
 Plan setup remains guided and explicit. The service should not accept arbitrary complete plan replacement as the normal setup path. Human checkpoint/approval phases are gated: completion must be preceded by an explicit `recordHitlInput` event tied to the current phase and source evidence.
@@ -175,7 +175,7 @@ Key rules:
 2. Add an embedded application service shell plus response/context utilities.
 3. Implement current-tool-aligned read/query service functions first: `describe`, `myBoards`, `whereAmI`, `getBoardProjection`, `listRuntimeObligations`, `listBoardObligations`, and `getPlanSetupStatus`.
 4. Add explicit artifact/plan reads and compact lifecycle status reads: `readArtifact`, `readArtifactByRef`, `readPlanArtifact`, and `getPlanStatus`.
-5. Migrate plan mutations, then general board mutations, then runtime protocol commands, with HITL phase completion gated by explicit recorded input.
+5. Migrate plan mutations, then general board mutations, then runtime protocol commands, with HITL phase completion gated by explicit recorded input and ordinary phase completion returning advisory criteria/evidence review plus required human-notification guidance.
 6. Move first-class OpenClaw tools onto service commands/queries while preserving tool names.
 7. Keep `parley_query`/`parley_mutate` as advanced facades over the same service calls.
 8. Defer transport, dashboard, auth, and database decisions until after the embedded service contract is stable.

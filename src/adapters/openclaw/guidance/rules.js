@@ -231,6 +231,19 @@ function runtimeNext(details) {
   return next;
 }
 
+function completionReviewGuidance(details) {
+  const review = details?.completion_review ?? details?.result?.completion_review ?? null;
+  if (review == null || typeof review !== "object" || Array.isArray(review)) return undefined;
+  return {
+    mode: review.mode,
+    completion_recorded: review.completion_recorded,
+    enforcement: review.enforcement,
+    introspection_questions: review.introspection_questions,
+    checklist: review.checklist,
+    human_notification: review.human_notification
+  };
+}
+
 function avoidGuidance(details, boardId) {
   const avoid = [];
   if (boardId == null && (details?.boards?.default_board || details?.runtime?.identity?.default_board)) {
@@ -255,6 +268,7 @@ export function buildGuidance(details) {
   const avoid = avoidGuidance(details, boardId);
   return Object.fromEntries(Object.entries({
     meaning: guidanceMeaning(details),
+    completion_review: completionReviewGuidance(details),
     next: next.length > 0 ? next : undefined,
     avoid: avoid.length > 0 ? avoid : undefined
   }).filter(([, value]) => value !== undefined));

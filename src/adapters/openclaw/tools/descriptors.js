@@ -322,7 +322,7 @@ export function planSetupDescriptor() {
       { tool: "parley_record_review_decision", purpose: "Reviewer command for assigned active review_decision obligations; resolves them internally." },
       { tool: "parley_activate_plan", purpose: "Owner-only lifecycle command to activate a ready plan." },
       { tool: "parley_record_hitl_input", purpose: "Owner-only/shepherd command to record explicit human input for HITL phases before completion." },
-      { tool: "parley_record_phase_outcome", purpose: "Owner-only lifecycle command to move the phase cursor after judging evidence; HITL completion requires recorded approving HITL input." }
+      { tool: "parley_record_phase_outcome", purpose: "Owner-only lifecycle command to move the phase cursor after judging evidence; completion is accepted with advisory criteria/evidence review and required human-notification guidance; HITL completion requires recorded approving HITL input." }
     ],
     rule: "Do not author plans as objects. Assemble plans through these narrow tools and follow each latest setupState response."
   };

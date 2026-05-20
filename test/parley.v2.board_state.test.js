@@ -1263,6 +1263,14 @@ test("Parley managed plan lifecycle tools own review, activation, and phase curs
       input: { planId, phaseId: "phase_1", outcome: "complete", note: "Owner accepts completion evidence." }
     });
     assert.equal(phaseOutcomeResult.details.result.plan.status, "complete");
+    assert.equal(phaseOutcomeResult.details.result.completion_review.mode, "advisory_after_completion");
+    assert.equal(phaseOutcomeResult.details.result.completion_review.enforcement, "not_blocking_or_reverting_agent_decision");
+    assert.deepEqual(phaseOutcomeResult.details.result.completion_review.criteria_snapshot.exit_criteria, ["Projection validates."]);
+    assert.match(phaseOutcomeResult.details.result.completion_review.introspection_questions.join("\n"), /criteria/);
+    assert.match(phaseOutcomeResult.details.result.completion_review.introspection_questions.join("\n"), /human-visible update/);
+    assert.equal(phaseOutcomeResult.details.result.completion_review.human_notification.required, true);
+    assert.equal(phaseOutcomeResult.details.result.completion_review.human_notification.opt_out_available, false);
+    assert.equal(phaseOutcomeResult.details.guidance.completion_review.human_notification.required, true);
     const completedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
     assert.deepEqual(completedPlan.managed.activeLifecycleObligationIds, []);
   });
@@ -1358,6 +1366,8 @@ test("Parley HITL phases require explicit recorded input before completion", asy
     });
     assert.equal(phaseOutcomeResult.details.result.plan.status, "complete");
     assert.equal(phaseOutcomeResult.details.result.effect.payload.hitl_input_effect_id, hitlInputResult.details.result.hitl_input.effect_id);
+    assert.equal(phaseOutcomeResult.details.result.completion_review.human_notification.required, true);
+    assert.equal(phaseOutcomeResult.details.guidance.completion_review.human_notification.opt_out_available, false);
   });
 });
 
