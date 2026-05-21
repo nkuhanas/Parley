@@ -92,7 +92,10 @@ Service-hosted runtime commands persist canonical thread/message state and retur
 | `addPlanPhase` | `parley_add_plan_phase` | Adds one explicit phase. |
 | `addPlanCheckpoint` | `parley_add_plan_checkpoint` | Adds human checkpoint/gate phase. |
 | `requestPlanReview` | `parley_request_plan_review` | Moves setup-complete plan into review and creates reviewer obligations. |
-| `recordReviewDecision` | `parley_record_review_decision` | Reviewer decision for active review obligation. |
+| `replacePlanReviewRouting` | `parley_replace_plan_review_routing` | Owner replaces active reviewer routing while a plan is in review. |
+| `cancelPlanReview` | `parley_cancel_plan_review` | Owner cancels active review routing and moves the plan back to `draft`, `needs_changes`, or `ready`. |
+| `recordReviewDecision` | `parley_record_review_decision` | Board-agent reviewer decision for that reviewer's active obligation. |
+| `recordHumanReviewAttestation` | `parley_record_human_review_attestation` | Plan owner attests a human reviewer decision from explicit source evidence. |
 | `markPlanReady` | `parley_mark_plan_ready` | Owner marks setup-complete plan ready without review. |
 | `activatePlan` | `parley_activate_plan` | Owner activates ready plan and creates lifecycle obligations. |
 | `pausePlan` | `parley_pause_plan` | Owner pauses active plan. |

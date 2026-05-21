@@ -21,6 +21,42 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function reviewerIds(board, value, fieldName = "requiredReviewers") {
+  const reviewers = unique(stringArray(value));
+  if (reviewers.length === 0) throw new Error(`${fieldName} must contain at least one board-local reviewer`);
+  const boardAgents = new Set(board.agent_registry.map((agent) => agent.board_agent_id));
+  for (const reviewer of reviewers) {
+    if (!boardAgents.has(reviewer)) throw new Error(`required reviewer must be a board agent: ${reviewer}`);
+  }
+  return reviewers;
+}
+
+function filterReviewDecisions(values, reviewers) {
+  const allowed = new Set(reviewers);
+  return unique(stringArray(values).filter((reviewer) => allowed.has(reviewer)));
+}
+
+function normalizeReviewDecision(value) {
+  const decision = String(value ?? "").trim();
+  if (!["approve", "request_changes", "reject"].includes(decision)) throw new Error("decision must be approve, request_changes, or reject");
+  return decision;
+}
+
+function reviewDecisionResolution(decision) {
+  return decision === "approve" ? "completed" : "rejected";
+}
+
+function humanReviewerId(value) {
+  return String(value ?? "human").trim() || "human";
+}
+
+function assertHumanReviewer(board, reviewer) {
+  const member = board.agent_registry.find((agent) => agent.board_agent_id === reviewer);
+  if (member == null) throw new Error(`human reviewer must be a board agent: ${reviewer}`);
+  if (member.kind !== "human") throw new Error(`human review attestation requires a human board member, got ${member.kind}: ${reviewer}`);
+  return member;
+}
+
 function phaseSummary(phase) {
   if (phase == null) return null;
   return compactObject({
@@ -85,14 +121,13 @@ async function recordLifecycleEffect(api, identity, plan, payload) {
   return saveEffectRecord(api.pluginConfig, identity.board, effect);
 }
 
-async function resolveManagedDecisionObligation(api, identity, plan, obligationId, role, resolution, note) {
+async function resolveLifecycleObligation(api, identity, plan, obligationId, role, resolution, note) {
   const obligation = await loadObligationRecord(api.pluginConfig, identity.board, obligationId);
   if (obligation == null) throw new Error(`obligation not found: ${obligationId}`);
-  if (obligation.agent !== identity.board_agent_id) throw new Error(`obligation is assigned to ${obligation.agent}, not ${identity.board_agent_id}`);
   if (!isCurrentLifecycleObligation(plan, obligation, role)) {
     throw new Error(`obligation is not the current plan lifecycle ${role} obligation for ${plan.plan_id}`);
   }
-  if (obligation.status === "resolved") throw new Error(`obligation already resolved: ${obligation.obligation_id}`);
+  if (["resolved", "cancelled", "superseded"].includes(obligation.status)) throw new Error(`obligation already ${obligation.status}: ${obligation.obligation_id}`);
   const timestamp = nowIso();
   return saveObligationRecord(api.pluginConfig, identity.board, {
     ...obligation,
@@ -102,6 +137,50 @@ async function resolveManagedDecisionObligation(api, identity, plan, obligationI
     resolved_at: timestamp,
     updated_at: timestamp
   });
+}
+
+async function resolveManagedDecisionObligation(api, identity, plan, obligationId, role, resolution, note) {
+  const obligation = await loadObligationRecord(api.pluginConfig, identity.board, obligationId);
+  if (obligation == null) throw new Error(`obligation not found: ${obligationId}`);
+  if (obligation.agent !== identity.board_agent_id) throw new Error(`obligation is assigned to ${obligation.agent}, not ${identity.board_agent_id}`);
+  return resolveLifecycleObligation(api, identity, plan, obligationId, role, resolution, note);
+}
+
+async function markCurrentLifecycleObligations(api, identity, plan, role, { status, resolution, note }) {
+  const timestamp = nowIso();
+  const saved = [];
+  for (const obligationId of plan.managed?.activeLifecycleObligationIds ?? []) {
+    const obligation = await loadObligationRecord(api.pluginConfig, identity.board, obligationId);
+    if (!isCurrentLifecycleObligation(plan, obligation, role)) continue;
+    if (["resolved", "cancelled", "superseded"].includes(obligation.status)) continue;
+    saved.push(await saveObligationRecord(api.pluginConfig, identity.board, {
+      ...obligation,
+      status,
+      resolution,
+      resolution_note: note ?? null,
+      resolved_at: timestamp,
+      updated_at: timestamp
+    }));
+  }
+  return saved;
+}
+
+async function resolveHumanReviewObligation(api, identity, plan, { obligationId = null, reviewer = "human", resolution, note }) {
+  let targetObligationId = obligationId;
+  if (targetObligationId == null) {
+    for (const activeId of plan.managed?.activeLifecycleObligationIds ?? []) {
+      const candidate = await loadObligationRecord(api.pluginConfig, identity.board, activeId);
+      if (candidate?.agent === reviewer && isCurrentLifecycleObligation(plan, candidate, "review_decision")) {
+        targetObligationId = candidate.obligation_id;
+        break;
+      }
+    }
+  }
+  if (targetObligationId == null) throw new Error(`current human review obligation not found for reviewer: ${reviewer}`);
+  const obligation = await loadObligationRecord(api.pluginConfig, identity.board, targetObligationId);
+  if (obligation == null) throw new Error(`obligation not found: ${targetObligationId}`);
+  if (obligation.agent !== reviewer) throw new Error(`obligation is assigned to ${obligation.agent}, not ${reviewer}`);
+  return resolveLifecycleObligation(api, identity, plan, targetObligationId, "review_decision", resolution, note);
 }
 
 function lifecycleToolParams(extraProperties, required = ["boardId", "planId"]) {
@@ -133,12 +212,7 @@ export function createRequestPlanReviewAction(api) {
         const plan = await loadPlanOrThrow(api, identity, params.planId);
         assertPlanOwner(plan, identity.actor);
         if (!["draft", "needs_changes", "ready"].includes(plan.status)) throw new Error(`plan status ${plan.status} cannot enter review`);
-        const reviewers = unique(stringArray(params.requiredReviewers ?? plan.review?.required_reviewers));
-        if (reviewers.length === 0) throw new Error("requiredReviewers must contain at least one board-local reviewer");
-        const boardAgents = new Set(identity.board.agent_registry.map((agent) => agent.board_agent_id));
-        for (const reviewer of reviewers) {
-          if (!boardAgents.has(reviewer)) throw new Error(`required reviewer must be a board agent: ${reviewer}`);
-        }
+        const reviewers = reviewerIds(identity.board, params.requiredReviewers ?? plan.review?.required_reviewers);
         const timestamp = nowIso();
         const transitioned = withLifecycleTransition({
           ...plan,
@@ -180,9 +254,8 @@ export function createRecordReviewDecisionAction(api) {
       return await withPlanMutationLock(api, identity, params.planId, async () => {
         const plan = await loadPlanOrThrow(api, identity, params.planId);
         if (plan.status !== "review") throw new Error(`plan is not in review: ${plan.status}`);
-        const decision = String(params.decision).trim();
-        if (!["approve", "request_changes", "reject"].includes(decision)) throw new Error("decision must be approve, request_changes, or reject");
-        const resolvedObligation = await resolveManagedDecisionObligation(api, identity, plan, params.obligationId, "review_decision", decision === "approve" ? "completed" : "rejected", params.note);
+        const decision = normalizeReviewDecision(params.decision);
+        const resolvedObligation = await resolveManagedDecisionObligation(api, identity, plan, params.obligationId, "review_decision", reviewDecisionResolution(decision), params.note);
         const approvals = unique([...(plan.review?.approvals ?? []), ...(decision === "approve" ? [identity.board_agent_id] : [])]);
         const objections = unique([...(plan.review?.objections ?? []), ...(["request_changes", "reject"].includes(decision) ? [identity.board_agent_id] : [])]);
         const required = plan.review?.required_reviewers ?? [];
@@ -218,6 +291,181 @@ export function createRecordReviewDecisionAction(api) {
   };
 }
 
+export function createReplacePlanReviewRoutingAction(api) {
+  return {
+    name: "parley_replace_plan_review_routing",
+    label: "Parley Replace Plan Review Routing",
+    description: "Owner-only lifecycle command: replace reviewer routing for an in-review plan and reconcile managed review obligations.",
+    parameters: lifecycleToolParams({
+      requiredReviewers: { type: "array", items: { type: "string" } },
+      reason: { type: "string" }
+    }, ["boardId", "planId", "requiredReviewers", "reason"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      return await withPlanMutationLock(api, identity, params.planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, params.planId);
+        assertPlanOwner(plan, identity.actor);
+        if (plan.status !== "review") throw new Error(`plan is not in review: ${plan.status}`);
+        const reviewers = reviewerIds(identity.board, params.requiredReviewers);
+        const reason = requireReason(params.reason);
+        const timestamp = nowIso();
+        const transitioned = withLifecycleTransition({
+          ...plan,
+          review: {
+            required_reviewers: reviewers,
+            approvals: filterReviewDecisions(plan.review?.approvals, reviewers),
+            objections: filterReviewDecisions(plan.review?.objections, reviewers)
+          }
+        }, { status: "review", timestamp });
+        const effect = await recordLifecycleEffect(api, identity, transitioned, {
+          action: "replace_review_routing",
+          from_status: plan.status,
+          to_status: "review",
+          previous_required_reviewers: plan.review?.required_reviewers ?? [],
+          required_reviewers: reviewers,
+          reason
+        });
+        const result = await saveAndExportPlan(api, identity, transitioned);
+        return boardResult({
+          tool: "parley_replace_plan_review_routing",
+          identity,
+          plan: result.plan,
+          effect,
+          artifact: result.artifact,
+          projection: result.projection,
+          plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+        });
+      });
+    }
+  };
+}
+
+export function createCancelPlanReviewAction(api) {
+  return {
+    name: "parley_cancel_plan_review",
+    label: "Parley Cancel Plan Review",
+    description: "Owner-only lifecycle command: cancel active review routing for an in-review plan and move it back to draft, needs_changes, or ready.",
+    parameters: lifecycleToolParams({
+      reason: { type: "string" },
+      nextStatus: { type: "string", description: "draft, needs_changes, or ready. Defaults to needs_changes." }
+    }, ["boardId", "planId", "reason"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      return await withPlanMutationLock(api, identity, params.planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, params.planId);
+        assertPlanOwner(plan, identity.actor);
+        if (plan.status !== "review") throw new Error(`plan is not in review: ${plan.status}`);
+        const nextStatus = String(params.nextStatus ?? params.next_status ?? "needs_changes").trim();
+        if (!["draft", "needs_changes", "ready"].includes(nextStatus)) throw new Error("nextStatus must be draft, needs_changes, or ready");
+        const reason = requireReason(params.reason);
+        const cancelledObligations = await markCurrentLifecycleObligations(api, identity, plan, "review_decision", {
+          status: "cancelled",
+          resolution: "cancelled",
+          note: `Plan review routing cancelled: ${reason}`
+        });
+        const timestamp = nowIso();
+        const transitioned = withLifecycleTransition({
+          ...plan,
+          review: { required_reviewers: [], approvals: [], objections: [] }
+        }, { status: nextStatus, currentPhaseId: null, resumePoint: null, timestamp });
+        const effect = await recordLifecycleEffect(api, identity, transitioned, {
+          action: "cancel_review_routing",
+          from_status: plan.status,
+          to_status: nextStatus,
+          previous_required_reviewers: plan.review?.required_reviewers ?? [],
+          reason
+        });
+        const result = await saveAndExportPlan(api, identity, transitioned);
+        return boardResult({
+          tool: "parley_cancel_plan_review",
+          identity,
+          plan: result.plan,
+          effect,
+          artifact: result.artifact,
+          projection: result.projection,
+          cancelled_obligations: cancelledObligations,
+          plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+        });
+      });
+    }
+  };
+}
+
+export function createRecordHumanReviewAttestationAction(api) {
+  return {
+    name: "parley_record_human_review_attestation",
+    label: "Parley Record Human Review Attestation",
+    description: "Owner-only lifecycle command: attest a human reviewer decision from external evidence and resolve the assigned human review obligation.",
+    parameters: lifecycleToolParams({
+      obligationId: { type: "string" },
+      humanReviewer: { type: "string", description: "Board-local human reviewer id. Defaults to human." },
+      decision: { type: "string", description: "approve, request_changes, or reject." },
+      summary: { type: "string", description: "Concise summary of the human decision/input." },
+      source: { type: "object", additionalProperties: true, description: "Evidence source. Use kind=human_message with messageId/transportMessageRef when input came from chat." },
+      note: { type: "string" }
+    }, ["boardId", "planId", "decision", "summary", "source"]),
+    async execute(_toolCallId, params) {
+      const identity = resolveToolCaller(api, params);
+      return await withPlanMutationLock(api, identity, params.planId, async () => {
+        const plan = await loadPlanOrThrow(api, identity, params.planId);
+        assertPlanOwner(plan, identity.actor);
+        if (plan.status !== "review") throw new Error(`plan is not in review: ${plan.status}`);
+        const reviewer = humanReviewerId(params.humanReviewer ?? params.human_reviewer);
+        assertHumanReviewer(identity.board, reviewer);
+        const required = plan.review?.required_reviewers ?? [];
+        if (!required.includes(reviewer)) throw new Error(`human reviewer is not required for this plan: ${reviewer}`);
+        const decision = normalizeReviewDecision(params.decision);
+        const summary = requireReason(params.summary, "summary");
+        const source = normalizeHitlSource(params.source);
+        const resolvedObligation = await resolveHumanReviewObligation(api, identity, plan, {
+          obligationId: params.obligationId,
+          reviewer,
+          resolution: reviewDecisionResolution(decision),
+          note: params.note ?? summary
+        });
+        const approvals = unique([...(plan.review?.approvals ?? []), ...(decision === "approve" ? [reviewer] : [])]);
+        const objections = unique([...(plan.review?.objections ?? []), ...(["request_changes", "reject"].includes(decision) ? [reviewer] : [])]);
+        const allApproved = required.length > 0 && required.every((item) => approvals.includes(item));
+        const toStatus = decision === "approve" ? (allApproved ? "ready" : "review") : "needs_changes";
+        const timestamp = nowIso();
+        const transitioned = withLifecycleTransition({
+          ...plan,
+          review: { required_reviewers: required, approvals, objections }
+        }, { status: toStatus, timestamp });
+        const effect = await recordLifecycleEffect(api, identity, transitioned, {
+          action: "record_human_review_attestation",
+          from_status: plan.status,
+          to_status: toStatus,
+          decision,
+          human_reviewer: reviewer,
+          attested_by: identity.board_agent_id,
+          summary,
+          source,
+          note: params.note,
+          obligation_id: resolvedObligation.obligation_id
+        });
+        const result = await saveAndExportPlan(api, identity, transitioned);
+        return boardResult({
+          tool: "parley_record_human_review_attestation",
+          identity,
+          decision,
+          human_review: {
+            reviewer,
+            summary,
+            source,
+            attested_by: identity.board_agent_id
+          },
+          obligation: resolvedObligation,
+          effect,
+          plan: result.plan,
+          artifact: result.artifact,
+          projection: result.projection,
+          plan_lifecycle: { obligations: result.lifecycleObligations ?? [] }
+        });
+      });
+    }
+  };
+}
 
 function requireReason(value, fieldName = "reason") {
   const reason = String(value ?? "").trim();

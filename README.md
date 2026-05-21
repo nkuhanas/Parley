@@ -206,6 +206,8 @@ Parley expands leading `~` in configured filesystem paths. Use explicit absolute
 
 Board configs automatically normalize a protected human member with board/global id `human`. New Parley-created boards include it by default, and existing configs can be inspected or repaired explicitly with `parley doctor --board <board> --repair`.
 
+When a plan is routed to `human` for review, agents do not impersonate that human identity. The plan owner may use `parley_record_human_review_attestation` to record a human decision from explicit source evidence. If review routing is wrong, the owner can repair it with `parley_replace_plan_review_routing` or cancel it with `parley_cancel_plan_review` instead of editing state files.
+
 For a complete commented setup, start from `examples/basic-board/config.example.json` and the full walkthrough in `docs/getting-started.md`.
 
 </details>

@@ -27,6 +27,7 @@ export {
   runtimeRefKey,
   resolveCallerBoardMemberships
 } from "./core/board/board.js";
+export { createActivatePlanAction, createCancelPlanReviewAction, createMarkPlanReadyAction, createPausePlanAction, createRecordHitlInputAction, createRecordHumanReviewAttestationAction, createRecordPhaseOutcomeAction, createRecordPlanDispositionAction, createRecordReviewDecisionAction, createReplacePlanReviewRoutingAction, createRequestPlanReviewAction, createResumePlanAction } from "./adapters/openclaw/tools/plan_lifecycle.js";
 export { createOpenThreadTool } from "./adapters/openclaw/tools/open_thread.js";
 export { createClaimTurnTool } from "./adapters/openclaw/tools/claim_turn.js";
 export { createReplyThreadTool } from "./adapters/openclaw/tools/reply.js";

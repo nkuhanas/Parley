@@ -77,6 +77,8 @@ Use `parley_query_search({ boardId, query, namespaces })` to search board-regist
 
 Use scoped plan reads for plan-specific recovery before broad projections: `parley_get_plan_overview`, `parley_get_plan_phases`, `parley_get_plan_review_status`, and `parley_get_plan_relationships`. The compatibility facade exposes the same reads as `plan_overview`, `plan_phases`, `plan_review_status`, and `plan_relationships` actions.
 
+Plan review routing is lifecycle-owned state. Use `parley_request_plan_review` to enter review, `parley_replace_plan_review_routing` to replace incorrect reviewers while the plan is still in review, and `parley_cancel_plan_review` to cancel active review routing without manual storage edits. A `human` reviewer obligation is resolved through owner-attested evidence using `parley_record_human_review_attestation`; ordinary `parley_record_review_decision` remains for board-agent reviewers resolving their own assigned obligations.
+
 `parley_board_projection` is compact by default. Pass `includeRecords: true` only when bounded raw records are needed, and `includeDerivedDetails: true` only when detailed derived graph, approval, checkpoint, or nested count state is needed.
 
 `parley_query` and `parley_mutate` are advanced compatibility facades over first-class read/write tools. Prefer first-class tools in agent-facing workflows because the tool name should match the caller's operational intent.

@@ -8,12 +8,15 @@ import { createAddPlanPhaseAction } from "../../adapters/openclaw/tools/add_plan
 import { createAddPlanCheckpointAction } from "../../adapters/openclaw/tools/add_plan_checkpoint.js";
 import {
   createActivatePlanAction,
+  createCancelPlanReviewAction,
   createMarkPlanReadyAction,
   createPausePlanAction,
   createRecordHitlInputAction,
+  createRecordHumanReviewAttestationAction,
   createRecordPhaseOutcomeAction,
   createRecordPlanDispositionAction,
   createRecordReviewDecisionAction,
+  createReplacePlanReviewRoutingAction,
   createRequestPlanReviewAction,
   createResumePlanAction
 } from "../../adapters/openclaw/tools/plan_lifecycle.js";
@@ -41,8 +44,11 @@ const MUTATE_TOOL_FACTORIES = {
   add_plan_phase: createAddPlanPhaseAction,
   add_plan_checkpoint: createAddPlanCheckpointAction,
   request_plan_review: createRequestPlanReviewAction,
+  replace_plan_review_routing: createReplacePlanReviewRoutingAction,
+  cancel_plan_review: createCancelPlanReviewAction,
   mark_plan_ready: createMarkPlanReadyAction,
   record_review_decision: createRecordReviewDecisionAction,
+  record_human_review_attestation: createRecordHumanReviewAttestationAction,
   activate_plan: createActivatePlanAction,
   pause_plan: createPausePlanAction,
   resume_plan: createResumePlanAction,

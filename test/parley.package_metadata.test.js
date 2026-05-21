@@ -52,7 +52,10 @@ test("package metadata advertises installable OpenClaw runtime entrypoints", asy
     "parley_get_plan_overview",
     "parley_get_plan_phases",
     "parley_get_plan_review_status",
-    "parley_get_plan_relationships"
+    "parley_get_plan_relationships",
+    "parley_replace_plan_review_routing",
+    "parley_cancel_plan_review",
+    "parley_record_human_review_attestation"
   ]) {
     assert.ok(manifest.contracts.tools.includes(toolName), `${toolName} should be advertised in contracts.tools`);
   }

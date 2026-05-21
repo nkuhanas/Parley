@@ -443,7 +443,7 @@ export function assertEffectPayload(type, value, fieldName = "payload") {
     case "hitl_input_recorded":
       return assertKnownPayload(value, fieldName, ["decision", "summary", "required_from", "requested_decision", "source", "resolved_obligation_id"]);
     case "plan_lifecycle_transitioned":
-      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "disposition", "phase_id", "obligation_id", "hitl_input_effect_id"]);
+      return assertKnownPayload(value, fieldName, ["action", "from_status", "to_status", "reason", "note", "decision", "disposition", "phase_id", "obligation_id", "hitl_input_effect_id", "previous_required_reviewers", "required_reviewers", "human_reviewer", "attested_by", "summary", "source"]);
     default:
       return assertPlainOptionalObject(value, fieldName);
   }

@@ -30,7 +30,7 @@ import { createGetPlanSetupStatusAction } from "./tools/get_plan_setup_status.js
 import { createGetPlanStatusAction } from "./tools/get_plan_status.js";
 import { createGetPlanOverviewAction, createGetPlanPhasesAction, createGetPlanRelationshipsAction, createGetPlanReviewStatusAction } from "./tools/get_plan_scoped.js";
 import { createReadPlanProjectionAction } from "./tools/read_plan_projection.js";
-import { createActivatePlanAction, createMarkPlanReadyAction, createPausePlanAction, createRecordHitlInputAction, createRecordPhaseOutcomeAction, createRecordPlanDispositionAction, createRecordReviewDecisionAction, createRequestPlanReviewAction, createResumePlanAction } from "./tools/plan_lifecycle.js";
+import { createActivatePlanAction, createCancelPlanReviewAction, createMarkPlanReadyAction, createPausePlanAction, createRecordHitlInputAction, createRecordHumanReviewAttestationAction, createRecordPhaseOutcomeAction, createRecordPlanDispositionAction, createRecordReviewDecisionAction, createReplacePlanReviewRoutingAction, createRequestPlanReviewAction, createResumePlanAction } from "./tools/plan_lifecycle.js";
 import { createRuntimeObligationsQueryAction, createBoardObligationsQueryAction } from "./tools/obligations.js";
 import { createNamespaceSearchAction } from "./tools/namespace_search.js";
 import { createQueryTool } from "./tools/query.js";
@@ -89,8 +89,11 @@ export function registerParleyTools(api) {
   registerRuntimeContextTool(runtimeApi, createGetPlanRelationshipsAction);
   registerRuntimeContextTool(runtimeApi, createReadPlanProjectionAction);
   registerRuntimeContextTool(runtimeApi, createRequestPlanReviewAction);
+  registerRuntimeContextTool(runtimeApi, createReplacePlanReviewRoutingAction);
+  registerRuntimeContextTool(runtimeApi, createCancelPlanReviewAction);
   registerRuntimeContextTool(runtimeApi, createMarkPlanReadyAction);
   registerRuntimeContextTool(runtimeApi, createRecordReviewDecisionAction);
+  registerRuntimeContextTool(runtimeApi, createRecordHumanReviewAttestationAction);
   registerRuntimeContextTool(runtimeApi, createActivatePlanAction);
   registerRuntimeContextTool(runtimeApi, createPausePlanAction);
   registerRuntimeContextTool(runtimeApi, createResumePlanAction);

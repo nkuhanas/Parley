@@ -16,7 +16,7 @@ export function createMutateTool(api) {
         boardId: { type: "string", description: "Required board id for this board-scoped operation. Call parley_my_boards to discover accessible boards and default_board." },
         action: {
           type: "string",
-          description: "Write action. Supported now: register_artifact, create_object, record_effect, create_obligation, create_trigger, resolve_obligation, record_relationship, remove_relationship, create_plan, write_plan_overview, add_plan_phase, add_plan_checkpoint, request_plan_review, mark_plan_ready, record_review_decision, activate_plan, pause_plan, resume_plan, record_hitl_input, record_phase_outcome, record_plan_disposition."
+          description: "Write action. Supported now: register_artifact, create_object, record_effect, create_obligation, create_trigger, resolve_obligation, record_relationship, remove_relationship, create_plan, write_plan_overview, add_plan_phase, add_plan_checkpoint, request_plan_review, replace_plan_review_routing, cancel_plan_review, mark_plan_ready, record_review_decision, record_human_review_attestation, activate_plan, pause_plan, resume_plan, record_hitl_input, record_phase_outcome, record_plan_disposition."
         },
         input: {
           type: "object",

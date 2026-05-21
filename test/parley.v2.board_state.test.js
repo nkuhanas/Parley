@@ -1276,6 +1276,174 @@ test("Parley managed plan lifecycle tools own review, activation, and phase curs
   });
 });
 
+test("Parley review routing can be replaced and human review can be owner-attested", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    pluginConfig.parleyDefaultBoards.project.members[1].runtime_refs = [{ scheme: "openclaw", type: "agent", id: "project-reviewer" }];
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_human_review_attestation",
+      filename: "human-review-attestation-plan.md",
+      participants: ["parley-agent", "human"]
+    });
+
+    const reviewResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "request_plan_review",
+      input: { planId, requiredReviewers: ["project-reviewer"], reason: "Route to reviewer before repair." }
+    });
+    const oldReviewObligation = reviewResult.details.result.plan_lifecycle.obligations[0];
+    assert.equal(oldReviewObligation.agent, "project-reviewer");
+
+    const replaceResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "replace_plan_review_routing",
+      input: { planId, requiredReviewers: ["human"], reason: "Owner routes review to human evidence." }
+    });
+    const replacedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(replacedPlan.review.required_reviewers, ["human"]);
+    assert.deepEqual(replacedPlan.review.approvals, []);
+    const humanReviewObligation = replaceResult.details.result.plan_lifecycle.obligations.find((obligation) => obligation.agent === "human");
+    assert.equal(humanReviewObligation.status, "active");
+    assert.equal(humanReviewObligation.managedBinding.role, "review_decision");
+    const supersededOldReview = await loadObligationRecord(pluginConfig, board, oldReviewObligation.obligation_id);
+    assert.equal(supersededOldReview.status, "superseded");
+
+    await assert.rejects(
+      () => mutateTool.execute(null, {
+        callerRuntimeRef: { scheme: "openclaw", type: "agent", id: "project-reviewer" },
+        boardId: "project",
+        action: "record_human_review_attestation",
+        input: {
+          planId,
+          decision: "approve",
+          summary: "Human approved, but a non-owner tried to attest it.",
+          source: { kind: "human_message", channel: "discord", messageId: "message-denied" }
+        }
+      }),
+      /plan owner required: parley-agent/
+    );
+
+    const attestationResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "record_human_review_attestation",
+      input: {
+        planId,
+        decision: "approve",
+        summary: "Sensei explicitly approved the plan review in chat.",
+        source: { kind: "human_message", channel: "discord", messageId: "message-approved" }
+      }
+    });
+    assert.equal(attestationResult.details.result.plan.status, "ready");
+    assert.equal(attestationResult.details.result.human_review.reviewer, "human");
+    assert.equal(attestationResult.details.result.human_review.attested_by, "parley-agent");
+    const attestedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(attestedPlan.review.approvals, ["human"]);
+    assert.equal(attestationResult.details.result.effect.payload.action, "record_human_review_attestation");
+    assert.equal(attestationResult.details.result.effect.payload.source.message_id, "message-approved");
+    const resolvedHumanReview = await loadObligationRecord(pluginConfig, board, humanReviewObligation.obligation_id);
+    assert.equal(resolvedHumanReview.status, "resolved");
+    assert.equal(resolvedHumanReview.resolution, "completed");
+  });
+});
+
+
+test("Parley human review attestation can request changes", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_human_review_changes",
+      filename: "human-review-changes-plan.md",
+      participants: ["parley-agent", "human"]
+    });
+
+    const reviewResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "request_plan_review",
+      input: { planId, requiredReviewers: ["human"], reason: "Route to human review." }
+    });
+    const reviewObligation = reviewResult.details.result.plan_lifecycle.obligations[0];
+
+    const attestationResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "record_human_review_attestation",
+      input: {
+        planId,
+        decision: "request_changes",
+        summary: "Sensei requested changes before approval.",
+        source: { kind: "human_message", channel: "discord", messageId: "message-change-request" }
+      }
+    });
+    assert.equal(attestationResult.details.result.plan.status, "needs_changes");
+    const changedPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(changedPlan.review.objections, ["human"]);
+    const resolvedHumanReview = await loadObligationRecord(pluginConfig, board, reviewObligation.obligation_id);
+    assert.equal(resolvedHumanReview.status, "resolved");
+    assert.equal(resolvedHumanReview.resolution, "rejected");
+  });
+});
+
+
+test("Parley review routing can be cancelled by the plan owner", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    pluginConfig.parleyDefaultBoards.project.members[1].runtime_refs = [{ scheme: "openclaw", type: "agent", id: "project-reviewer" }];
+    const api = toolApi(pluginConfig);
+    const mutateTool = createMutateTool(api);
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const { planId } = await createGuidedPlan(mutateTool, {
+      planId: "plan_cancel_review_routing",
+      filename: "cancel-review-routing-plan.md",
+      participants: ["parley-agent", "human"]
+    });
+
+    const reviewResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "request_plan_review",
+      input: { planId, requiredReviewers: ["human"], reason: "Route to human review before cancellation." }
+    });
+    const reviewObligation = reviewResult.details.result.plan_lifecycle.obligations[0];
+    assert.equal(reviewObligation.agent, "human");
+
+    await assert.rejects(
+      () => mutateTool.execute(null, {
+        callerRuntimeRef: { scheme: "openclaw", type: "agent", id: "project-reviewer" },
+        boardId: "project",
+        action: "cancel_plan_review",
+        input: { planId, reason: "Non-owner cancellation attempt." }
+      }),
+      /plan owner required: parley-agent/
+    );
+
+    const cancelResult = await mutateTool.execute(null, {
+      callerRuntimeRef: AGENT_RUNTIME_REF,
+      boardId: "project",
+      action: "cancel_plan_review",
+      input: { planId, nextStatus: "needs_changes", reason: "Review request was routed incorrectly." }
+    });
+    assert.equal(cancelResult.details.result.plan.status, "needs_changes");
+    const cancelledPlan = await loadPlanSetupRecord(pluginConfig, board, planId);
+    assert.deepEqual(cancelledPlan.review.required_reviewers, []);
+    assert.equal(cancelResult.details.result.cancelled_obligations.length, 1);
+    assert.equal(cancelResult.details.result.cancelled_obligations[0].obligation_id, reviewObligation.obligation_id);
+    const cancelledReview = await loadObligationRecord(pluginConfig, board, reviewObligation.obligation_id);
+    assert.equal(cancelledReview.status, "cancelled");
+    assert.equal(cancelledReview.resolution, "cancelled");
+    assert.equal(cancelResult.details.result.plan_lifecycle.obligations.length, 1);
+    assert.equal(cancelResult.details.result.plan_lifecycle.obligations[0].agent, "parley-agent");
+    assert.equal(cancelResult.details.result.plan_lifecycle.obligations[0].managedBinding.role, "change_response");
+  });
+});
+
+
 test("Parley HITL phases require explicit recorded input before completion", async () => {
   await withPluginConfig(async (pluginConfig) => {
     const api = toolApi(pluginConfig);

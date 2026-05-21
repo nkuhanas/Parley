@@ -6,6 +6,7 @@
 - Add `parley doctor [--board <board>] [--repair]` to inspect or repair protected human board member entries in explicit configs.
 - Make board projections compact by default, with raw records gated by `includeRecords` and detailed derived state gated by `includeDerivedDetails` / `includeDetails`.
 - Add scoped plan reads for overview, phases, review status, and relationships through first-class tools and `parley_query` facade actions.
+- Add owner-only review-routing repair commands and owner-attested human review decisions for protected `human` reviewer obligations.
 
 ## 0.1.1
 
