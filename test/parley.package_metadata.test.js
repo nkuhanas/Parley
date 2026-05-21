@@ -48,6 +48,14 @@ test("package metadata advertises installable OpenClaw runtime entrypoints", asy
   assert.ok(Array.isArray(manifest.contracts?.tools));
   assert.ok(manifest.contracts.tools.includes("parley_my_boards"));
   assert.ok(manifest.contracts.tools.includes("parley_where_am_i"));
+  for (const toolName of [
+    "parley_get_plan_overview",
+    "parley_get_plan_phases",
+    "parley_get_plan_review_status",
+    "parley_get_plan_relationships"
+  ]) {
+    assert.ok(manifest.contracts.tools.includes(toolName), `${toolName} should be advertised in contracts.tools`);
+  }
 
   await assertFile("plugin.js");
   await assertFile("openclaw.plugin.json");
