@@ -27,6 +27,10 @@ const SERVICE_QUERY_TOOL_SPECS = Object.freeze({
   parley_validate_state: { query: "validateState", input: params => params ?? {}, result: data => boardResult({ tool: "parley_validate_state", identity: data.identity, validation: data.validation }) },
   parley_get_plan_setup_status: { query: "getPlanSetupStatus", input: params => params ?? {}, result: data => boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }) },
   parley_get_plan_status: { query: "getPlanStatus", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_get_plan_overview: { query: "getPlanOverview", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_get_plan_phases: { query: "getPlanPhases", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_get_plan_review_status: { query: "getPlanReviewStatus", input: params => params ?? {}, result: data => boardResult(data) },
+  parley_get_plan_relationships: { query: "getPlanRelationships", input: params => params ?? {}, result: data => boardResult(data) },
   parley_read_plan_projection: { query: "readPlanProjection", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_runtime_obligations: { query: "listRuntimeObligations", input: params => params ?? {}, result: data => boardResult(data) },
   parley_query_board_obligations: { query: "listBoardObligations", input: params => params ?? {}, result: data => boardResult(data) },
@@ -250,8 +254,9 @@ function compactBoardProjectionForFacade(projection) {
     omitted: ["agents", "approval_state", "activation_state", "checkpoint_state", "relationship_graph", "records"],
     records: null,
     recordsOmitted: projection.records != null,
-    detailedProjectionAvailableVia: "parley_board_projection",
-    recordExcerptsAvailableVia: "parley_board_projection"
+    detailedProjectionAvailableVia: "parley_board_projection({ includeDerivedDetails: true })",
+    scopedPlanReadsAvailableVia: ["parley_get_plan_overview", "parley_get_plan_phases", "parley_get_plan_review_status", "parley_get_plan_relationships"],
+    recordExcerptsAvailableVia: "parley_board_projection({ includeRecords: true })"
   };
 }
 
@@ -290,6 +295,18 @@ async function executeQueryFacade(api, params = {}) {
     delegatedDetails = boardResult({ tool: "parley_get_plan_setup_status", identity: data.identity, plan: data.plan, setupState: data.setupState }).details;
   } else if (params.action === "plan_status") {
     const data = await executeQuery(api, params, "getPlanStatus", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
+  } else if (params.action === "plan_overview") {
+    const data = await executeQuery(api, params, "getPlanOverview", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
+  } else if (params.action === "plan_phases") {
+    const data = await executeQuery(api, params, "getPlanPhases", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
+  } else if (params.action === "plan_review_status") {
+    const data = await executeQuery(api, params, "getPlanReviewStatus", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
+    delegatedDetails = boardResult(data).details;
+  } else if (params.action === "plan_relationships") {
+    const data = await executeQuery(api, params, "getPlanRelationships", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });
     delegatedDetails = boardResult(data).details;
   } else if (params.action === "read_plan_projection") {
     const data = await executeQuery(api, params, "readPlanProjection", { boardId: params?.boardId, ...normalizeFacadeInput(params?.input) });

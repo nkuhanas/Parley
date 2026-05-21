@@ -16,6 +16,8 @@ A global agent is the durable Parley-wide identity resolved from runtime binding
 
 A board agent is the identity used inside one board's records. One global agent can have different board-local identities on different boards.
 
+Parley reserves a protected board-local human member id, `human`, for portable human-gate and review flows. New Parley-created boards include it by default, and explicit configs can be inspected or repaired with the CLI doctor.
+
 ## Runtime protocol record
 
 A runtime protocol record belongs to Parley's communication/control-plane layer, not to board state.

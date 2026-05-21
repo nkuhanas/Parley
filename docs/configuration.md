@@ -133,13 +133,31 @@ parleyBoards: {
       }
     ],
     members: [
-      { agent_id: "my-agent", board_agent_id: "my-agent" }
+      { agent_id: "my-agent", board_agent_id: "my-agent" },
+      {
+        agent_id: "human",
+        board_agent_id: "human",
+        display_name: "Human",
+        kind: "human",
+        roles: ["human"],
+        runtime_refs: [],
+        permissions: { preset: "human_protected", protected: true }
+      }
     ]
   }
 }
 ```
 
 Use explicit `boardId` for every board-scoped operation. `default_board` helps callers choose a board after discovery, but Parley does not silently route board-scoped tools to it.
+
+Parley normalizes board configs with a protected human member using board/global id `human`. New boards created through Parley's default board helpers include this member automatically. Existing configs should not be mass-edited casually; inspect or repair a specific config/board explicitly:
+
+```sh
+parley --config ./parley.config.json doctor --board project
+parley --config ./parley.config.json doctor --board project --repair
+```
+
+`doctor --repair` requires a writable config file and creates or repairs only the protected `human` member entry for the selected board(s). It does not grant ordinary agent memberships or replace runtime identity bindings.
 
 ## Namespace safety
 

@@ -5,9 +5,12 @@ import path from "node:path";
 import test from "node:test";
 
 import { registerParleyTools } from "../src/adapters/openclaw/index.js";
+import { createParleyBoardConfig } from "../src/adapters/openclaw/config.js";
+import { doctorParleyBoardConfig } from "../src/core/config_doctor.js";
 import {
   resolveParleyRuntimeConfig,
   resolveParleyPaths,
+  resolveParleyBoardRegistry,
   PARLEY_RUNTIME_MODES
 } from "../src/core/config.js";
 import { ensureParleyRuntimeLayout } from "../src/core/storage/store.js";
@@ -34,6 +37,81 @@ async function withTempRoot(callback) {
 
 test("runtime mode enum includes standalone/service/client/test", () => {
   assert.deepEqual(PARLEY_RUNTIME_MODES, ["standalone", "service", "client", "test"]);
+});
+
+test("new Parley board config includes protected plain human member", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const board = createParleyBoardConfig({ parleyRoot: path.join(tempRoot, "parley") }, { repoRoot: path.join(tempRoot, "repo") });
+    const human = board.members.find((member) => member.board_agent_id === "human");
+
+    assert.ok(human);
+    assert.equal(human.agent_id, "human");
+    assert.equal(human.kind, "human");
+    assert.deepEqual(human.roles, ["human"]);
+    assert.deepEqual(human.runtime_refs, []);
+    assert.equal(human.permissions.protected, true);
+  });
+});
+
+test("board registry normalization appends protected human member to configured boards", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const registry = resolveParleyBoardRegistry({
+      parleyDefaultBoards: {
+        project: {
+          board_id: "project",
+          display_name: "Project",
+          status: "active",
+          board_root: path.join(tempRoot, "boards", "project"),
+          managed_artifact_root: path.join(tempRoot, "boards", "project", "artifacts"),
+          artifact_namespaces: [{
+            id: "project_plans",
+            roles: ["plan_landing", "reference"],
+            default_for: ["plan_landing"],
+            uri_prefix: "repo://plans/",
+            resolved_root: path.join(tempRoot, "repo", "plans"),
+            allowed_subpaths: []
+          }],
+          members: [{
+            agent_id: "project-agent",
+            board_agent_id: "project-agent",
+            display_name: "Project Agent",
+            kind: "agent",
+            runtime_refs: [{ scheme: "openclaw", type: "agent", id: "project-agent" }],
+            roles: ["implementation"],
+            permissions: { preset: "board_admin" }
+          }]
+        }
+      }
+    });
+
+    const board = registry.boards.project;
+    const human = board.agent_registry.find((member) => member.board_agent_id === "human");
+    assert.ok(human);
+    assert.equal(human.global_agent_id, "human");
+    assert.equal(human.kind, "human");
+    assert.equal(human.permissions.protected, true);
+    assert.equal(registry.agents.human.memberships.project.board_agent_id, "human");
+  });
+});
+
+test("config doctor inspection does not mutate missing member arrays", async () => {
+  const config = {
+    parleyDefaultBoards: {
+      project: {
+        board_id: "project",
+        board_root: "/tmp/project"
+      }
+    }
+  };
+
+  const inspect = doctorParleyBoardConfig(config, { boardId: "project" });
+  assert.equal(inspect.ok, false);
+  assert.equal(inspect.summary.missing, 1);
+  assert.equal(Object.hasOwn(config.parleyDefaultBoards.project, "members"), false);
+
+  const repair = doctorParleyBoardConfig(config, { boardId: "project", repair: true });
+  assert.equal(repair.ok, true);
+  assert.equal(config.parleyDefaultBoards.project.members[0].board_agent_id, "human");
 });
 
 test("explicit standalone mode resolves intentional local state", async () => {

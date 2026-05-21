@@ -137,7 +137,7 @@ Rules:
 - Queries should prefer projections/read models over raw storage records.
 - Pagination or cursor fields should be included for lists that can grow.
 - Bounded excerpts are acceptable; full artifacts require explicit artifact-read behavior.
-- Facade board reads (`parley_query(action="board")`) must remain compact: include only board metadata and scalar counts, omit raw `records`, and omit detailed derived state. Callers that need bounded record excerpts or detailed graph/approval/checkpoint state should use the first-class `parley_board_projection` query explicitly.
+- Facade board reads (`parley_query(action="board")`) must remain compact: include only board metadata and scalar counts, omit raw `records`, and omit detailed derived state. Callers that need bounded raw record excerpts should use `parley_board_projection({ includeRecords: true })`. Callers that need detailed derived graph/approval/checkpoint/nested-count state should use `parley_board_projection({ includeDerivedDetails: true })` or the compatibility alias `includeDetails: true`. For plan-specific overview, phase, review, or relationship data, prefer the scoped plan read tools before fetching broad board projections or full rendered plan projections.
 
 ## Plan Mutation Responses
 

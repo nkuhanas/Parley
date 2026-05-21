@@ -10,6 +10,8 @@ parley health
 parley describe
 parley my-boards --config ./parley.config.json
 parley where-am-i --config ./parley.config.json --board project
+parley --config ./parley.config.json doctor --board project
+parley --config ./parley.config.json doctor --board project --repair
 parley-codex --api-url http://127.0.0.1:7331 --auth-token-file /etc/parley/token --dry-run
 ```
 
@@ -50,6 +52,17 @@ The wrapper exports:
 - provenance variables: `PARLEY_SESSION_ID`, `PARLEY_WORKER_SURFACE`, `PARLEY_HOST_ID`, and `PARLEY_WORKSPACE`
 
 `parley-codex --dry-run` prints the sanitized launch environment without executing `codex`. To smoke the Parley CLI through the same environment, override the launched command, for example `parley-codex --command parley -- where-am-i`. The wrapper does not assign board authority by itself; the service board registry must contain the durable actor/runtime ref (for example `codex:agent:codex-agent`).
+
+## Config doctor
+
+`parley doctor` inspects explicit config for protected board defaults. It currently checks that selected board configs contain a protected human member with board/global id `human`.
+
+```sh
+parley --config ./parley.config.json doctor --board project
+parley --config ./parley.config.json doctor --board project --repair
+```
+
+`--repair` requires `--config` or `PARLEY_CONFIG` so Parley knows which JSON file to update. It creates or repairs only the protected `human` member entry; it does not register ordinary agents or runtime bindings.
 
 ## Service daemon
 

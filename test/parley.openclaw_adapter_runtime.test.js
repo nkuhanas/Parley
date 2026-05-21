@@ -37,6 +37,10 @@ const OPENCLAW_TOOL_NAMES = [
   "parley_add_plan_checkpoint",
   "parley_get_plan_setup_status",
   "parley_get_plan_status",
+  "parley_get_plan_overview",
+  "parley_get_plan_phases",
+  "parley_get_plan_review_status",
+  "parley_get_plan_relationships",
   "parley_read_plan_projection",
   "parley_request_plan_review",
   "parley_mark_plan_ready",
@@ -275,8 +279,9 @@ test("OpenClaw adapter client mode compacts parley_query board records", async (
     assert.equal(result.details.result.projection.records, null);
     assert.equal(result.details.result.projection.recordsOmitted, true);
     assert.equal(result.details.result.projection.approval_state, undefined);
-    assert.equal(result.details.result.projection.detailedProjectionAvailableVia, "parley_board_projection");
-    assert.equal(result.details.result.projection.recordExcerptsAvailableVia, "parley_board_projection");
+    assert.equal(result.details.result.projection.detailedProjectionAvailableVia, "parley_board_projection({ includeDerivedDetails: true })");
+    assert.deepEqual(result.details.result.projection.scopedPlanReadsAvailableVia, ["parley_get_plan_overview", "parley_get_plan_phases", "parley_get_plan_review_status", "parley_get_plan_relationships"]);
+    assert.equal(result.details.result.projection.recordExcerptsAvailableVia, "parley_board_projection({ includeRecords: true })");
   });
 });
 

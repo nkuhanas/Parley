@@ -28,7 +28,18 @@
           "resolved_root": "~/projects/example/project-plans"
         }
       ],
-      "members": [{ "agent_id": "my-agent", "board_agent_id": "my-agent" }]
+      "members": [
+        { "agent_id": "my-agent", "board_agent_id": "my-agent" },
+        {
+          "agent_id": "human",
+          "board_agent_id": "human",
+          "display_name": "Human",
+          "kind": "human",
+          "roles": ["human"],
+          "runtime_refs": [],
+          "permissions": { "preset": "human_protected", "protected": true }
+        }
+      ]
     },
     "research": {
       "board_id": "research",
@@ -42,7 +53,18 @@
           "resolved_root": "~/projects/example/research"
         }
       ],
-      "members": [{ "agent_id": "my-agent", "board_agent_id": "my-agent" }]
+      "members": [
+        { "agent_id": "my-agent", "board_agent_id": "my-agent" },
+        {
+          "agent_id": "human",
+          "board_agent_id": "human",
+          "display_name": "Human",
+          "kind": "human",
+          "roles": ["human"],
+          "runtime_refs": [],
+          "permissions": { "preset": "human_protected", "protected": true }
+        }
+      ]
     }
   }
 }

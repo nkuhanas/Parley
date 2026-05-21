@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveParleyRuntimeConfig } from "../core/config.js";
+import { doctorParleyBoardConfig } from "../core/config_doctor.js";
 import {
   PARLEY_CREDENTIAL_ENV_KEYS,
   PARLEY_CREDENTIAL_FILE_ENV_KEYS,
@@ -17,7 +18,7 @@ import {
 import { migrateParleySqliteLedger } from "../core/storage/sqlite_ledger.js";
 import { createParleyEmbeddedClient, createParleyRemoteClient } from "../client/index.js";
 
-const COMMANDS = new Set(["mode", "migrate", "health", "describe", "my-boards", "where-am-i"]);
+const COMMANDS = new Set(["mode", "migrate", "doctor", "health", "describe", "my-boards", "where-am-i"]);
 
 function expandHome(value) {
   if (typeof value !== "string") return value;
@@ -36,6 +37,8 @@ function usage() {
 Commands:
   mode                         Show resolved runtime mode/config summary.
   migrate                      Run idempotent service-mode SQLite ledger migrations.
+  doctor [--board <board>] [--repair]
+                               Inspect protected board defaults; --repair writes missing/invalid human member entries to --config.
   health                       Check remote service or embedded client health.
   describe [--topic <topic>] [--board <board>]
   my-boards                    List boards visible to the caller.
@@ -58,6 +61,10 @@ function parseArgs(argv) {
       options.includeTerminal = true;
       continue;
     }
+    if (arg === "--repair") {
+      options.repair = true;
+      continue;
+    }
     if (!arg.startsWith("--")) {
       options._.push(arg);
       continue;
@@ -73,9 +80,13 @@ function parseArgs(argv) {
   return options;
 }
 
+function resolveConfigPath(configPath) {
+  return configPath == null ? null : path.resolve(expandHome(configPath));
+}
+
 async function loadJsonConfig(configPath) {
-  if (configPath == null) return {};
-  const resolved = path.resolve(expandHome(configPath));
+  const resolved = resolveConfigPath(configPath);
+  if (resolved == null) return {};
   const content = await fs.readFile(resolved, "utf8");
   const parsed = JSON.parse(content);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -261,6 +272,29 @@ export async function runParleyCli(argv = process.argv.slice(2), io = {}) {
     const migration = await migrateParleySqliteLedger(pluginConfig, { surface: "cli", env });
     printJson({ ok: true, command, runtime: runtimeSummary(runtimeConfig), migration }, stdout);
     return 0;
+  }
+
+  if (command === "doctor") {
+    const repair = options.repair === true;
+    const resolvedConfigPath = resolveConfigPath(configPath);
+    if (repair && resolvedConfigPath == null) {
+      throw new Error("doctor --repair requires --config or PARLEY_CONFIG so Parley knows which config file to update");
+    }
+    const doctor = doctorParleyBoardConfig(resolvedConfigPath == null ? pluginConfig : fileConfig, {
+      boardId: nonEmptyString(options.board),
+      repair
+    });
+    if (repair && doctor.repaired) {
+      await fs.writeFile(resolvedConfigPath, `${JSON.stringify(fileConfig, null, 2)}\n`, "utf8");
+    }
+    printJson({
+      ok: doctor.ok,
+      command,
+      runtime: runtimeSummary(runtimeConfig),
+      configPath: resolvedConfigPath,
+      doctor
+    }, stdout);
+    return doctor.ok ? 0 : 1;
   }
 
   const client = createClientForRuntime(runtimeConfig, pluginConfig, { env, fetchImpl: io.fetchImpl });

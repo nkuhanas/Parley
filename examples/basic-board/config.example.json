@@ -34,7 +34,16 @@
         }
       ],
       "members": [
-        { "agent_id": "my-agent", "board_agent_id": "my-agent", "roles": ["implementation"] }
+        { "agent_id": "my-agent", "board_agent_id": "my-agent", "roles": ["implementation"] },
+        {
+          "agent_id": "human",
+          "board_agent_id": "human",
+          "display_name": "Human",
+          "kind": "human",
+          "roles": ["human"],
+          "runtime_refs": [],
+          "permissions": { "preset": "human_protected", "protected": true }
+        }
       ]
     }
   }

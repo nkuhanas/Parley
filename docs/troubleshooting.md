@@ -34,6 +34,24 @@ Call `parley_describe({ topic: "recovery" })`, then `parley_where_am_i({})` or `
 
 For invalid facade actions, filters, or targetKinds, validation errors include `validValues` plus a hint to call `parley_describe` with the relevant topic. Prefer first-class tools for normal agent work; use `parley_query` or `parley_mutate` only when a single-dispatch compatibility surface is needed.
 
+## Protected human member missing or invalid
+
+Parley boards should include a protected human member with board/global id `human`. New boards created through Parley's default board helpers include it automatically, but older persisted configs may be missing it or may have an incomplete entry.
+
+Inspect an explicit config first:
+
+```sh
+parley --config ./parley.config.json doctor --board project
+```
+
+Repair only when you intentionally want to update that config file:
+
+```sh
+parley --config ./parley.config.json doctor --board project --repair
+```
+
+`doctor --repair` does not register every human everywhere and does not grant ordinary agent authority; it only creates or repairs the protected `human` board member entry for the selected board(s).
+
 ## Artifact path rejected
 
 Check the board's `artifact_namespaces`, `resolved_root`, and `allowed_subpaths`. Parley rejects paths outside configured namespace boundaries.

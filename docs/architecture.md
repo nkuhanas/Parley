@@ -55,5 +55,6 @@ These specs define Parley's application-service boundary while keeping OpenClaw 
 - `default_board` is returned as a selection hint and is not silently applied.
 - Tool actions are bounded; unsupported actions fail closed.
 - First-class tools are the preferred agent-facing affordance; `parley_query` and `parley_mutate` remain advanced compatibility facades.
+- Plan-specific reads should use scoped query/tool surfaces before broad board projections or full rendered plan projections.
 - Tool outputs should be operational and actionable without becoming verbose; diagnostics are opt-in when they expose provenance or runtime identity details.
 - Consuming projects own their domain-specific board defaults and execution policy.

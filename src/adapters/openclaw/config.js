@@ -1,6 +1,8 @@
 import os from "node:os";
 import path from "node:path";
 
+import { createProtectedHumanBoardMember } from "../../core/board/human_member.js";
+
 const DEFAULT_PARLEY_ROOT = path.join(os.homedir(), ".local", "share", "parley");
 const DEFAULT_PARLEY_REPO_ROOT = path.join(os.homedir(), "workspace", "Parley");
 
@@ -89,7 +91,8 @@ export function createParleyBoardConfig(pluginConfig = {}, options = {}) {
         kind: "agent",
         roles: ["maintainer", "implementation"],
         permissions: { preset: "board_admin" }
-      }
+      },
+      createProtectedHumanBoardMember()
     ]
   };
 }

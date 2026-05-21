@@ -119,7 +119,7 @@ Phase 2 should implement current-tool-aligned service query names first. Dashboa
 
 | Service query | Current tool | Notes |
 | --- | --- | --- |
-| `getBoardProjection` | `parley_board_projection` | Minimal board-scoped projection. Implement now. |
+| `getBoardProjection` | `parley_board_projection` | Compact board-scoped projection; raw records and detailed derived state are opt-in. Implement now. |
 | `checkpointProjection` | `parley_checkpoint_projection` | Inspect/advance projection checkpoint. Implement now. |
 | `listRuntimeObligations` | `parley_query_runtime_obligations` | Runtime obligations; no board id. Implement now. |
 | `listBoardObligations` | `parley_query_board_obligations` | Board-local obligations with target-kind filters. Implement now. |
@@ -128,6 +128,10 @@ Phase 2 should implement current-tool-aligned service query names first. Dashboa
 | `validateState` | `parley_validate_state` | Validate board records/references/derived state. |
 | `getPlanSetupStatus` | `parley_get_plan_setup_status` | Plan setup completeness and setup guidance. |
 | `getPlanStatus` | `parley_get_plan_status` / `parley_query(action="plan_status")` | Compact lifecycle position, current phase, HITL readiness, and next lifecycle action. |
+| `getPlanOverview` | `parley_get_plan_overview` / `parley_query(action="plan_overview")` | Overview band and compact plan metadata for a tracked plan. |
+| `getPlanPhases` | `parley_get_plan_phases` / `parley_query(action="plan_phases")` | Full phase definitions and phase counts for a tracked plan. |
+| `getPlanReviewStatus` | `parley_get_plan_review_status` / `parley_query(action="plan_review_status")` | Required reviewers, pending/invalid reviewers, approvals, objections, and lifecycle review obligations. |
+| `getPlanRelationships` | `parley_get_plan_relationships` / `parley_query(action="plan_relationships")` | Declared and board-recorded relationships touching a tracked plan. |
 | `readPlanProjection` | `parley_read_plan_projection` / `parley_query(action="read_plan_projection")` | Service-rendered tracked plan Markdown projection for recovery/cache misses. |
 
 ### Artifact read queries
@@ -164,7 +168,7 @@ Key rules:
 
 - mutation responses include `code` and `message` when blocked or errored
 - plan mutations normally stay compact, but plan-projection mutations may include a bounded service/client transport `projection` payload (`uri`, `mediaType`, `contentDigest`, optional `body`, and diagnostic `serviceLocalPath`) so adapters can materialize local non-authoritative mirrors without a second round trip; tool-facing output must omit the projection body after any materialization
-- `parley_query(action="board")` must return only compact board metadata and scalar counts; it must omit raw `records` and detailed derived state even when record excerpts were requested; use `parley_board_projection(includeRecords=true)` for explicit bounded record inspection
+- `parley_query(action="board")` must return only compact board metadata and scalar counts; it must omit raw `records` and detailed derived state even when record excerpts were requested; use `parley_board_projection({ includeRecords: true })` for explicit bounded record inspection and `parley_board_projection({ includeDerivedDetails: true })` for detailed derived graph/approval/checkpoint/count state
 - artifact body access for arbitrary artifacts still requires explicit artifact-read query or `include_body: true`
 - top-level artifact fields are primary artifact fields
 - multi-artifact responses may add a plural `artifacts` array later when a concrete command needs it
@@ -174,7 +178,7 @@ Key rules:
 1. Keep current behavior unchanged and add service-contract tests/fixtures around commands and query response shapes.
 2. Add an embedded application service shell plus response/context utilities.
 3. Implement current-tool-aligned read/query service functions first: `describe`, `myBoards`, `whereAmI`, `getBoardProjection`, `listRuntimeObligations`, `listBoardObligations`, and `getPlanSetupStatus`.
-4. Add explicit artifact/plan reads and compact lifecycle status reads: `readArtifact`, `readArtifactByRef`, `readPlanArtifact`, and `getPlanStatus`.
+4. Add explicit artifact/plan reads plus compact/scoped plan reads: `readArtifact`, `readArtifactByRef`, `readPlanArtifact`, `getPlanStatus`, `getPlanOverview`, `getPlanPhases`, `getPlanReviewStatus`, and `getPlanRelationships`.
 5. Migrate plan mutations, then general board mutations, then runtime protocol commands, with HITL phase completion gated by explicit recorded input and ordinary phase completion returning advisory criteria/evidence review plus required human-notification guidance.
 6. Move first-class OpenClaw tools onto service commands/queries while preserving tool names.
 7. Keep `parley_query`/`parley_mutate` as advanced facades over the same service calls.

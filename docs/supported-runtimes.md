@@ -74,7 +74,7 @@ Session aliases are provenance and recovery hints. They should not be the only d
 
 ## Board contract
 
-Board-scoped operations should pass an explicit `boardId` even when a default board is configured.
+Board-scoped operations should pass an explicit `boardId` even when a default board is configured. Boards also carry a protected human member with board/global id `human`; this gives human-gate/review flows a portable board-local target without turning every agent or runtime into that human actor.
 
 A typical recovery sequence is:
 

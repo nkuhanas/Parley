@@ -2,6 +2,7 @@ import { createBoardProjectionTool } from "./board_projection.js";
 import { createValidatePlanAction } from "./validate_plan.js";
 import { createGetPlanSetupStatusAction } from "./get_plan_setup_status.js";
 import { createGetPlanStatusAction } from "./get_plan_status.js";
+import { createGetPlanOverviewAction, createGetPlanPhasesAction, createGetPlanRelationshipsAction, createGetPlanReviewStatusAction } from "./get_plan_scoped.js";
 import { createReadPlanProjectionAction } from "./read_plan_projection.js";
 import { createValidateStateAction } from "./validate_state.js";
 import { createWhereAmITool } from "./where_am_i.js";
@@ -61,8 +62,9 @@ function compactBoardProjectionForFacade(projection) {
     omitted: ["agents", "approval_state", "activation_state", "checkpoint_state", "relationship_graph", "records"],
     records: null,
     recordsOmitted: projection.records != null,
-    detailedProjectionAvailableVia: "parley_board_projection",
-    recordExcerptsAvailableVia: "parley_board_projection"
+    detailedProjectionAvailableVia: "parley_board_projection({ includeDerivedDetails: true })",
+    scopedPlanReadsAvailableVia: ["parley_get_plan_overview", "parley_get_plan_phases", "parley_get_plan_review_status", "parley_get_plan_relationships"],
+    recordExcerptsAvailableVia: "parley_board_projection({ includeRecords: true })"
   };
 }
 
@@ -86,12 +88,12 @@ export function createQueryTool(api) {
       properties: {
         callerRuntimeRef: callerRuntimeRefParameter(),
         boardId: { type: "string", description: "Required for board-scoped actions. Omit for my_boards, runtime_obligations, and runtime-only where_am_i." },
-        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, plan_setup_status, plan_status, read_plan_projection, validate_state, runtime_obligations, board_obligations, search." },
+        action: { type: "string", description: "Read action. Supported now: where_am_i, my_boards, board, validate_plan, plan_setup_status, plan_status, plan_overview, plan_phases, plan_review_status, plan_relationships, read_plan_projection, validate_state, runtime_obligations, board_obligations, search." },
         includeTerminal: { type: "boolean", description: "where_am_i board section only: include resolved/cancelled/superseded obligations. Defaults to false." },
         verbosity: { type: "string", description: "where_am_i only: compact or full. Defaults to compact." },
         includeRecords: { type: "boolean", description: "board only: include bounded record excerpts. Defaults to false; records are opt-in to preserve context." },
         recordLimit: { type: "number", description: "board only: maximum records per collection when includeRecords is true. Defaults to 50; 0 returns counts only." },
-        input: { type: "object", description: "Action-specific input. Used by validate_plan, runtime_obligations, board_obligations, and search.", additionalProperties: true }
+        input: { type: "object", description: "Action-specific input. Used by validate_plan, plan_* reads, read_plan_projection, runtime_obligations, board_obligations, and search.", additionalProperties: true }
       }
     },
     async execute(toolCallId, params) {
@@ -131,6 +133,38 @@ export function createQueryTool(api) {
         delegated = await delegatedTool.execute(toolCallId, delegatedParams);
       } else if (params.action === "plan_status") {
         const delegatedTool = createGetPlanStatusAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "plan_overview") {
+        const delegatedTool = createGetPlanOverviewAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "plan_phases") {
+        const delegatedTool = createGetPlanPhasesAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "plan_review_status") {
+        const delegatedTool = createGetPlanReviewStatusAction(api);
+        const delegatedParams = {
+          ...shared,
+          ...normalizeInput(params?.input)
+        };
+        assertDelegatedParams(delegatedTool, delegatedParams);
+        delegated = await delegatedTool.execute(toolCallId, delegatedParams);
+      } else if (params.action === "plan_relationships") {
+        const delegatedTool = createGetPlanRelationshipsAction(api);
         const delegatedParams = {
           ...shared,
           ...normalizeInput(params?.input)

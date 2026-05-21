@@ -10,8 +10,12 @@ export {
   resolveParleyRuntimeConfig,
   resolveParleyConfig,
   resolveParleyPaths,
-  resolveParleyBoardRegistry
+  resolveParleyBoardRegistry,
+  defaultHumanBoardMember,
+  PARLEY_DEFAULT_HUMAN_MEMBER_ID
 } from "./core/config.js";
+export { doctorParleyBoardConfig } from "./core/config_doctor.js";
+export { DEFAULT_HUMAN_BOARD_AGENT_ID, createProtectedHumanBoardMember, isDefaultHumanMember, isProtectedHumanBoardMember } from "./core/board/human_member.js";
 export {
   resolveCallerIdentity,
   requireBoardAgent,
@@ -45,6 +49,7 @@ export { createRecordRelationshipTool } from "./adapters/openclaw/tools/record_r
 export { createRemoveRelationshipTool } from "./adapters/openclaw/tools/remove_relationship.js";
 export { createCheckpointProjectionTool } from "./adapters/openclaw/tools/checkpoint_projection.js";
 export { createValidateStateAction } from "./adapters/openclaw/tools/validate_state.js";
+export { createGetPlanOverviewAction, createGetPlanPhasesAction, createGetPlanReviewStatusAction, createGetPlanRelationshipsAction } from "./adapters/openclaw/tools/get_plan_scoped.js";
 export { createQueryTool } from "./adapters/openclaw/tools/query.js";
 export { createMutateTool } from "./adapters/openclaw/tools/mutate.js";
 export * from "./adapters/proxmox/index.js";

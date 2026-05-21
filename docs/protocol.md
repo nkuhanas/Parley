@@ -75,6 +75,10 @@ Use `parley_query_board_obligations({ boardId, filter: "needs_my_action", target
 
 Use `parley_query_search({ boardId, query, namespaces })` to search board-registered reference namespaces. Search is artifact/reference/content-oriented and does not return runtime threads or messages. Future runtime thread discovery should use an explicit runtime query action.
 
+Use scoped plan reads for plan-specific recovery before broad projections: `parley_get_plan_overview`, `parley_get_plan_phases`, `parley_get_plan_review_status`, and `parley_get_plan_relationships`. The compatibility facade exposes the same reads as `plan_overview`, `plan_phases`, `plan_review_status`, and `plan_relationships` actions.
+
+`parley_board_projection` is compact by default. Pass `includeRecords: true` only when bounded raw records are needed, and `includeDerivedDetails: true` only when detailed derived graph, approval, checkpoint, or nested count state is needed.
+
 `parley_query` and `parley_mutate` are advanced compatibility facades over first-class read/write tools. Prefer first-class tools in agent-facing workflows because the tool name should match the caller's operational intent.
 
 ## Obligation priority

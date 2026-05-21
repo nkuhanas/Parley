@@ -504,8 +504,8 @@ test("Parley v2 first-class schemas route raw target/payload through constructor
     assert.equal(effectTool.parameters.properties.target.type, "object");
     assert.equal(effectTool.parameters.properties.payload.type, "object");
     assert.equal(obligationTool.parameters.properties.target.type, "object");
-    assert.match(projectionTool.description, /read-only minimal projection/i);
-    assert.deepEqual(Object.keys(projectionTool.parameters.properties).sort(), ["boardId", "callerRuntimeRef", "includeRecords", "recordLimit"]);
+    assert.match(projectionTool.description, /compact read-only board projection/i);
+    assert.deepEqual(Object.keys(projectionTool.parameters.properties).sort(), ["boardId", "callerRuntimeRef", "includeDerivedDetails", "includeRecords", "recordLimit"]);
     assert.match(relationshipTool.description, /relationship record/);
     assert.deepEqual(relationshipTool.parameters.required, ["boardId", "type", "from", "to"]);
     assert.match(removeRelationshipTool.description, /Logically remove/);
@@ -1591,7 +1591,8 @@ test("Parley human checkpoint phases create shepherd obligations", async () => {
 
     const boardResultValue = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project"
+      boardId: "project",
+      includeDerivedDetails: true
     });
     const checkpointState = boardResultValue.details.projection.checkpoint_state;
     assert.equal(boardResultValue.details.projection.counts.human_checkpoints, 1);
@@ -1647,7 +1648,8 @@ test("Parley deferred human approval gate phases do not create notify obligation
 
     const boardResultValue = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project"
+      boardId: "project",
+      includeDerivedDetails: true
     });
     assert.equal(boardResultValue.details.projection.counts.human_checkpoints, 1);
     assert.equal(boardResultValue.details.projection.counts.active_human_checkpoint_obligations, 0);
@@ -1977,7 +1979,8 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
 
     const boardBefore = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project"
+      boardId: "project",
+      includeDerivedDetails: true
     });
     assert.equal(boardBefore.details.projection.counts.deferred_phases, 1);
     assert.equal(boardBefore.details.projection.counts.activation_candidates, 0);
@@ -2020,7 +2023,8 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
 
     const boardAfterProposal = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project"
+      boardId: "project",
+      includeDerivedDetails: true
     });
     const [candidate] = boardAfterProposal.details.projection.activation_state.activation_candidates;
     assert.equal(boardAfterProposal.details.projection.counts.activation_candidates, 1);
@@ -2057,7 +2061,8 @@ test("Parley activation state surfaces deferred phases and non-executing proposa
 
     const boardAfterDismissal = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
-      boardId: "project"
+      boardId: "project",
+      includeDerivedDetails: true
     });
     assert.equal(boardAfterDismissal.details.projection.activation_state.activation_candidates[0].status, "dismissed");
 
@@ -2131,7 +2136,7 @@ test("Parley projection checkpoints compare and advance board-agent cursors", as
     });
     assert.equal(changedInspect.details.comparison.changed, true);
     assert.deepEqual(changedInspect.details.comparison.count_deltas.artifacts, { before: 0, after: 1, delta: 1 });
-    assert.deepEqual(changedInspect.details.comparison.count_deltas["artifacts_by_kind.plan"], { before: 0, after: 1, delta: 1 });
+    assert.equal(changedInspect.details.comparison.count_deltas["artifacts_by_kind.plan"], undefined);
 
     const whereAdvance = await checkpointTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
@@ -2234,11 +2239,11 @@ test("Parley v2 tools write artifact, object, effect, obligation and where_am_i 
     assert.equal(whereResult.details.projection.blocking_obligations[0].object.object_id, "object_demo");
     assert.equal(whereResult.details.projection.blocking_obligations[0].artifact.artifact_id, "artifact_demo");
 
-    const boardProjectionResult = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true });
+    const boardProjectionResult = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true, includeDerivedDetails: true });
     const projection = boardProjectionResult.details.projection;
     assert.equal(projection.projection_type, "minimal_board");
     assert.equal(projection.derived, true);
-    assert.equal(projection.counts.agents, 2);
+    assert.equal(projection.counts.agents, 3);
     assert.equal(projection.counts.artifacts, 1);
     assert.equal(projection.counts.objects, 1);
     assert.equal(projection.counts.effects, 1);
@@ -2304,7 +2309,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(relationshipResult.details.relationship.relationship_id, "relationship_graph_review_depends");
     assert.equal(relationshipResult.details.effect.type, "relationship_added");
 
-    const projection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true })).details.projection;
+    const projection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true, includeDerivedDetails: true })).details.projection;
     assert.equal(projection.counts.relationships, 1);
     assert.equal(projection.counts.relationship_edges, 1);
     assert.equal(projection.counts.relationship_nodes, 2);
@@ -2326,7 +2331,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(removalResult.details.effect.type, "relationship_removed");
     assert.equal(removalResult.details.effect.payload.removal_mode, "inactive_in_projection");
 
-    const removedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true })).details.projection;
+    const removedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true, includeDerivedDetails: true })).details.projection;
     assert.equal(removedProjection.counts.relationships, 1);
     assert.equal(removedProjection.counts.relationship_edges, 0);
     assert.equal(removedProjection.counts.relationship_nodes, 0);
@@ -2349,7 +2354,7 @@ test("Parley v2 relationship records feed the board relationship graph", async (
     assert.equal(correctedRelationshipResult.details.relationship.correction_of, "relationship_graph_review_depends");
     assert.equal(correctedRelationshipResult.details.effect.payload.correction_of, "relationship_graph_review_depends");
 
-    const correctedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true })).details.projection;
+    const correctedProjection = (await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: true, includeDerivedDetails: true })).details.projection;
     assert.equal(correctedProjection.counts.relationships, 2);
     assert.equal(correctedProjection.counts.relationship_edges, 1);
     assert.equal(correctedProjection.counts.relationship_nodes, 2);
@@ -2416,7 +2421,7 @@ test("Parley v2 scoped approvals become stale across artifact versions unless ca
       title: "Reviewed Plan v2"
     });
 
-    const staleProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: false });
+    const staleProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: false, includeDerivedDetails: true });
     assert.equal(staleProjection.details.projection.counts.approvals, 1);
     assert.equal(staleProjection.details.projection.counts.stale_approvals, 1);
     assert.equal(staleProjection.details.projection.approval_state.approvals[0].status, "stale");
@@ -2435,7 +2440,7 @@ test("Parley v2 scoped approvals become stale across artifact versions unless ca
       payload: { carry_forward_from_version: 1, note: "carry v1 review forward" }
     });
 
-    const carriedProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: false });
+    const carriedProjection = await boardProjectionTool.execute(null, { callerRuntimeRef: AGENT_RUNTIME_REF, boardId: "project", includeRecords: false, includeDerivedDetails: true });
     assert.equal(carriedProjection.details.projection.counts.approvals, 2);
     assert.equal(carriedProjection.details.projection.counts.stale_approvals, 0);
     assert.equal(carriedProjection.details.projection.counts.carried_forward_approvals, 1);
@@ -2755,20 +2760,23 @@ test("Parley effect-derived projections use deterministic created_at plus effect
     assert.equal(queryResult.details.result.projection.recordsOmitted, true);
     assert.equal(queryResult.details.result.projection.approval_state, undefined);
     assert.equal(queryResult.details.result.projection.relationship_graph, undefined);
-    assert.equal(queryResult.details.result.projection.detailedProjectionAvailableVia, "parley_board_projection");
-    assert.equal(queryResult.details.result.projection.recordExcerptsAvailableVia, "parley_board_projection");
+    assert.equal(queryResult.details.result.projection.detailedProjectionAvailableVia, "parley_board_projection({ includeDerivedDetails: true })");
+    assert.deepEqual(queryResult.details.result.projection.scopedPlanReadsAvailableVia, ["parley_get_plan_overview", "parley_get_plan_phases", "parley_get_plan_review_status", "parley_get_plan_relationships"]);
+    assert.equal(queryResult.details.result.projection.recordExcerptsAvailableVia, "parley_board_projection({ includeRecords: true })");
 
     const first = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
       includeRecords: true,
-      recordLimit: 10
+      recordLimit: 10,
+      includeDerivedDetails: true
     });
     const second = await boardProjectionTool.execute(null, {
       callerRuntimeRef: AGENT_RUNTIME_REF,
       boardId: "project",
       includeRecords: true,
-      recordLimit: 10
+      recordLimit: 10,
+      includeDerivedDetails: true
     });
 
     const effectIds = first.details.projection.records.effects.map((effect) => effect.effect_id);

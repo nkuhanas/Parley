@@ -60,9 +60,35 @@ function summarizeAgents(board) {
   }));
 }
 
+function compactCounts(counts) {
+  return Object.fromEntries(Object.entries(counts).filter(([, value]) => typeof value !== "object" || value == null));
+}
+
+function recordsPayload({ includeRecords, recordLimit, artifacts, objects, effects, obligations, relationships, plans }) {
+  if (!includeRecords) return null;
+  return {
+    limit: recordLimit,
+    truncated: {
+      artifacts: artifacts.length > recordLimit,
+      objects: objects.length > recordLimit,
+      effects: effects.length > recordLimit,
+      obligations: obligations.length > recordLimit,
+      relationships: relationships.length > recordLimit,
+      plans: plans.length > recordLimit
+    },
+    artifacts: limitRecords(artifacts, recordLimit),
+    objects: limitRecords(objects, recordLimit),
+    effects: limitRecords(effects, recordLimit),
+    obligations: limitRecords(obligations, recordLimit),
+    relationships: limitRecords(relationships, recordLimit),
+    plans: limitRecords(plans, recordLimit)
+  };
+}
+
 export async function buildBoardProjection(pluginConfig, board, options = {}) {
   const recordLimit = normalizeRecordLimit(options.recordLimit);
   const includeRecords = options.includeRecords === true;
+  const includeDerivedDetails = options.includeDerivedDetails === true || options.includeDetails === true;
   const [artifacts, objects, effects, obligations, relationships, plans] = await Promise.all([
     listArtifactRecords(pluginConfig, board),
     listCoordinationObjectRecords(pluginConfig, board),
@@ -76,74 +102,74 @@ export async function buildBoardProjection(pluginConfig, board, options = {}) {
   const activation_state = await deriveActivationState(board, artifacts, effects, plans);
   const checkpoint_state = await deriveCheckpointState(board, artifacts, obligations, plans);
 
-  return {
+  const fullCounts = {
+    agents: board.agent_registry.length,
+    artifacts: artifacts.length,
+    objects: objects.length,
+    effects: effects.length,
+    obligations: obligations.length,
+    relationships: relationships.length,
+    plans: plans.length,
+    plan_setup_complete: plans.filter((plan) => plan.overview != null && plan.phases.length > 0).length,
+    plan_setup_incomplete: plans.filter((plan) => plan.overview == null || plan.phases.length === 0).length,
+    relationship_nodes: relationship_graph.counts.nodes,
+    relationship_edges: relationship_graph.counts.edges,
+    approvals: approval_state.counts.approvals,
+    deferred_phases: activation_state.counts.deferred_phases,
+    activation_candidates: activation_state.counts.activation_candidates,
+    human_checkpoints: checkpoint_state.counts.human_checkpoints,
+    active_human_checkpoint_obligations: checkpoint_state.counts.active_human_checkpoint_obligations,
+    stale_approvals: approval_state.counts.by_status.stale ?? 0,
+    active_approvals: approval_state.counts.by_status.active ?? 0,
+    carried_forward_approvals: approval_state.counts.by_status.carried_forward ?? 0,
+    withdrawn_approvals: approval_state.counts.by_status.withdrawn ?? 0,
+    artifacts_by_kind: countBy(artifacts, "kind"),
+    artifacts_by_status: countBy(artifacts, "status"),
+    objects_by_kind: countBy(objects, "kind"),
+    objects_by_status: countBy(objects, "status"),
+    effects_by_type: countBy(effects, "type"),
+    obligations_by_type: countBy(obligations, "type"),
+    obligations_by_status: countBy(obligations, "status"),
+    obligations_by_agent: countObligationsByAgent(obligations),
+    relationships_by_type: relationship_graph.counts.by_type,
+    relationships_by_status: relationship_graph.counts.by_status,
+    approvals_by_status: approval_state.counts.by_status,
+    approvals_by_scope: approval_state.counts.by_scope,
+    approvals_by_approver: approval_state.counts.by_approver,
+    activation_candidates_by_status: activation_state.counts.candidates_by_status,
+    deferred_phases_by_status: activation_state.counts.by_status,
+    human_checkpoints_by_status: checkpoint_state.counts.by_status,
+    human_checkpoints_by_shepherd: checkpoint_state.counts.by_shepherd
+  };
+  const projection = {
     board_id: board.board_id,
     display_name: board.display_name,
     status: board.status,
     projection_type: "minimal_board",
     derived: true,
+    details_included: includeDerivedDetails,
+    records_included: includeRecords,
+    agent_count: board.agent_registry.length,
+    counts: includeDerivedDetails ? fullCounts : compactCounts(fullCounts),
+    omitted: includeDerivedDetails
+      ? []
+      : ["agents", "approval_state", "activation_state", "checkpoint_state", "relationship_graph", "nested_count_breakdowns"],
+    detailedProjectionAvailableVia: "parley_board_projection({ includeDerivedDetails: true })",
+    scopedPlanReadsAvailableVia: [
+      "parley_get_plan_overview",
+      "parley_get_plan_phases",
+      "parley_get_plan_review_status",
+      "parley_get_plan_relationships"
+    ],
+    records: recordsPayload({ includeRecords, recordLimit, artifacts, objects, effects, obligations, relationships, plans })
+  };
+  if (!includeDerivedDetails) return projection;
+  return {
+    ...projection,
     agents: summarizeAgents(board),
-    counts: {
-      agents: board.agent_registry.length,
-      artifacts: artifacts.length,
-      objects: objects.length,
-      effects: effects.length,
-      obligations: obligations.length,
-      relationships: relationships.length,
-      plans: plans.length,
-      plan_setup_complete: plans.filter((plan) => plan.overview != null && plan.phases.length > 0).length,
-      plan_setup_incomplete: plans.filter((plan) => plan.overview == null || plan.phases.length === 0).length,
-      relationship_nodes: relationship_graph.counts.nodes,
-      relationship_edges: relationship_graph.counts.edges,
-      approvals: approval_state.counts.approvals,
-      deferred_phases: activation_state.counts.deferred_phases,
-      activation_candidates: activation_state.counts.activation_candidates,
-      human_checkpoints: checkpoint_state.counts.human_checkpoints,
-      active_human_checkpoint_obligations: checkpoint_state.counts.active_human_checkpoint_obligations,
-      stale_approvals: approval_state.counts.by_status.stale ?? 0,
-      active_approvals: approval_state.counts.by_status.active ?? 0,
-      carried_forward_approvals: approval_state.counts.by_status.carried_forward ?? 0,
-      withdrawn_approvals: approval_state.counts.by_status.withdrawn ?? 0,
-      artifacts_by_kind: countBy(artifacts, "kind"),
-      artifacts_by_status: countBy(artifacts, "status"),
-      objects_by_kind: countBy(objects, "kind"),
-      objects_by_status: countBy(objects, "status"),
-      effects_by_type: countBy(effects, "type"),
-      obligations_by_type: countBy(obligations, "type"),
-      obligations_by_status: countBy(obligations, "status"),
-      obligations_by_agent: countObligationsByAgent(obligations),
-      relationships_by_type: relationship_graph.counts.by_type,
-      relationships_by_status: relationship_graph.counts.by_status,
-      approvals_by_status: approval_state.counts.by_status,
-      approvals_by_scope: approval_state.counts.by_scope,
-      approvals_by_approver: approval_state.counts.by_approver,
-      activation_candidates_by_status: activation_state.counts.candidates_by_status,
-      deferred_phases_by_status: activation_state.counts.by_status,
-      human_checkpoints_by_status: checkpoint_state.counts.by_status,
-      human_checkpoints_by_shepherd: checkpoint_state.counts.by_shepherd
-    },
     approval_state,
     activation_state,
     checkpoint_state,
-    relationship_graph,
-    records: includeRecords
-      ? {
-          limit: recordLimit,
-          truncated: {
-            artifacts: artifacts.length > recordLimit,
-            objects: objects.length > recordLimit,
-            effects: effects.length > recordLimit,
-            obligations: obligations.length > recordLimit,
-            relationships: relationships.length > recordLimit,
-            plans: plans.length > recordLimit
-          },
-          artifacts: limitRecords(artifacts, recordLimit),
-          objects: limitRecords(objects, recordLimit),
-          effects: limitRecords(effects, recordLimit),
-          obligations: limitRecords(obligations, recordLimit),
-          relationships: limitRecords(relationships, recordLimit),
-          plans: limitRecords(plans, recordLimit)
-        }
-      : null
+    relationship_graph
   };
 }

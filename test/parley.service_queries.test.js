@@ -8,6 +8,10 @@ import {
   checkpointProjection,
   describe,
   getBoardProjection,
+  getPlanOverview,
+  getPlanPhases,
+  getPlanRelationships,
+  getPlanReviewStatus,
   getPlanSetupStatus,
   getPlanStatus,
   listBoardObligations,
@@ -168,7 +172,10 @@ test("service getBoardProjection uses caller board default for read-only project
     assert.equal(result.status, "ok");
     assert.equal(result.data.identity.board_id, "project");
     assert.equal(result.data.projection.board_id, "project");
-    assert.equal(result.data.projection.counts.agents, 1);
+    assert.equal(result.data.projection.counts.agents, 2);
+    assert.equal(result.data.projection.details_included, false);
+    assert.equal(result.data.projection.approval_state, undefined);
+    assert.ok(result.data.projection.scopedPlanReadsAvailableVia.includes("parley_get_plan_overview"));
   });
 });
 
@@ -213,6 +220,51 @@ test("service getPlanStatus reads compact lifecycle position", async () => {
   });
 });
 
+
+
+test("service scoped plan reads return overview, phases, review, and relationships without board projection", async () => {
+  await withPluginConfig(async (pluginConfig) => {
+    const board = resolveParleyBoardRegistry(pluginConfig).boards.project;
+    const plan = {
+      ...testPlanRecord(board),
+      review: { required_reviewers: ["parley-agent", "missing-reviewer"], approvals: [], objections: ["needs scope check"] },
+      relationships: { depends_on: [{ kind: "plan", id: "plan_previous" }] }
+    };
+    await savePlanSetupRecord(pluginConfig, board, plan);
+    await saveObligationRecord(pluginConfig, board, createObligationRecord({
+      board_id: "project",
+      obligation_id: "obligation_service_review",
+      agent: "parley-agent",
+      type: "review",
+      status: "active",
+      target: { artifact_id: plan.artifact_id, artifact_version: 1, plan_id: plan.plan_id, scope: "plan_review" },
+      scope: "plan_lifecycle:review_decision",
+      reason: "review requested"
+    }));
+
+    const overview = await getPlanOverview({ caller: CALLER, input: { plan_id: plan.plan_id } }, { pluginConfig });
+    assert.equal(overview.status, "ok");
+    assert.equal(overview.data.tool, "parley_get_plan_overview");
+    assert.equal(overview.data.overview.purpose, "Test service query setup state.");
+
+    const phases = await getPlanPhases({ caller: CALLER, input: { plan_id: plan.plan_id } }, { pluginConfig });
+    assert.equal(phases.status, "ok");
+    assert.equal(phases.data.tool, "parley_get_plan_phases");
+    assert.equal(phases.data.counts.phases, 1);
+    assert.equal(phases.data.counts.by_kind.implementation, 1);
+
+    const review = await getPlanReviewStatus({ caller: CALLER, input: { plan_id: plan.plan_id } }, { pluginConfig });
+    assert.equal(review.status, "ok");
+    assert.deepEqual(review.data.review.pending_reviewers, ["parley-agent"]);
+    assert.deepEqual(review.data.review.invalid_required_reviewers, ["missing-reviewer"]);
+    assert.equal(review.data.review.lifecycle_review_obligations[0].obligation_id, "obligation_service_review");
+
+    const relationships = await getPlanRelationships({ caller: CALLER, input: { plan_id: plan.plan_id } }, { pluginConfig });
+    assert.equal(relationships.status, "ok");
+    assert.deepEqual(relationships.data.relationships.declared_relationships, plan.relationships);
+    assert.equal(relationships.data.relationships.counts.board_relationships, 0);
+  });
+});
 
 test("service readPlanProjection renders tracked plan markdown through query envelope", async () => {
   await withPluginConfig(async (pluginConfig) => {
@@ -499,7 +551,7 @@ test("service checkpointProjection compares and advances board-agent cursors", a
     }, { pluginConfig });
     assert.equal(changedInspect.data.comparison.changed, true);
     assert.deepEqual(changedInspect.data.comparison.count_deltas.artifacts, { before: 0, after: 1, delta: 1 });
-    assert.deepEqual(changedInspect.data.comparison.count_deltas["artifacts_by_kind.plan"], { before: 0, after: 1, delta: 1 });
+    assert.equal(changedInspect.data.comparison.count_deltas["artifacts_by_kind.plan"], undefined);
 
     const whereAdvance = await checkpointProjection({
       caller: CALLER,

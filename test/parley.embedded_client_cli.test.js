@@ -361,3 +361,45 @@ test("CLI client mode can use canonical OpenClaw caller identity plus CLI aliase
     });
   });
 });
+
+test("CLI doctor repairs protected human board member in explicit config", async () => {
+  await withTempRoot(async (tempRoot) => {
+    const configPath = await writeConfig(tempRoot);
+
+    const inspectOut = memoryStream();
+    const inspectErr = memoryStream();
+    const inspectExit = await runParleyCli(["--config", configPath, "doctor", "--board", "project"], { env: cliEnv(tempRoot), stdout: inspectOut, stderr: inspectErr });
+    const inspect = JSON.parse(inspectOut.text());
+    assert.equal(inspectExit, 1);
+    assert.equal(inspectErr.text(), "");
+    assert.equal(inspect.ok, false);
+    assert.equal(inspect.doctor.summary.missing, 1);
+    assert.equal(inspect.doctor.boards[0].human_member_id, "human");
+
+    const repairOut = memoryStream();
+    const repairErr = memoryStream();
+    const repairExit = await runParleyCli(["--config", configPath, "doctor", "--board", "project", "--repair"], { env: cliEnv(tempRoot), stdout: repairOut, stderr: repairErr });
+    const repair = JSON.parse(repairOut.text());
+    assert.equal(repairExit, 0);
+    assert.equal(repairErr.text(), "");
+    assert.equal(repair.ok, true);
+    assert.equal(repair.doctor.summary.repaired, 1);
+
+    const repairedConfig = JSON.parse(await fs.readFile(configPath, "utf8"));
+    const human = repairedConfig.parleyDefaultBoards.project.members.find((member) => member.board_agent_id === "human");
+    assert.ok(human);
+    assert.equal(human.agent_id, "human");
+    assert.equal(human.kind, "human");
+    assert.deepEqual(human.roles, ["human"]);
+    assert.equal(human.permissions.protected, true);
+
+    const secondOut = memoryStream();
+    const secondErr = memoryStream();
+    const secondExit = await runParleyCli(["--config", configPath, "doctor", "--board", "project"], { env: cliEnv(tempRoot), stdout: secondOut, stderr: secondErr });
+    const second = JSON.parse(secondOut.text());
+    assert.equal(secondExit, 0);
+    assert.equal(secondErr.text(), "");
+    assert.equal(second.ok, true);
+    assert.equal(second.doctor.summary.ok, 1);
+  });
+});

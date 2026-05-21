@@ -1,4 +1,4 @@
-export const QUERY_ACTIONS = Object.freeze(["where_am_i", "my_boards", "board", "validate_plan", "plan_setup_status", "plan_status", "read_plan_projection", "validate_state", "runtime_obligations", "board_obligations", "search"]);
+export const QUERY_ACTIONS = Object.freeze(["where_am_i", "my_boards", "board", "validate_plan", "plan_setup_status", "plan_status", "plan_overview", "plan_phases", "plan_review_status", "plan_relationships", "read_plan_projection", "validate_state", "runtime_obligations", "board_obligations", "search"]);
 export const MUTATE_ACTIONS = Object.freeze([
   "register_artifact",
   "create_object",
@@ -79,7 +79,7 @@ export function overviewDescriptor() {
   return {
     topic: "overview",
     purpose: "Discover Parley's agent-facing tool surface, target scopes, first-class operational tools, advanced facade actions, board selection rules, and common examples.",
-    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_create_trigger", "parley_resolve_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_read_plan_projection", "parley_request_plan_review", "parley_mark_plan_ready", "parley_record_review_decision", "parley_activate_plan", "parley_pause_plan", "parley_resume_plan", "parley_record_hitl_input", "parley_record_phase_outcome", "parley_record_plan_disposition", "parley_get_plan_setup_status", "parley_get_plan_status", "parley_query", "parley_mutate"],
+    tools: ["parley_describe", "parley_my_boards", "parley_where_am_i", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search", "parley_board_projection", "parley_validate_plan", "parley_validate_state", "parley_register_artifact", "parley_create_object", "parley_record_effect", "parley_create_obligation", "parley_create_trigger", "parley_resolve_obligation", "parley_record_relationship", "parley_remove_relationship", "parley_create_plan", "parley_write_plan_overview", "parley_add_plan_phase", "parley_add_plan_checkpoint", "parley_get_plan_overview", "parley_get_plan_phases", "parley_get_plan_review_status", "parley_get_plan_relationships", "parley_read_plan_projection", "parley_request_plan_review", "parley_mark_plan_ready", "parley_record_review_decision", "parley_activate_plan", "parley_pause_plan", "parley_resume_plan", "parley_record_hitl_input", "parley_record_phase_outcome", "parley_record_plan_disposition", "parley_get_plan_setup_status", "parley_get_plan_status", "parley_query", "parley_mutate"],
     topics: [...DESCRIBE_TOPICS],
     query_actions: [...QUERY_ACTIONS],
     mutate_actions: [...MUTATE_ACTIONS],
@@ -161,18 +161,19 @@ export function queryDescriptor() {
     topic: "query",
     tool: "parley_query",
     role: "advanced facade over first-class read tools",
-    first_class_equivalents: ["parley_where_am_i", "parley_my_boards", "parley_board_projection", "parley_validate_plan", "parley_read_plan_projection", "parley_get_plan_status", "parley_validate_state", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search"],
+    first_class_equivalents: ["parley_where_am_i", "parley_my_boards", "parley_board_projection", "parley_validate_plan", "parley_get_plan_overview", "parley_get_plan_phases", "parley_get_plan_review_status", "parley_get_plan_relationships", "parley_read_plan_projection", "parley_get_plan_status", "parley_validate_state", "parley_query_runtime_obligations", "parley_query_board_obligations", "parley_query_search"],
     actions: [...QUERY_ACTIONS],
     required_fields: ["action"],
-    board_scoped_actions: ["board", "validate_plan", "plan_setup_status", "plan_status", "read_plan_projection", "validate_state", "board_obligations", "search"],
+    board_scoped_actions: ["board", "validate_plan", "plan_setup_status", "plan_status", "plan_overview", "plan_phases", "plan_review_status", "plan_relationships", "read_plan_projection", "validate_state", "board_obligations", "search"],
     boardless_actions: ["my_boards", "runtime_obligations"],
     optional_board_actions: ["where_am_i"],
-    input_actions: ["validate_plan", "plan_setup_status", "plan_status", "read_plan_projection", "runtime_obligations", "board_obligations", "search"],
+    input_actions: ["validate_plan", "plan_setup_status", "plan_status", "plan_overview", "plan_phases", "plan_review_status", "plan_relationships", "read_plan_projection", "runtime_obligations", "board_obligations", "search"],
     removed_actions: [{ action: "obligations", replacement: "runtime_obligations or board_obligations" }],
     examples: [
       { description: "Runtime recovery.", call: { action: "where_am_i" } },
       { description: "List accessible boards.", call: { action: "my_boards" } },
-      { description: "Get board projection metadata.", call: { action: "board", boardId: "project" } },
+      { description: "Get compact board projection metadata.", call: { action: "board", boardId: "project" } },
+      { description: "Read a plan overview without broad board state.", call: { action: "plan_overview", boardId: "project", input: { planId: "plan_alpha" } } },
       { description: "Find board obligations needing action.", call: { action: "board_obligations", boardId: "project", input: { filter: "needs_my_action" } } }
     ]
   };

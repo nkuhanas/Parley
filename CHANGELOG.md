@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add protected default board member `human` for new/normalized boards and document explicit persisted config shape.
+- Add `parley doctor [--board <board>] [--repair]` to inspect or repair protected human board member entries in explicit configs.
+- Make board projections compact by default, with raw records gated by `includeRecords` and detailed derived state gated by `includeDerivedDetails` / `includeDetails`.
+- Add scoped plan reads for overview, phases, review status, and relationships through first-class tools and `parley_query` facade actions.
+
 ## 0.1.1
 
 - Fix npm/npx bin entrypoint execution through package manager symlinks.

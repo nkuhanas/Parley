@@ -186,7 +186,16 @@ const pluginConfig = {
         }
       ],
       members: [
-        { agent_id: "my-agent", board_agent_id: "my-agent", roles: ["implementation"] }
+        { agent_id: "my-agent", board_agent_id: "my-agent", roles: ["implementation"] },
+        {
+          agent_id: "human",
+          board_agent_id: "human",
+          display_name: "Human",
+          kind: "human",
+          roles: ["human"],
+          runtime_refs: [],
+          permissions: { preset: "human_protected", protected: true }
+        }
       ]
     }
   }
@@ -194,6 +203,8 @@ const pluginConfig = {
 ```
 
 Parley expands leading `~` in configured filesystem paths. Use explicit absolute paths in production config when possible.
+
+Board configs automatically normalize a protected human member with board/global id `human`. New Parley-created boards include it by default, and existing configs can be inspected or repaired explicitly with `parley doctor --board <board> --repair`.
 
 For a complete commented setup, start from `examples/basic-board/config.example.json` and the full walkthrough in `docs/getting-started.md`.
 
@@ -236,12 +247,13 @@ Exact fields vary by adapter mode, verbosity, and board state. Full response exa
 | Recovery | `parley_describe`, `parley_where_am_i`, `parley_my_boards` | Help agents recover identity, scope, and next work |
 | Runtime protocol | threads, messages, turns | Coordinate bounded exchanges outside board state |
 | Board records | artifacts, objects, effects, relationships | Persist durable evidence and project context |
+| Board projections | `parley_board_projection` | Compact board metadata/counts by default; detailed derived state and record excerpts are explicit opt-ins |
 | Obligations | create, query, resolve obligations | Track who needs to do what |
-| Plans | setup, review, activate, advance, validate | Govern lifecycle-managed work |
+| Plans | setup, scoped reads, review, activate, advance, validate | Govern lifecycle-managed work |
 | Triggers | create triggers | Bind future coordination events to board state |
 | Validation | validate plan/state | Detect invalid or inconsistent coordination state |
 
-Full tool references, response guidance, and examples live in `docs/getting-started.md`, `docs/supported-runtimes.md`, and `examples/basic-board/`.
+For plan inspection, prefer scoped reads such as `parley_get_plan_overview`, `parley_get_plan_phases`, `parley_get_plan_review_status`, and `parley_get_plan_relationships` before fetching full rendered plan projections. Full tool references, response guidance, and examples live in `docs/getting-started.md`, `docs/supported-runtimes.md`, and `examples/basic-board/`.
 
 ## Status
 

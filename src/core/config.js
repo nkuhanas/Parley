@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assertBoardAgentRecord, assertBoardId, assertRuntimeRef } from "./board/board_schema.js";
+import { createProtectedHumanBoardMember, isDefaultHumanMember, PARLEY_DEFAULT_HUMAN_MEMBER_ID } from "./board/human_member.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -454,6 +455,8 @@ export function resolveParleyPaths(pluginConfig = {}, options = {}) {
   };
 }
 
+export { PARLEY_DEFAULT_HUMAN_MEMBER_ID };
+
 function normalizeBoardMember(rawMember, fieldName) {
   if (!rawMember || typeof rawMember !== "object" || Array.isArray(rawMember)) {
     throw new Error(`${fieldName} must be an object`);
@@ -468,6 +471,18 @@ function normalizeBoardMember(rawMember, fieldName) {
     display_name: rawMember.display_name ?? rawMember.displayName,
     runtime_refs: rawMember.runtime_refs ?? rawMember.runtimeRefs ?? rawMember.runtime_bindings ?? rawMember.runtimeBindings ?? []
   }, fieldName);
+}
+
+export function defaultHumanBoardMember() {
+  return normalizeBoardMember(createProtectedHumanBoardMember(), "human");
+}
+
+function ensureDefaultHumanMember(agentRegistry, fieldName) {
+  if (agentRegistry.length === 0 || agentRegistry.some(isDefaultHumanMember)) return agentRegistry;
+  return [
+    ...agentRegistry,
+    normalizeBoardMember(createProtectedHumanBoardMember(), `${fieldName}[${agentRegistry.length}]`)
+  ];
 }
 
 function normalizeBoard(rawBoard, boardId) {
@@ -504,6 +519,7 @@ function normalizeBoard(rawBoard, boardId) {
       : Array.isArray(rawBoard.members)
         ? rawBoard.members
         : [];
+  const normalizedAgentRegistry = rawAgentRegistry.map((agent, index) => normalizeBoardMember(agent, `agent_registry[${index}]`));
 
   return {
     board_id: normalizedBoardId,
@@ -527,7 +543,7 @@ function normalizeBoard(rawBoard, boardId) {
       ? legacyAllowedLandingRoots
       : artifactNamespaces.filter((namespace) => namespace.roles.includes("explicit_landing") || namespace.roles.includes("plan_landing")).map((namespace) => namespace.resolved_root),
     permission_model: rawBoard.permission_model ?? rawBoard.permissionModel ?? { mode: "board_wide_all_tools", future_agent_scoping: true },
-    agent_registry: rawAgentRegistry.map((agent, index) => normalizeBoardMember(agent, `agent_registry[${index}]`))
+    agent_registry: ensureDefaultHumanMember(normalizedAgentRegistry, "agent_registry")
   };
 }
 

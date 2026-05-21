@@ -1,5 +1,9 @@
 export {
   getBoardProjection,
+  getPlanOverview,
+  getPlanPhases,
+  getPlanRelationships,
+  getPlanReviewStatus,
   getPlanSetupStatus,
   getPlanStatus,
   myBoards,
